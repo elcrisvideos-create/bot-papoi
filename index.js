@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Events, REST, Routes, ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, REST, Routes, ChannelType, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 require('dotenv').config();
 const fs = require('fs');
 const axios = require('axios');
@@ -23,6 +23,19 @@ const NIVELES = [
 
 const SOLO_HOIST = ['papoi mayor','moderador','booster papoi','papoi leyenda','papoi veterano','papoi fiel','papoi activo','papoi'];
 
+// ==== NUEVO: LISTA DE PETS (ROLES YA CREADOS POR SEN2 V2) ====
+const PETS = {
+  'Secreto': [
+    'RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','TRex','Kraken','Cerberus','Yeti','King Snake'
+  ],
+  'Eterno': [
+    'Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'
+  ],
+  'Divino': [
+    'World Burner','ArchAngel','Nightflame','Kitsune','Unicorn'
+  ]
+};
+
 function isOwner(id){ return id === process.env.OWNER_ID; }
 function isMod(member){
   if(!member) return false;
@@ -45,6 +58,8 @@ client.on(Events.ClientReady, async () => {
     { name: 'warn', description: 'Advertir a un usuario', options: [{ name: 'usuario', description: 'Usuario a advertir', type: 6, required: true }, { name: 'razon', description: 'Razón de la advertencia', type: 3, required: true }] },
     { name: 'clear', description: 'Borrar mensajes del canal', options: [{ name: 'cantidad', description: 'Cantidad de mensajes a borrar', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageMessages.toString() },
     { name: 'slowmode', description: 'Cambiar cooldown del canal', options: [{ name: 'segundos', description: 'Segundos de cooldown', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
+    // NUEVO COMANDO - NO BORRA LOS ANTERIORES
+    { name: 'setup-pets', description: 'Crear panel automático de roles de pets (Secreto/Eterno/Divino)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
   ]});
 
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
@@ -118,10 +133,91 @@ client.on(Events.MessageCreate, async msg => {
 });
 
 client.on(Events.InteractionCreate, async inter => {
+  // ==== NUEVO: MANEJO DE MENUS DE PETS (ANTES DE LOS COMANDOS) ====
+  if(inter.isStringSelectMenu()){
+    if(inter.customId.startsWith('pets_')){
+      await inter.deferReply({ flags: 64 });
+      const categoria = inter.customId.replace('pets_','');
+      const seleccionados = inter.values;
+      let agregados = [];
+      let quitados = [];
+      let noEncontrados = [];
+
+      for(const petName of seleccionados){
+        const rol = inter.guild.roles.cache.find(r => r.name.toLowerCase() === petName.toLowerCase());
+        if(!rol){ noEncontrados.push(petName); continue; }
+        if(inter.member.roles.cache.has(rol.id)){
+          await inter.member.roles.remove(rol).catch(()=>{});
+          quitados.push(petName);
+        } else {
+          await inter.member.roles.add(rol).catch(()=>{});
+          agregados.push(petName);
+        }
+      }
+
+      let msg = `**${categoria}**:\n`;
+      if(agregados.length) msg += `✅ Agregados: ${agregados.join(', ')}\n`;
+      if(quitados.length) msg += `❌ Quitados: ${quitados.join(', ')}\n`;
+      if(noEncontrados.length) msg += `⚠️ Rol no encontrado: ${noEncontrados.join(', ')} (créalo con Sen2 V2 primero)\n`;
+      if(!agregados.length && !quitados.length) msg += 'No se hizo ningún cambio.';
+      msg += `\n\nVuelve a abrir el menú para agregar/quitar más.`;
+
+      return inter.editReply({ content: msg });
+    }
+  }
+
   if(!inter.isChatInputCommand()) return;
   if(!isMod(inter.member) &&!['rank','separar-papois-exacto'].includes(inter.commandName)){
-    return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: 64 });
+    // Permitir setup-pets solo a mods/admins, no a usuarios normales
+    if(inter.commandName === 'setup-pets' && !inter.memberPermissions.has(PermissionFlagsBits.Administrator) && !isMod(inter.member)){
+      return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: 64 });
+    }
+    if(!['setup-pets'].includes(inter.commandName)){
+      return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: 64 });
+    }
   }
+
+  if(inter.commandName === 'setup-pets'){
+    await inter.deferReply({ flags: 64 });
+
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('🥚 Notificaciones de Pets | Los Papois')
+      .setDescription('**Elige qué pets quieres que te pingueen cuando salgan.**\n\n> Si seleccionas un pet que ya tienes, se te quitará (toggle).\n> Puedes seleccionar varios a la vez.\n\n**Categorías:**\n🔴 **Secreto** - 14 pets\n🟣 **Eterno** - 10 pets\n🟡 **Divino** - 5 pets\n\n*Este panel reemplaza tener que hacerlo 1 por 1 en Canales y roles.*')
+      .setThumbnail(inter.guild.iconURL())
+      .setTimestamp();
+
+    const rowSecreto = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('pets_Secreto')
+        .setPlaceholder('🔴 Elige pets Secretos...')
+        .setMinValues(1)
+        .setMaxValues(Math.min(PETS['Secreto'].length, 25))
+        .addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, description: `Notificación para ${p}` })))
+    );
+
+    const rowEterno = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('pets_Eterno')
+        .setPlaceholder('🟣 Elige pets Eternos...')
+        .setMinValues(1)
+        .setMaxValues(Math.min(PETS['Eterno'].length, 25))
+        .addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, description: `Notificación para ${p}` })))
+    );
+
+    const rowDivino = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('pets_Divino')
+        .setPlaceholder('🟡 Elige pets Divinos...')
+        .setMinValues(1)
+        .setMaxValues(Math.min(PETS['Divino'].length, 25))
+        .addOptions(PETS['Divino'].map(p => ({ label: p, value: p, description: `Notificación para ${p}`, emoji: '✨' })))
+    );
+
+    await inter.channel.send({ embeds: [embed], components: [rowSecreto, rowEterno, rowDivino] });
+    return inter.editReply({ content: '✅ Panel de pets creado en este canal. Ya puedes borrar las preguntas tediosas de Canales y roles.' });
+  }
+
   if(inter.commandName === 'separar-papois-exacto'){
     await inter.deferReply({ flags: 64 });
     for(const [id, rol] of inter.guild.roles.cache){
@@ -167,8 +263,8 @@ client.on(Events.InteractionCreate, async inter => {
     const user = inter.options.getUser('usuario');
     const razon = inter.options.getString('razon');
     const canal = inter.guild.channels.cache.find(c=>c.name.includes('general'));
-    if(canal) canal.send({ content: `⚠️ ${user} advertencia: ${razon}` }).catch(()=>{});
-    return inter.reply({ content: `⚠️ Warn a ${user.tag}`, flags: 64 });
+    if(canal) canal.send({ content: `⚠ ${user} advertencia: ${razon}` }).catch(()=>{});
+    return inter.reply({ content: `⚠ Warn a ${user.tag}`, flags: 64 });
   }
   if(inter.commandName === 'clear'){
     const cant = inter.options.getInteger('cantidad');
