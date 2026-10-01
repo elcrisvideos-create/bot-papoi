@@ -24,15 +24,9 @@ const NIVELES = [
 const SOLO_HOIST = ['papoi mayor','moderador','booster papoi','papoi leyenda','papoi veterano','papoi fiel','papoi activo','papoi'];
 
 const PETS = {
-  'Secreto': [
-    'RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','TRex','Kraken','Cerberus','Yeti','King Snake'
-  ],
-  'Eterno': [
-    'Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'
-  ],
-  'Divino': [
-    'World Burner','ArchAngel','Nightflame','Kitsune','Unicorn'
-  ]
+  'Secreto': ['RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','TRex','Kraken','Cerberus','Yeti','King Snake'],
+  'Eterno': ['Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'],
+  'Divino': ['World Burner','ArchAngel','Nightflame','Kitsune','Unicorn']
 };
 const ALL_PETS = [...PETS['Secreto'], ...PETS['Eterno'], ...PETS['Divino']];
 
@@ -47,7 +41,6 @@ client.on(Events.ClientReady, async () => {
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
   console.log(`✅ BotPapoi2026 FINAL 24/7 ONLINE como ${client.user.tag} | TikTok @${tiktokUser}`);
   const rest = new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
-  
   await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
     { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
     { name: 'rank', description: 'Ver tu XP y nivel', options: [{ name: 'usuario', description: 'Usuario a consultar', type: 6, required: false }] },
@@ -62,7 +55,6 @@ client.on(Events.ClientReady, async () => {
     { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
     { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles en la categoría ROBA UN HUEVO', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
   ]});
-
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(guild){
     const general = guild.channels.cache.find(c => c.name.includes('general') && c.type === ChannelType.GuildText);
@@ -78,12 +70,7 @@ client.on(Events.GuildMemberAdd, async member => {
   if(rolPapoi) await member.roles.add(rolPapoi).catch(()=>{});
   const bienvenida = guild.channels.cache.find(c => c.name.includes('bienvenida'));
   if(bienvenida){
-    const embed = new EmbedBuilder()
-     .setColor(0xf1c40f)
-     .setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`)
-     .setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando.`)
-     .setThumbnail(member.user.displayAvatarURL())
-     .setTimestamp();
+    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando.`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
     bienvenida.send({ content: `${member}`, embeds: [embed] }).catch(()=>{});
   }
 });
@@ -92,7 +79,6 @@ client.on(Events.MessageCreate, async msg => {
   if(!msg.guild || msg.author.bot) return;
   const member = msg.member;
   if(!member) return;
-
   if(!isOwner(msg.author.id)){
     const esMultimedia = msg.channel.name.toLowerCase().includes('multimedia');
     if(!esMultimedia && msg.attachments.size > 0){
@@ -103,7 +89,6 @@ client.on(Events.MessageCreate, async msg => {
       return;
     }
   }
-
   if(!isMod(member)){
     const tieneLink = /(https?:\/\/|www\.|discord\.gg|discord\.com\/invite|t\.me\/)/i.test(msg.content);
     if(tieneLink){
@@ -113,7 +98,6 @@ client.on(Events.MessageCreate, async msg => {
       return;
     }
   }
-
   const ahora = Date.now();
   const ultimo = lastXP.get(msg.author.id) || 0;
   if(ahora - ultimo > 60000){
@@ -135,7 +119,6 @@ client.on(Events.MessageCreate, async msg => {
 
 async function crearPanelPingRoles(channel){
   const guild = channel.guild;
-  
   const embed = new EmbedBuilder()
     .setColor(0x00f2ea)
     .setTitle('🔗 | ping-roles — ¡Elige tus avisos!')
@@ -145,53 +128,33 @@ async function crearPanelPingRoles(channel){
       `**¿Cómo se usa? (Súper fácil)**\n`+
       `**1.** Abre uno de los menús de abajo 👇\n`+
       `**2.** Marca los pets que te interesan (puedes marcar varios a la vez)\n`+
-      `**3.** ¡Listo! Si ya tenías ese rol se te quita, si no lo tenías se te pone. Es como un interruptor 🔛🔜\n\n`+
+      `**3.** ¡Listo! Si ya tenías ese rol se te quita, si no lo tenías se te pone. Es como un interruptor 🔛\n\n`+
       `**Categorías:**\n`+
       `🍀 **Huevo Secreto** — Pets secretos (14 disponibles)\n`+
       `🚀 **Huevo Eterno** — Pets eternos (10 disponibles)\n`+
       `💎 **Huevo Divino** — Pets divinos ULTRA raros (5 disponibles)\n\n`+
-      `> 💡 *Ejemplo: Si solo quieres que te avise de \`Kitsune\` y \`Unicorn\`, solo marca esos 2 en Divino. Ya no te llegará spam de todos los demás.*\n\n`+
-      `**Botones de ayuda:**\n`+
-      `📋 **Mis Pings** — Mira qué avisos tienes ahora\n`+
-      `✨ **Ayuda** — Vuelve a ver este mensaje`
+      `> 💡 *Ejemplo: Si solo quieres que te avise de \`Kitsune\` y \`Unicorn\`, solo marca esos 2 en Divino.*\n`
     )
     .setThumbnail(guild.iconURL())
-    .setImage('https://i.imgur.com/8Km9tLL.png')
     .setFooter({ text: 'PAPOIS EMPIRE • Cambios instantáneos • No afecta tus otros roles' })
     .setTimestamp();
 
   const rowSecreto = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('pets_Secreto')
-      .setPlaceholder('🍀 Huevo Secreto — Elige tus pets específicos')
-      .setMinValues(1)
-      .setMaxValues(Math.min(PETS['Secreto'].length, 25))
+    new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder('🍀 Huevo Secreto — Elige tus pets específicos').setMinValues(1).setMaxValues(Math.min(PETS['Secreto'].length, 25))
       .addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, description: `Solo te avisará de ${p}`, emoji: '🍀' })))
   );
-
   const rowEterno = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('pets_Eterno')
-      .setPlaceholder('🚀 Huevo Eterno — Elige tus pets específicos')
-      .setMinValues(1)
-      .setMaxValues(Math.min(PETS['Eterno'].length, 25))
+    new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder('🚀 Huevo Eterno — Elige tus pets específicos').setMinValues(1).setMaxValues(Math.min(PETS['Eterno'].length, 25))
       .addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, description: `Solo te avisará de ${p}`, emoji: '🚀' })))
   );
-
   const rowDivino = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('pets_Divino')
-      .setPlaceholder('💎 Huevo Divino — Elige tus pets específicos')
-      .setMinValues(1)
-      .setMaxValues(Math.min(PETS['Divino'].length, 25))
+    new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder('💎 Huevo Divino — Elige tus pets específicos').setMinValues(1).setMaxValues(Math.min(PETS['Divino'].length, 25))
       .addOptions(PETS['Divino'].map(p => ({ label: p, value: p, description: `Solo te avisará de ${p} • ULTRA RARO`, emoji: '💎' })))
   );
-
   const rowBotones = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('btn_customize').setLabel('✨ Ayuda').setStyle(ButtonStyle.Success)
   );
-
   await channel.send({ embeds: [embed], components: [rowSecreto, rowEterno, rowDivino, rowBotones] });
 }
 
@@ -207,27 +170,18 @@ client.on(Events.InteractionCreate, async inter => {
       return inter.reply({ content: '👇 **Cómo usar:** Abre uno de los 3 menús de arriba y marca los pets que quieres. Puedes marcar varios a la vez. Si ya lo tenías, se te quitará.', flags: 64 });
     }
   }
-
   if(inter.isStringSelectMenu()){
     if(inter.customId.startsWith('pets_')){
       await inter.deferReply({ flags: 64 });
       const categoria = inter.customId.replace('pets_','');
       const seleccionados = inter.values;
-      let agregados = [];
-      let quitados = [];
-
+      let agregados = []; let quitados = [];
       for(const petName of seleccionados){
         const rol = inter.guild.roles.cache.find(r => r.name.toLowerCase() === petName.toLowerCase());
         if(!rol) continue;
-        if(inter.member.roles.cache.has(rol.id)){
-          await inter.member.roles.remove(rol).catch(()=>{});
-          quitados.push(petName);
-        } else {
-          await inter.member.roles.add(rol).catch(()=>{});
-          agregados.push(petName);
-        }
+        if(inter.member.roles.cache.has(rol.id)){ await inter.member.roles.remove(rol).catch(()=>{}); quitados.push(petName); }
+        else { await inter.member.roles.add(rol).catch(()=>{}); agregados.push(petName); }
       }
-
       let msg = `**${categoria}**:\n`;
       if(agregados.length) msg += `✅ Ahora te avisará de: **${agregados.join(', ')}**\n`;
       if(quitados.length) msg += `❌ Ya NO te avisará de: **${quitados.join(', ')}**\n`;
@@ -235,36 +189,19 @@ client.on(Events.InteractionCreate, async inter => {
       return inter.editReply({ content: msg });
     }
   }
-
   if(!inter.isChatInputCommand()) return;
-
   if(inter.commandName === 'mis-pings'){
     await inter.deferReply({ flags: 64 });
     const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
     if(!rolesPet.length) return inter.editReply({ content: '📭 No tienes pings activos. Ve a #🔗 | ping-roles y elige los pets que quieres.' });
     return inter.editReply({ content: `📋 **Tus pings (${rolesPet.length}):** ${rolesPet.join(', ')}` });
   }
-
   if(inter.commandName === 'crear-canal-ping-roles'){
     await inter.deferReply({ flags: 64 });
     const guild = inter.guild;
-    
-    // BUSCAR CATEGORIA EXACTA ROBA UN HUEVO
-    let categoria = guild.channels.cache.find(c => 
-      c.type === ChannelType.GuildCategory && 
-      c.name.toLowerCase().includes('roba un huevo')
-    );
-    if(!categoria){
-      categoria = guild.channels.cache.find(c => 
-        c.type === ChannelType.GuildCategory && 
-        (c.name.toLowerCase().includes('roba') || c.name.toLowerCase().includes('huevo'))
-      );
-    }
-
-    if(!categoria){
-      return inter.editReply({ content: '❌ No encontré la categoría `🥚 · ROBA UN HUEVO`. Créala primero o renombra la categoría existente para que contenga "ROBA UN HUEVO".' });
-    }
-
+    let categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('roba un huevo'));
+    if(!categoria) categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && (c.name.toLowerCase().includes('roba') || c.name.toLowerCase().includes('huevo')));
+    if(!categoria) return inter.editReply({ content: '❌ No encontré la categoría `🥚 · ROBA UN HUEVO`.' });
     let canal = guild.channels.cache.find(c => c.name.toLowerCase().includes('ping-roles'));
     if(!canal){
       canal = await guild.channels.create({
@@ -280,35 +217,24 @@ client.on(Events.InteractionCreate, async inter => {
     } else {
       await canal.setParent(categoria.id).catch(()=>{});
       await canal.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false, AddReactions: false, SendMessagesInThreads: false }).catch(()=>{});
-      // Borrar mensajes viejos del bot para dejarlo limpio
-      const msgs = await canal.messages.fetch({ limit: 10 }).catch(()=>null);
-      if(msgs){
-        for(const m of msgs.values()){
-          if(m.author.id === client.user.id) await m.delete().catch(()=>{});
-        }
-      }
+      const msgs = await canal.messages.fetch({ limit: 20 }).catch(()=>null);
+      if(msgs){ for(const m of msgs.values()){ if(m.author.id === client.user.id) await m.delete().catch(()=>{}); } }
     }
-
     await crearPanelPingRoles(canal);
-    return inter.editReply({ content: `✅ Canal creado/reparado: ${canal} dentro de **${categoria.name}**\nYa está en solo lectura y con el panel pro para niños y adultos.\n\nAhora ya puedes borrar la sección de "Que Notificacion de Huevos quieres recibir?" en Canales y roles.` });
+    return inter.editReply({ content: `✅ Canal limpio y reparado: ${canal} dentro de **${categoria.name}**\nYa sin imagen rara, solo tu logo.` });
   }
-
   if(!isMod(inter.member) &&!['rank','separar-papois-exacto','mis-pings'].includes(inter.commandName)){
     if(['setup-pets','crear-canal-ping-roles'].includes(inter.commandName)){
       if(!inter.memberPermissions.has(PermissionFlagsBits.Administrator) && !isMod(inter.member)){
         return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: 64 });
       }
-    } else {
-      return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: 64 });
-    }
+    } else { return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: 64 }); }
   }
-
   if(inter.commandName === 'setup-pets'){
     await inter.deferReply({ flags: 64 });
     await crearPanelPingRoles(inter.channel);
-    return inter.editReply({ content: '✅ Panel pro creado aquí. Si no es #ping-roles, pon el canal en solo lectura.' });
+    return inter.editReply({ content: '✅ Panel pro creado aquí.' });
   }
-
   if(inter.commandName === 'separar-papois-exacto'){
     await inter.deferReply({ flags: 64 });
     for(const [id, rol] of inter.guild.roles.cache){
@@ -374,12 +300,10 @@ let isLiveNow = false;
 function startTikTokMonitor(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
   console.log(`🎬 Monitor TikTok iniciado para @${tiktokUser} - revisando cada 60s`);
-  
   setInterval(async () => {
     try{
       const guild = client.guilds.cache.get(process.env.GUILD_ID);
       if(!guild) return;
-
       const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 10000 });
       const video = res.data?.data?.videos?.[0];
       if(video){
@@ -388,18 +312,11 @@ function startTikTokMonitor(){
           lastVideoId = video.video_id;
           const canalClips = guild.channels.cache.find(c => c.name.includes('clips-tiktok'));
           if(canalClips){
-            const embed = new EmbedBuilder()
-             .setColor(0x00f2ea)
-             .setTitle(`🎬 Nuevo video de @${tiktokUser}!`)
-             .setDescription(video.title || '¡Nuevo TikTok!')
-             .setImage(video.cover)
-             .setURL(`https://www.tiktok.com/@${tiktokUser}/video/${video.video_id}`)
-             .setTimestamp();
+            const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle(`🎬 Nuevo video de @${tiktokUser}!`).setDescription(video.title || '¡Nuevo TikTok!').setImage(video.cover).setURL(`https://www.tiktok.com/@${tiktokUser}/video/${video.video_id}`).setTimestamp();
             canalClips.send({ content: `@everyone`, embeds: [embed] }).catch(()=>{});
           }
         }
       }
-
       try{
         const infoRes = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=${tiktokUser}`, { timeout: 10000 });
         const userInfo = infoRes.data?.data;
@@ -407,16 +324,10 @@ function startTikTokMonitor(){
         if(isLive && !isLiveNow){
           isLiveNow = true;
           const canalLive = guild.channels.cache.find(c => c.name.includes('elcris-en-vivo'));
-          if(canalLive){
-            canalLive.send({ content: `🔴 **@everyone ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{});
-          }
-        } else if(!isLive){
-          isLiveNow = false;
-        }
+          if(canalLive){ canalLive.send({ content: `🔴 **@everyone ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{}); }
+        } else if(!isLive){ isLiveNow = false; }
       }catch(e){}
-
     }catch(e){}
   }, 60000);
 }
-
 client.login(process.env.DISCORD_TOKEN);
