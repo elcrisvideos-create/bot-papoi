@@ -13,6 +13,11 @@ try { xpData = JSON.parse(fs.readFileSync('./xp.json','utf8')); } catch { xpData
 const saveXP = () => fs.writeFileSync('./xp.json', JSON.stringify(xpData, null, 2));
 const lastXP = new Map();
 
+// --- NUEVO: CACHE PARA TIKTOK (no toca nada de XP ni roles) ---
+let tiktokCache = {};
+try { tiktokCache = JSON.parse(fs.readFileSync('./tiktok.json','utf8')); } catch { tiktokCache = { lastVideoId: null, isLiveNow: false }; }
+const saveTikTok = () => fs.writeFileSync('./tiktok.json', JSON.stringify(tiktokCache, null, 2));
+
 const NIVELES = [
   { name: 'Papoi', xp: 0 },
   { name: 'Papoi Activo', xp: 500 },
@@ -40,6 +45,7 @@ function isMod(member){
 client.on(Events.ClientReady, async () => {
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
   console.log(`✅ BotPapoi2026 FINAL 24/7 ONLINE como ${client.user.tag} | TikTok @${tiktokUser}`);
+  console.log(`📦 TikTok cache: lastVideoId=${tiktokCache.lastVideoId} isLive=${tiktokCache.isLiveNow}`);
   const rest = new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
   await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
     { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
@@ -54,6 +60,10 @@ client.on(Events.ClientReady, async () => {
     { name: 'setup-pets', description: 'Crear panel de ping-roles en este canal', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
     { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles en la categoría ROBA UN HUEVO', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    // --- SOLO 3 COMANDOS NUEVOS, NO BORRO NINGUNO ANTERIOR ---
+    { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'test-tiktok', description: 'Probar conexión con TikTok', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'live', description: 'Anunciar manualmente que estás en LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
   ]});
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(guild){
@@ -224,7 +234,7 @@ client.on(Events.InteractionCreate, async inter => {
     return inter.editReply({ content: `✅ Canal limpio y reparado: ${canal} dentro de **${categoria.name}**\nYa sin imagen rara, solo tu logo.` });
   }
   if(!isMod(inter.member) &&!['rank','separar-papois-exacto','mis-pings'].includes(inter.commandName)){
-    if(['setup-pets','crear-canal-ping-roles'].includes(inter.commandName)){
+    if(['setup-pets','crear-canal-ping-roles','test-bienvenida','test-tiktok','live'].includes(inter.commandName)){
       if(!inter.memberPermissions.has(PermissionFlagsBits.Administrator) && !isMod(inter.member)){
         return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: 64 });
       }
@@ -251,6 +261,36 @@ client.on(Events.InteractionCreate, async inter => {
     let nivelActual = 'Papoi';
     for(const n of NIVELES) if(xp >= n.xp) nivelActual = n.name;
     return inter.reply({ content: `⭐ **${user.username}** - ${xp} XP - Nivel: **${nivelActual}**`, flags: 64 });
+  }
+  // --- NUEVOS COMANDOS DE PRUEBA ---
+  if(inter.commandName === 'test-bienvenida'){
+    const bienvenida = inter.guild.channels.cache.find(c => c.name.toLowerCase().includes('bienvenida'));
+    if(!bienvenida) return inter.reply({ content: '❌ No encontré canal bienvenida', flags: 64 });
+    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${inter.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando.`).setThumbnail(inter.user.displayAvatarURL()).setTimestamp();
+    await bienvenida.send({ content: `${inter.user}`, embeds: [embed] }).catch(()=>{});
+    return inter.reply({ content: `✅ Prueba enviada a ${bienvenida}`, flags: 64 });
+  }
+  if(inter.commandName === 'test-tiktok'){
+    await inter.deferReply({ flags: 64 });
+    const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
+    let result = `Probando @${tiktokUser}...\n`;
+    try{
+      const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      result += `Posts API: OK - video_id=${res.data?.data?.videos?.[0]?.video_id || 'no data'}\n`;
+    }catch(e){ result += `Posts API: ERROR ${e.message}\n`; }
+    try{
+      const infoRes = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=${tiktokUser}`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      result += `Info API: OK - is_live=${infoRes.data?.data?.user?.is_live}\n`;
+    }catch(e){ result += `Info API: ERROR ${e.message}\n`; }
+    result += `\nCache: lastVideo=${tiktokCache.lastVideoId} isLive=${tiktokCache.isLiveNow}`;
+    return inter.editReply({ content: result.slice(0,1900) });
+  }
+  if(inter.commandName === 'live'){
+    const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
+    const canalLive = inter.guild.channels.cache.find(c => c.name.toLowerCase().includes('elcris-en-vivo'));
+    if(!canalLive) return inter.reply({ content: '❌ No encontré canal elcris-en-vivo', flags: 64 });
+    await canalLive.send({ content: `🔴 **@everyone ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{});
+    return inter.reply({ content: `✅ Anuncio LIVE enviado a ${canalLive}`, flags: 64 });
   }
   if(inter.commandName === 'ban'){
     const user = inter.options.getMember('usuario');
@@ -295,39 +335,56 @@ client.on(Events.InteractionCreate, async inter => {
   }
 });
 
-let lastVideoId = null;
-let isLiveNow = false;
+// --- TIKTOK MONITOR MEJORADO - SOLO ESTA FUNCIÓN CAMBIÓ ---
+async function checkTikTok(){
+  const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
+  const guild = client.guilds.cache.get(process.env.GUILD_ID);
+  if(!guild) return;
+  console.log(`🔍 [TikTok] Revisando @${tiktokUser}... lastVideo=${tiktokCache.lastVideoId}`);
+  try{
+    const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const video = res.data?.data?.videos?.[0];
+    if(video){
+      if(tiktokCache.lastVideoId === null){
+        tiktokCache.lastVideoId = video.video_id;
+        saveTikTok();
+        console.log(`💾 Primer video guardado: ${video.video_id} (sin avisar para no spamear)`);
+      } else if(video.video_id !== tiktokCache.lastVideoId){
+        console.log(`🎬 NUEVO VIDEO! ${tiktokCache.lastVideoId} -> ${video.video_id}`);
+        tiktokCache.lastVideoId = video.video_id;
+        saveTikTok();
+        const canalClips = guild.channels.cache.find(c => c.name.toLowerCase().includes('clips-tiktok'));
+        if(canalClips){
+          const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle(`🎬 Nuevo video de @${tiktokUser}!`).setDescription(video.title || '¡Nuevo TikTok!').setImage(video.cover).setURL(`https://www.tiktok.com/@${tiktokUser}/video/${video.video_id}`).setTimestamp();
+          await canalClips.send({ content: `@everyone`, embeds: [embed] }).catch(e=>console.log('Error clip:', e.message));
+        }
+      } else {
+        console.log(`✅ Sin videos nuevos`);
+      }
+    }
+  }catch(e){ console.log(`❌ Error videos TikTok: ${e.message}`); }
+
+  try{
+    const infoRes = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=${tiktokUser}`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const isLive = infoRes.data?.data?.user?.is_live || infoRes.data?.data?.is_live || false;
+    console.log(`📡 Live status API: ${isLive} | cache: ${tiktokCache.isLiveNow}`);
+    if(isLive && !tiktokCache.isLiveNow){
+      tiktokCache.isLiveNow = true; saveTikTok();
+      const canalLive = guild.channels.cache.find(c => c.name.toLowerCase().includes('elcris-en-vivo'));
+      if(canalLive) await canalLive.send({ content: `🔴 **@everyone ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{});
+      console.log('🔴 LIVE anunciado!');
+    } else if(!isLive && tiktokCache.isLiveNow){
+      tiktokCache.isLiveNow = false; saveTikTok();
+      console.log('⚪ Live terminado');
+    }
+  }catch(e){ console.log(`❌ Error live TikTok: ${e.message}`); }
+}
+
 function startTikTokMonitor(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  console.log(`🎬 Monitor TikTok iniciado para @${tiktokUser} - revisando cada 60s`);
-  setInterval(async () => {
-    try{
-      const guild = client.guilds.cache.get(process.env.GUILD_ID);
-      if(!guild) return;
-      const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 10000 });
-      const video = res.data?.data?.videos?.[0];
-      if(video){
-        if(lastVideoId === null){ lastVideoId = video.video_id; }
-        else if(video.video_id !== lastVideoId){
-          lastVideoId = video.video_id;
-          const canalClips = guild.channels.cache.find(c => c.name.includes('clips-tiktok'));
-          if(canalClips){
-            const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle(`🎬 Nuevo video de @${tiktokUser}!`).setDescription(video.title || '¡Nuevo TikTok!').setImage(video.cover).setURL(`https://www.tiktok.com/@${tiktokUser}/video/${video.video_id}`).setTimestamp();
-            canalClips.send({ content: `@everyone`, embeds: [embed] }).catch(()=>{});
-          }
-        }
-      }
-      try{
-        const infoRes = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=${tiktokUser}`, { timeout: 10000 });
-        const userInfo = infoRes.data?.data;
-        const isLive = userInfo?.user?.is_live || userInfo?.is_live || false;
-        if(isLive && !isLiveNow){
-          isLiveNow = true;
-          const canalLive = guild.channels.cache.find(c => c.name.includes('elcris-en-vivo'));
-          if(canalLive){ canalLive.send({ content: `🔴 **@everyone ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{}); }
-        } else if(!isLive){ isLiveNow = false; }
-      }catch(e){}
-    }catch(e){}
-  }, 60000);
+  console.log(`🎬 Monitor TikTok iniciado para @${tiktokUser} - cada 90s`);
+  setTimeout(checkTikTok, 10000);
+  setInterval(checkTikTok, 90000);
 }
+
 client.login(process.env.DISCORD_TOKEN);
