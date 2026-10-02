@@ -13,7 +13,6 @@ try { xpData = JSON.parse(fs.readFileSync('./xp.json','utf8')); } catch { xpData
 const saveXP = () => fs.writeFileSync('./xp.json', JSON.stringify(xpData, null, 2));
 const lastXP = new Map();
 
-// --- NUEVO: CACHE PARA TIKTOK (no toca nada de XP ni roles) ---
 let tiktokCache = {};
 try { tiktokCache = JSON.parse(fs.readFileSync('./tiktok.json','utf8')); } catch { tiktokCache = { lastVideoId: null, isLiveNow: false }; }
 const saveTikTok = () => fs.writeFileSync('./tiktok.json', JSON.stringify(tiktokCache, null, 2));
@@ -44,23 +43,21 @@ function isMod(member){
 
 client.on(Events.ClientReady, async () => {
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  console.log(`✅ BotPapoi2026 FINAL 24/7 ONLINE como ${client.user.tag} | TikTok @${tiktokUser}`);
-  console.log(`📦 TikTok cache: lastVideoId=${tiktokCache.lastVideoId} isLive=${tiktokCache.isLiveNow}`);
+  console.log(`✅ BotPapoi2026 ONLINE ${client.user.tag} | TikTok @${tiktokUser}`);
   const rest = new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
   await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
     { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
     { name: 'rank', description: 'Ver tu XP y nivel', options: [{ name: 'usuario', description: 'Usuario a consultar', type: 6, required: false }] },
-    { name: 'ban', description: 'Banear usuario del server', options: [{ name: 'usuario', description: 'Usuario a banear', type: 6, required: true }, { name: 'razon', description: 'Razón del baneo', type: 3, required: false }], default_member_permissions: PermissionFlagsBits.BanMembers.toString() },
+    { name: 'ban', description: 'Banear usuario', options: [{ name: 'usuario', description: 'Usuario a banear', type: 6, required: true }, { name: 'razon', description: 'Razón', type: 3, required: false }], default_member_permissions: PermissionFlagsBits.BanMembers.toString() },
     { name: 'kick', description: 'Expulsar usuario', options: [{ name: 'usuario', description: 'Usuario a expulsar', type: 6, required: true }, { name: 'razon', description: 'Razón', type: 3, required: false }], default_member_permissions: PermissionFlagsBits.KickMembers.toString() },
-    { name: 'mute', description: 'Silenciar usuario temporalmente', options: [{ name: 'usuario', description: 'Usuario a silenciar', type: 6, required: true }, { name: 'minutos', description: 'Minutos de silencio', type: 4, required: true }, { name: 'razon', description: 'Razón del mute', type: 3, required: false }], default_member_permissions: PermissionFlagsBits.ModerateMembers.toString() },
-    { name: 'unmute', description: 'Quitar silencio a usuario', options: [{ name: 'usuario', description: 'Usuario a desmutear', type: 6, required: true }], default_member_permissions: PermissionFlagsBits.ModerateMembers.toString() },
-    { name: 'warn', description: 'Advertir a un usuario', options: [{ name: 'usuario', description: 'Usuario a advertir', type: 6, required: true }, { name: 'razon', description: 'Razón de la advertencia', type: 3, required: true }] },
-    { name: 'clear', description: 'Borrar mensajes del canal', options: [{ name: 'cantidad', description: 'Cantidad de mensajes a borrar', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageMessages.toString() },
-    { name: 'slowmode', description: 'Cambiar cooldown del canal', options: [{ name: 'segundos', description: 'Segundos de cooldown', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
-    { name: 'setup-pets', description: 'Crear panel de ping-roles en este canal', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'mute', description: 'Silenciar temporalmente', options: [{ name: 'usuario', description: 'Usuario a silenciar', type: 6, required: true }, { name: 'minutos', description: 'Minutos', type: 4, required: true }, { name: 'razon', description: 'Razón', type: 3, required: false }], default_member_permissions: PermissionFlagsBits.ModerateMembers.toString() },
+    { name: 'unmute', description: 'Quitar silencio', options: [{ name: 'usuario', description: 'Usuario a desmutear', type: 6, required: true }], default_member_permissions: PermissionFlagsBits.ModerateMembers.toString() },
+    { name: 'warn', description: 'Advertir usuario', options: [{ name: 'usuario', description: 'Usuario a advertir', type: 6, required: true }, { name: 'razon', description: 'Razón', type: 3, required: true }] },
+    { name: 'clear', description: 'Borrar mensajes', options: [{ name: 'cantidad', description: 'Cantidad', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageMessages.toString() },
+    { name: 'slowmode', description: 'Cambiar cooldown', options: [{ name: 'segundos', description: 'Segundos', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
+    { name: 'setup-pets', description: 'Crear panel de ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
     { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles en la categoría ROBA UN HUEVO', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-    // --- SOLO 3 COMANDOS NUEVOS, NO BORRO NINGUNO ANTERIOR ---
     { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'test-tiktok', description: 'Probar conexión con TikTok', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'live', description: 'Anunciar manualmente que estás en LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -71,7 +68,7 @@ client.on(Events.ClientReady, async () => {
     if(general) await general.setRateLimitPerUser(10).catch(()=>{});
   }
   startTikTokMonitor();
-  console.log('✅ Comandos registrados sin errores');
+  console.log('✅ Comandos registrados');
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -134,31 +131,30 @@ async function crearPanelPingRoles(channel){
     .setTitle('🔗 | ping-roles — ¡Elige tus avisos!')
     .setDescription(
       `**¡Bienvenido a Ping Roles de PAPOIS EMPIRE!** 👋\n\n`+
-      `Aquí eliges **exactamente** qué pets quieres que te avise el bot. Así no te llegan pings de todos los huevos, solo de los que TÚ quieras.\n\n`+
-      `**¿Cómo se usa? (Súper fácil)**\n`+
+      `Aquí eliges **exactamente** qué pets quieres que te avise el bot.\n\n`+
+      `**¿Cómo se usa?**\n`+
       `**1.** Abre uno de los menús de abajo 👇\n`+
-      `**2.** Marca los pets que te interesan (puedes marcar varios a la vez)\n`+
-      `**3.** ¡Listo! Si ya tenías ese rol se te quita, si no lo tenías se te pone. Es como un interruptor 🔛\n\n`+
+      `**2.** Marca los pets que te interesan\n`+
+      `**3.** ¡Listo! Es como un interruptor 🔛\n\n`+
       `**Categorías:**\n`+
-      `🍀 **Huevo Secreto** — Pets secretos (14 disponibles)\n`+
-      `🚀 **Huevo Eterno** — Pets eternos (10 disponibles)\n`+
-      `💎 **Huevo Divino** — Pets divinos ULTRA raros (5 disponibles)\n\n`+
-      `> 💡 *Ejemplo: Si solo quieres que te avise de \`Kitsune\` y \`Unicorn\`, solo marca esos 2 en Divino.*\n`
+      `🍀 **Huevo Secreto** — 14 pets\n`+
+      `🚀 **Huevo Eterno** — 10 pets\n`+
+      `💎 **Huevo Divino** — 5 pets ULTRA raros\n`
     )
     .setThumbnail(guild.iconURL())
-    .setFooter({ text: 'PAPOIS EMPIRE • Cambios instantáneos • No afecta tus otros roles' })
+    .setFooter({ text: 'PAPOIS EMPIRE • Cambios instantáneos' })
     .setTimestamp();
 
   const rowSecreto = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder('🍀 Huevo Secreto — Elige tus pets específicos').setMinValues(1).setMaxValues(Math.min(PETS['Secreto'].length, 25))
+    new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder('🍀 Huevo Secreto').setMinValues(1).setMaxValues(Math.min(PETS['Secreto'].length, 25))
       .addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, description: `Solo te avisará de ${p}`, emoji: '🍀' })))
   );
   const rowEterno = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder('🚀 Huevo Eterno — Elige tus pets específicos').setMinValues(1).setMaxValues(Math.min(PETS['Eterno'].length, 25))
+    new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder('🚀 Huevo Eterno').setMinValues(1).setMaxValues(Math.min(PETS['Eterno'].length, 25))
       .addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, description: `Solo te avisará de ${p}`, emoji: '🚀' })))
   );
   const rowDivino = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder('💎 Huevo Divino — Elige tus pets específicos').setMinValues(1).setMaxValues(Math.min(PETS['Divino'].length, 25))
+    new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder('💎 Huevo Divino').setMinValues(1).setMaxValues(Math.min(PETS['Divino'].length, 25))
       .addOptions(PETS['Divino'].map(p => ({ label: p, value: p, description: `Solo te avisará de ${p} • ULTRA RARO`, emoji: '💎' })))
   );
   const rowBotones = new ActionRowBuilder().addComponents(
@@ -173,11 +169,11 @@ client.on(Events.InteractionCreate, async inter => {
     if(inter.customId === 'btn_my_pings'){
       await inter.deferReply({ flags: 64 });
       const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
-      if(!rolesPet.length) return inter.editReply({ content: '📭 **No tienes ningún ping activo.**\nVe arriba y elige en los menús, por ejemplo `Kitsune` o `World Burner`.' });
-      return inter.editReply({ content: `📋 **Tus pings activos (${rolesPet.length}):**\n${rolesPet.map(r => `• ${r}`).join('\n')}\n\nPara quitar uno, selecciónalo de nuevo en el menú.` });
+      if(!rolesPet.length) return inter.editReply({ content: '📭 **No tienes ningún ping activo.**' });
+      return inter.editReply({ content: `📋 **Tus pings activos (${rolesPet.length}):**\n${rolesPet.map(r => `• ${r}`).join('\n')}` });
     }
     if(inter.customId === 'btn_customize'){
-      return inter.reply({ content: '👇 **Cómo usar:** Abre uno de los 3 menús de arriba y marca los pets que quieres. Puedes marcar varios a la vez. Si ya lo tenías, se te quitará.', flags: 64 });
+      return inter.reply({ content: '👇 Abre uno de los 3 menús de arriba y marca los pets que quieres.', flags: 64 });
     }
   }
   if(inter.isStringSelectMenu()){
@@ -195,7 +191,6 @@ client.on(Events.InteractionCreate, async inter => {
       let msg = `**${categoria}**:\n`;
       if(agregados.length) msg += `✅ Ahora te avisará de: **${agregados.join(', ')}**\n`;
       if(quitados.length) msg += `❌ Ya NO te avisará de: **${quitados.join(', ')}**\n`;
-      msg += `\nUsa 📋 Mis Pings para ver tu lista completa.`;
       return inter.editReply({ content: msg });
     }
   }
@@ -203,7 +198,7 @@ client.on(Events.InteractionCreate, async inter => {
   if(inter.commandName === 'mis-pings'){
     await inter.deferReply({ flags: 64 });
     const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
-    if(!rolesPet.length) return inter.editReply({ content: '📭 No tienes pings activos. Ve a #🔗 | ping-roles y elige los pets que quieres.' });
+    if(!rolesPet.length) return inter.editReply({ content: '📭 No tienes pings activos.' });
     return inter.editReply({ content: `📋 **Tus pings (${rolesPet.length}):** ${rolesPet.join(', ')}` });
   }
   if(inter.commandName === 'crear-canal-ping-roles'){
@@ -211,27 +206,21 @@ client.on(Events.InteractionCreate, async inter => {
     const guild = inter.guild;
     let categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('roba un huevo'));
     if(!categoria) categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && (c.name.toLowerCase().includes('roba') || c.name.toLowerCase().includes('huevo')));
-    if(!categoria) return inter.editReply({ content: '❌ No encontré la categoría `🥚 · ROBA UN HUEVO`.' });
+    if(!categoria) return inter.editReply({ content: '❌ No encontré la categoría ROBA UN HUEVO.' });
     let canal = guild.channels.cache.find(c => c.name.toLowerCase().includes('ping-roles'));
     if(!canal){
       canal = await guild.channels.create({
         name: '🔗 | ping-roles',
         type: ChannelType.GuildText,
         parent: categoria.id,
-        topic: 'Elige EXACTAMENTE qué pets quieres que te pingueen. Solo lectura.',
         permissionOverwrites: [
-          { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.AddReactions, PermissionFlagsBits.SendMessagesInThreads, PermissionFlagsBits.CreatePublicThreads] },
+          { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
           { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory] },
         ]
       });
-    } else {
-      await canal.setParent(categoria.id).catch(()=>{});
-      await canal.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false, AddReactions: false, SendMessagesInThreads: false }).catch(()=>{});
-      const msgs = await canal.messages.fetch({ limit: 20 }).catch(()=>null);
-      if(msgs){ for(const m of msgs.values()){ if(m.author.id === client.user.id) await m.delete().catch(()=>{}); } }
     }
     await crearPanelPingRoles(canal);
-    return inter.editReply({ content: `✅ Canal limpio y reparado: ${canal} dentro de **${categoria.name}**\nYa sin imagen rara, solo tu logo.` });
+    return inter.editReply({ content: `✅ Canal reparado: ${canal}` });
   }
   if(!isMod(inter.member) &&!['rank','separar-papois-exacto','mis-pings'].includes(inter.commandName)){
     if(['setup-pets','crear-canal-ping-roles','test-bienvenida','test-tiktok','live'].includes(inter.commandName)){
@@ -243,7 +232,7 @@ client.on(Events.InteractionCreate, async inter => {
   if(inter.commandName === 'setup-pets'){
     await inter.deferReply({ flags: 64 });
     await crearPanelPingRoles(inter.channel);
-    return inter.editReply({ content: '✅ Panel pro creado aquí.' });
+    return inter.editReply({ content: '✅ Panel creado aquí.' });
   }
   if(inter.commandName === 'separar-papois-exacto'){
     await inter.deferReply({ flags: 64 });
@@ -262,27 +251,16 @@ client.on(Events.InteractionCreate, async inter => {
     for(const n of NIVELES) if(xp >= n.xp) nivelActual = n.name;
     return inter.reply({ content: `⭐ **${user.username}** - ${xp} XP - Nivel: **${nivelActual}**`, flags: 64 });
   }
-  // --- NUEVOS COMANDOS DE PRUEBA ---
   if(inter.commandName === 'test-bienvenida'){
     const bienvenida = inter.guild.channels.cache.find(c => c.name.toLowerCase().includes('bienvenida'));
     if(!bienvenida) return inter.reply({ content: '❌ No encontré canal bienvenida', flags: 64 });
-    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${inter.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando.`).setThumbnail(inter.user.displayAvatarURL()).setTimestamp();
+    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${inter.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!`).setThumbnail(inter.user.displayAvatarURL()).setTimestamp();
     await bienvenida.send({ content: `${inter.user}`, embeds: [embed] }).catch(()=>{});
     return inter.reply({ content: `✅ Prueba enviada a ${bienvenida}`, flags: 64 });
   }
   if(inter.commandName === 'test-tiktok'){
     await inter.deferReply({ flags: 64 });
-    const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-    let result = `Probando @${tiktokUser}...\n`;
-    try{
-      const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-      result += `Posts API: OK - video_id=${res.data?.data?.videos?.[0]?.video_id || 'no data'}\n`;
-    }catch(e){ result += `Posts API: ERROR ${e.message}\n`; }
-    try{
-      const infoRes = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=${tiktokUser}`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-      result += `Info API: OK - is_live=${infoRes.data?.data?.user?.is_live}\n`;
-    }catch(e){ result += `Info API: ERROR ${e.message}\n`; }
-    result += `\nCache: lastVideo=${tiktokCache.lastVideoId} isLive=${tiktokCache.isLiveNow}`;
+    const result = await testTikTokAPIs();
     return inter.editReply({ content: result.slice(0,1900) });
   }
   if(inter.commandName === 'live'){
@@ -335,54 +313,120 @@ client.on(Events.InteractionCreate, async inter => {
   }
 });
 
-// --- TIKTOK MONITOR MEJORADO - SOLO ESTA FUNCIÓN CAMBIÓ ---
+// --- FUNCION DE PRUEBA MULTI-API ---
+async function testTikTokAPIs(){
+  const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
+  let result = `🧪 Probando @${tiktokUser} con múltiples métodos...\n\n`;
+  
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Referer': 'https://www.tikwm.com/',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+    'Origin': 'https://www.tikwm.com',
+  };
+
+  // Intento 1: tikwm www
+  try{
+    const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers });
+    result += `✅ tikwm www: OK - video=${res.data?.data?.videos?.[0]?.video_id}\n`;
+  }catch(e){ result += `❌ tikwm www: ${e.response?.status || e.message}\n`; }
+
+  // Intento 2: tikwm sin www
+  try{
+    const res = await axios.get(`https://tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers });
+    result += `✅ tikwm sin www: OK - video=${res.data?.data?.videos?.[0]?.video_id}\n`;
+  }catch(e){ result += `❌ tikwm sin www: ${e.response?.status || e.message}\n`; }
+
+  // Intento 3: API alternativa - countik
+  try{
+    const res = await axios.get(`https://api.countik.com/api/user/${tiktokUser}`, { timeout: 15000, headers: { 'User-Agent': headers['User-Agent'] } });
+    result += `✅ countik: OK\n`;
+  }catch(e){ result += `❌ countik: ${e.response?.status || e.message}\n`; }
+
+  // Intento 4: TikTok web directo (scraping ligero)
+  try{
+    const res = await axios.get(`https://www.tiktok.com/@${tiktokUser}`, { timeout: 15000, headers: { 'User-Agent': headers['User-Agent'], 'Accept-Language': 'en-US' } });
+    const hasVideo = res.data.includes('video_id') || res.data.includes('itemId');
+    result += `✅ tiktok.com web: ${hasVideo ? 'HTML con videos' : 'HTML sin videos'} (status ${res.status})\n`;
+  }catch(e){ result += `❌ tiktok.com web: ${e.response?.status || e.message}\n`; }
+
+  result += `\nCache actual: lastVideo=${tiktokCache.lastVideoId} isLive=${tiktokCache.isLiveNow}\n`;
+  result += `\n💡 Si todo da 403, Railway está bloqueado. Usa /live manual mientras tanto.`;
+  return result;
+}
+
+// --- MONITOR MEJORADO CON BYPASS ---
 async function checkTikTok(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(!guild) return;
-  console.log(`🔍 [TikTok] Revisando @${tiktokUser}... lastVideo=${tiktokCache.lastVideoId}`);
+  console.log(`🔍 [TikTok] Revisando @${tiktokUser}...`);
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Referer': 'https://www.tikwm.com/',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://www.tikwm.com',
+  };
+
+  let videoFound = null;
+
+  // Intenta www.tikwm
   try{
-    const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const video = res.data?.data?.videos?.[0];
-    if(video){
-      if(tiktokCache.lastVideoId === null){
-        tiktokCache.lastVideoId = video.video_id;
-        saveTikTok();
-        console.log(`💾 Primer video guardado: ${video.video_id} (sin avisar para no spamear)`);
-      } else if(video.video_id !== tiktokCache.lastVideoId){
-        console.log(`🎬 NUEVO VIDEO! ${tiktokCache.lastVideoId} -> ${video.video_id}`);
-        tiktokCache.lastVideoId = video.video_id;
-        saveTikTok();
-        const canalClips = guild.channels.cache.find(c => c.name.toLowerCase().includes('clips-tiktok'));
-        if(canalClips){
-          const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle(`🎬 Nuevo video de @${tiktokUser}!`).setDescription(video.title || '¡Nuevo TikTok!').setImage(video.cover).setURL(`https://www.tiktok.com/@${tiktokUser}/video/${video.video_id}`).setTimestamp();
-          await canalClips.send({ content: `@everyone`, embeds: [embed] }).catch(e=>console.log('Error clip:', e.message));
-        }
-      } else {
-        console.log(`✅ Sin videos nuevos`);
+    const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers });
+    videoFound = res.data?.data?.videos?.[0];
+    console.log(`✅ tikwm www OK: ${videoFound?.video_id}`);
+  }catch(e){
+    console.log(`❌ tikwm www falló: ${e.response?.status} ${e.message}`);
+    // Intenta sin www
+    try{
+      const res2 = await axios.get(`https://tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 15000, headers });
+      videoFound = res2.data?.data?.videos?.[0];
+      console.log(`✅ tikwm sin www OK: ${videoFound?.video_id}`);
+    }catch(e2){
+      console.log(`❌ tikwm sin www también falló: ${e2.response?.status}`);
+    }
+  }
+
+  if(videoFound){
+    if(tiktokCache.lastVideoId === null){
+      tiktokCache.lastVideoId = videoFound.video_id;
+      saveTikTok();
+      console.log(`💾 Primer video guardado: ${videoFound.video_id}`);
+    } else if(videoFound.video_id !== tiktokCache.lastVideoId){
+      console.log(`🎬 NUEVO VIDEO DETECTADO!`);
+      tiktokCache.lastVideoId = videoFound.video_id;
+      saveTikTok();
+      const canalClips = guild.channels.cache.find(c => c.name.toLowerCase().includes('clips-tiktok'));
+      if(canalClips){
+        const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle(`🎬 Nuevo video de @${tiktokUser}!`).setDescription(videoFound.title || '¡Nuevo TikTok!').setImage(videoFound.cover).setURL(`https://www.tiktok.com/@${tiktokUser}/video/${videoFound.video_id}`).setTimestamp();
+        await canalClips.send({ content: `@everyone`, embeds: [embed] }).catch(e=>console.log(e.message));
       }
     }
-  }catch(e){ console.log(`❌ Error videos TikTok: ${e.message}`); }
+  }
 
+  // LIVE - intenta con headers mejorados
   try{
-    const infoRes = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=${tiktokUser}`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const isLive = infoRes.data?.data?.user?.is_live || infoRes.data?.data?.is_live || false;
-    console.log(`📡 Live status API: ${isLive} | cache: ${tiktokCache.isLiveNow}`);
+    const infoRes = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=${tiktokUser}`, { timeout: 15000, headers });
+    const isLive = infoRes.data?.data?.user?.is_live || false;
+    console.log(`📡 Live check: is_live=${isLive}`);
     if(isLive && !tiktokCache.isLiveNow){
       tiktokCache.isLiveNow = true; saveTikTok();
       const canalLive = guild.channels.cache.find(c => c.name.toLowerCase().includes('elcris-en-vivo'));
       if(canalLive) await canalLive.send({ content: `🔴 **@everyone ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{});
-      console.log('🔴 LIVE anunciado!');
     } else if(!isLive && tiktokCache.isLiveNow){
       tiktokCache.isLiveNow = false; saveTikTok();
-      console.log('⚪ Live terminado');
     }
-  }catch(e){ console.log(`❌ Error live TikTok: ${e.message}`); }
+  }catch(e){
+    console.log(`❌ Live check falló: ${e.response?.status} ${e.message} - el auto falló, usa /live manual`);
+  }
 }
 
 function startTikTokMonitor(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  console.log(`🎬 Monitor TikTok iniciado para @${tiktokUser} - cada 90s`);
+  console.log(`🎬 Monitor TikTok iniciado @${tiktokUser} cada 90s con bypass`);
   setTimeout(checkTikTok, 10000);
   setInterval(checkTikTok, 90000);
 }
