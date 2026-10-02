@@ -338,12 +338,18 @@ client.on(Events.MessageCreate, async msg => {
     }
   }
   
-  if(!isMod(member)){
-    const tieneLink = /(https?:\/\/|www\.|discord\.gg|discord\.com\/invite|t\.me\/)/i.test(msg.content);
+    if(!isMod(member)){
+    const contenido = msg.content.toLowerCase().replace(/\s+/g, '');
+    const tieneLink = /(https?:\/\/|www\.|discord\.gg|discord\.com\/invite|discordapp\.com\/invite|t\.me\/|discord\.io)/i.test(contenido);
     if(tieneLink){
-      await msg.delete().catch(()=>{});
-      const warn = await msg.channel.send({ content: `${msg.author} ❌ Links bloqueados.` }).catch(()=>{});
-      if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 4000);
+      try {
+        await msg.delete();
+        console.log(`[ANTI-INVITE] Borrado invite de ${msg.author.tag} en #${msg.channel.name}: ${msg.content}`);
+        const warn = await msg.channel.send({ content: `${msg.author} ❌ Invites de otros servidores no permitidos.` }).catch(()=>{});
+        if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 5000);
+      } catch(e){
+        console.log(`❌ No pude borrar invite: ${e.message} - Revisa permiso Gestionar mensajes en #${msg.channel.name}`);
+      }
       return;
     }
   }
