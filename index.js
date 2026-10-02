@@ -4,8 +4,14 @@ const fs = require('fs');
 const axios = require('axios');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
-  partials: [Partials.Channel, Partials.Message]
+  intents: [
+    GatewayIntentBits.Guilds, 
+    GatewayIntentBits.GuildMembers, 
+    GatewayIntentBits.GuildMessages, 
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions
+  ],
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User, Partials.GuildMember]
 });
 
 let xpData = {};
@@ -38,10 +44,15 @@ function isMod(member){
   if(isOwner(member.id)) return true;
   return member.roles.cache.some(r => ['papoi mayor','moderador'].includes(r.name.toLowerCase()));
 }
+function isPapoiMayor(member){
+  if(!member) return false;
+  if(isOwner(member.id)) return true;
+  return member.roles.cache.some(r => r.name.toLowerCase() === 'papoi mayor');
+}
 
 client.on(Events.ClientReady, async () => {
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  console.log(`✅ BotPapoi2026 V4 FINAL ONLINE ${client.user.tag} | @${tiktokUser}`);
+  console.log(`✅ BotPapoi2026 V4 FINAL + REACCIONES SOLO PAPOI MAYOR ONLINE ${client.user.tag}`);
   const rest = new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
   await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
     { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
@@ -55,11 +66,11 @@ client.on(Events.ClientReady, async () => {
     { name: 'slowmode', description: 'Cambiar cooldown', options: [{ name: 'segundos', description: 'Segundos', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
     { name: 'setup-pets', description: 'Crear panel de ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
-    { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles en la categoría ROBA UN HUEVO', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'test-tiktok', description: 'Probar conexión con TikTok V4', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-    { name: 'live', description: 'Anunciar manualmente que estás en LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-    { name: 'video', description: 'Anunciar manualmente un video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
   ]});
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(guild){
@@ -67,7 +78,7 @@ client.on(Events.ClientReady, async () => {
     if(general) await general.setRateLimitPerUser(10).catch(()=>{});
   }
   startTikTokMonitor();
-  console.log('✅ Comandos V4 FINAL registrados con @everyone');
+  console.log('✅ Comandos V4 FINAL REACCIONES registrados');
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -76,8 +87,29 @@ client.on(Events.GuildMemberAdd, async member => {
   if(rolPapoi) await member.roles.add(rolPapoi).catch(()=>{});
   const bienvenida = guild.channels.cache.find(c => c.name.includes('bienvenida'));
   if(bienvenida){
-    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando.`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
+    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
     bienvenida.send({ content: `${member}`, embeds: [embed] }).catch(()=>{});
+  }
+});
+
+// --- NUEVO: SOLO PAPOI MAYOR PUEDE REACCIONAR ---
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  if(user.bot) return;
+  try{
+    if(reaction.partial) await reaction.fetch();
+    const guild = reaction.message.guild;
+    if(!guild) return;
+    const member = await guild.members.fetch(user.id).catch(()=>null);
+    if(!member) return;
+    
+    // Si es Papoi Mayor o Owner, lo dejamos reaccionar
+    if(isPapoiMayor(member)) return;
+    
+    // Si no es Papoi Mayor, le borramos la reacción al instante
+    await reaction.users.remove(user.id).catch(()=>{});
+    console.log(`🚫 Reacción de ${user.tag} borrada - solo Papoi Mayor puede reaccionar`);
+  }catch(e){
+    console.log(`Error quitando reacción: ${e.message}`);
   }
 });
 
@@ -238,7 +270,7 @@ client.on(Events.InteractionCreate, async inter => {
   if(inter.commandName === 'slowmode'){ const seg = inter.options.getInteger('segundos'); await inter.channel.setRateLimitPerUser(seg).catch(()=>{}); return inter.reply({ content: `⏳ Slowmode puesto a ${seg}s` }); }
 });
 
-// --- V4 FINAL: OEMBED + @EVERYONE ---
+// --- V4 FINAL: OEMBED + @EVERYONE + REACCIONES SOLO PAPOI MAYOR ---
 
 async function getVideoDetails(videoId, tiktokUser, originalUrl){
   let title = null;
@@ -328,7 +360,6 @@ async function sendViralVideoAnnouncement(guild, videoDetails){
     new ButtonBuilder().setLabel('🔥 Ver en TikTok').setStyle(ButtonStyle.Link).setURL(videoDetails.originalUrl),
   );
 
-  // FINAL CON @EVERYONE
   const content = `@everyone 🔥 **NUEVO VIDEO DEL PAPOI MAYOR** 🔥\n${videoDetails.originalUrl}`;
 
   await canalClips.send({ 
@@ -378,7 +409,7 @@ async function scrapeTikTokDirect(tiktokUser){
 
 async function testTikTokAPIs(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  let result = `🧪 V4 FINAL OEMBED Probando @${tiktokUser}...\n\n`;
+  let result = `🧪 V4 FINAL + REACCIONES SOLO PAPOI MAYOR Probando @${tiktokUser}...\n\n`;
   try{
     const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(`https://www.tiktok.com/@${tiktokUser}/video/7691863965617491218`)}`;
     const res = await axios.get(oembedUrl, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0' } });
@@ -393,7 +424,7 @@ async function testTikTokAPIs(){
     const details = await getVideoDetails('7691863965617491218', tiktokUser, `https://www.tiktok.com/@${tiktokUser}/video/7691863965617491218`);
     result += `✅ getVideoDetails V4: cover=${details.cover ? 'SI' : 'NO'} title=${details.title.slice(0,30)}\n`;
   }catch(e){ result += `❌ getVideoDetails V4: ${e.message}\n`; }
-  result += `\nCache: lastVideo=${tiktokCache.lastVideoId}\nFINAL CON @EVERYONE`;
+  result += `\nCache: lastVideo=${tiktokCache.lastVideoId}\nFINAL CON @EVERYONE + SOLO PAPOI MAYOR REACCIONES`;
   return result;
 }
 
@@ -415,7 +446,7 @@ async function checkTikTok(){
     if(tiktokCache.lastVideoId === null){
       tiktokCache.lastVideoId = videoId;
       saveTikTok();
-      console.log('💾 Primer video guardado sin avisar (para no spamear al reiniciar)');
+      console.log('💾 Primer video guardado sin avisar');
     } else if(videoId !== tiktokCache.lastVideoId){
       console.log('🎬 NUEVO VIDEO DETECTADO! V4 FINAL...');
       tiktokCache.lastVideoId = videoId;
@@ -428,7 +459,7 @@ async function checkTikTok(){
 
 function startTikTokMonitor(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  console.log(`🎬 Monitor TikTok V4 FINAL iniciado @${tiktokUser} cada 90s CON @EVERYONE`);
+  console.log(`🎬 Monitor TikTok V4 FINAL + REACCIONES iniciado @${tiktokUser} cada 90s`);
   setTimeout(checkTikTok, 15000);
   setInterval(checkTikTok, 90000);
 }
