@@ -41,7 +41,7 @@ function isMod(member){
 
 client.on(Events.ClientReady, async () => {
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  console.log(`✅ BotPapoi2026 AURA V2 ONLINE ${client.user.tag} | @${tiktokUser}`);
+  console.log(`✅ BotPapoi2026 MODO PRUEBA SIN EVERYONE ONLINE ${client.user.tag}`);
   const rest = new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
   await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
     { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
@@ -55,11 +55,11 @@ client.on(Events.ClientReady, async () => {
     { name: 'slowmode', description: 'Cambiar cooldown', options: [{ name: 'segundos', description: 'Segundos', type: 4, required: true }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
     { name: 'setup-pets', description: 'Crear panel de ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
-    { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles en la categoría ROBA UN HUEVO', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'test-tiktok', description: 'Probar conexión con TikTok', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-    { name: 'live', description: 'Anunciar manualmente que estás en LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-    { name: 'video', description: 'Anunciar manualmente un video nuevo con aura', options: [{ name: 'url', description: 'Link del video de TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'live', description: 'Anunciar manualmente LIVE (MODO PRUEBA SIN PING)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+    { name: 'video', description: 'Anunciar video con aura (MODO PRUEBA SIN PING)', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
   ]});
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(guild){
@@ -67,7 +67,7 @@ client.on(Events.ClientReady, async () => {
     if(general) await general.setRateLimitPerUser(10).catch(()=>{});
   }
   startTikTokMonitor();
-  console.log('✅ Comandos registrados AURA V2');
+  console.log('✅ Comandos MODO PRUEBA registrados');
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -76,7 +76,7 @@ client.on(Events.GuildMemberAdd, async member => {
   if(rolPapoi) await member.roles.add(rolPapoi).catch(()=>{});
   const bienvenida = guild.channels.cache.find(c => c.name.includes('bienvenida'));
   if(bienvenida){
-    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando.`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
+    const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
     bienvenida.send({ content: `${member}`, embeds: [embed] }).catch(()=>{});
   }
 });
@@ -125,40 +125,34 @@ client.on(Events.MessageCreate, async msg => {
 
 async function crearPanelPingRoles(channel){
   const guild = channel.guild;
-  const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('🔗 | ping-roles — ¡Elige tus avisos!').setDescription(`**¡Bienvenido a Ping Roles!** 👋\n\nElige exactamente qué pets quieres que te avise.\n\n🍀 Secreto — 14 pets\n🚀 Eterno — 10 pets\n💎 Divino — 5 ULTRA raros\n`).setThumbnail(guild.iconURL()).setTimestamp();
-  const rowSecreto = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder('🍀 Huevo Secreto').setMinValues(1).setMaxValues(Math.min(PETS['Secreto'].length, 25)).addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, emoji: '🍀' }))));
-  const rowEterno = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder('🚀 Huevo Eterno').setMinValues(1).setMaxValues(Math.min(PETS['Eterno'].length, 25)).addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, emoji: '🚀' }))));
-  const rowDivino = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder('💎 Huevo Divino').setMinValues(1).setMaxValues(Math.min(PETS['Divino'].length, 25)).addOptions(PETS['Divino'].map(p => ({ label: p, value: p, emoji: '💎' }))));
-  const rowBotones = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('btn_customize').setLabel('✨ Ayuda').setStyle(ButtonStyle.Success));
+  const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('🔗 | ping-roles — ¡Elige tus avisos!').setDescription(`🍀 Secreto — 14 pets\n🚀 Eterno — 10 pets\n💎 Divino — 5 ULTRA raros`).setThumbnail(guild.iconURL()).setTimestamp();
+  const rowSecreto = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder('🍀 Huevo Secreto').setMinValues(1).setMaxValues(25).addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, emoji: '🍀' }))));
+  const rowEterno = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder('🚀 Huevo Eterno').setMinValues(1).setMaxValues(25).addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, emoji: '🚀' }))));
+  const rowDivino = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder('💎 Huevo Divino').setMinValues(1).setMaxValues(25).addOptions(PETS['Divino'].map(p => ({ label: p, value: p, emoji: '💎' }))));
+  const rowBotones = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary));
   await channel.send({ embeds: [embed], components: [rowSecreto, rowEterno, rowDivino, rowBotones] });
 }
 
 client.on(Events.InteractionCreate, async inter => {
-  if(inter.isButton()){
-    if(inter.customId === 'btn_my_pings'){
-      await inter.deferReply({ flags: 64 });
-      const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
-      if(!rolesPet.length) return inter.editReply({ content: '📭 No tienes pings activos.' });
-      return inter.editReply({ content: `📋 Tus pings (${rolesPet.length}): ${rolesPet.join(', ')}` });
-    }
-    if(inter.customId === 'btn_customize'){ return inter.reply({ content: '👇 Abre un menú arriba y marca los pets.', flags: 64 }); }
+  if(inter.isButton() && inter.customId === 'btn_my_pings'){
+    await inter.deferReply({ flags: 64 });
+    const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
+    if(!rolesPet.length) return inter.editReply({ content: '📭 No tienes pings activos.' });
+    return inter.editReply({ content: `📋 Tus pings: ${rolesPet.join(', ')}` });
   }
-  if(inter.isStringSelectMenu()){
-    if(inter.customId.startsWith('pets_')){
-      await inter.deferReply({ flags: 64 });
-      const seleccionados = inter.values;
-      let agregados = []; let quitados = [];
-      for(const petName of seleccionados){
-        const rol = inter.guild.roles.cache.find(r => r.name.toLowerCase() === petName.toLowerCase());
-        if(!rol) continue;
-        if(inter.member.roles.cache.has(rol.id)){ await inter.member.roles.remove(rol).catch(()=>{}); quitados.push(petName); }
-        else { await inter.member.roles.add(rol).catch(()=>{}); agregados.push(petName); }
-      }
-      let msg = ``;
-      if(agregados.length) msg += `✅ Ahora te avisará de: **${agregados.join(', ')}**\n`;
-      if(quitados.length) msg += `❌ Ya NO te avisará de: **${quitados.join(', ')}**\n`;
-      return inter.editReply({ content: msg || 'Hecho' });
+  if(inter.isStringSelectMenu() && inter.customId.startsWith('pets_')){
+    await inter.deferReply({ flags: 64 });
+    let agregados = []; let quitados = [];
+    for(const petName of inter.values){
+      const rol = inter.guild.roles.cache.find(r => r.name.toLowerCase() === petName.toLowerCase());
+      if(!rol) continue;
+      if(inter.member.roles.cache.has(rol.id)){ await inter.member.roles.remove(rol).catch(()=>{}); quitados.push(petName); }
+      else { await inter.member.roles.add(rol).catch(()=>{}); agregados.push(petName); }
     }
+    let msg = ``;
+    if(agregados.length) msg += `✅ Ahora: **${agregados.join(', ')}**\n`;
+    if(quitados.length) msg += `❌ Ya no: **${quitados.join(', ')}**\n`;
+    return inter.editReply({ content: msg || 'Hecho' });
   }
   if(!inter.isChatInputCommand()) return;
   if(inter.commandName === 'mis-pings'){
@@ -170,13 +164,10 @@ client.on(Events.InteractionCreate, async inter => {
   if(inter.commandName === 'crear-canal-ping-roles'){
     await inter.deferReply({ flags: 64 });
     const guild = inter.guild;
-    let categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('roba un huevo'));
-    if(!categoria) categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && (c.name.toLowerCase().includes('roba') || c.name.toLowerCase().includes('huevo')));
+    let categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('roba un huevo')) || guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('roba'));
     if(!categoria) return inter.editReply({ content: '❌ No encontré categoría ROBA UN HUEVO.' });
     let canal = guild.channels.cache.find(c => c.name.toLowerCase().includes('ping-roles'));
-    if(!canal){
-      canal = await guild.channels.create({ name: '🔗 | ping-roles', type: ChannelType.GuildText, parent: categoria.id, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks] }] });
-    }
+    if(!canal) canal = await guild.channels.create({ name: '🔗 | ping-roles', type: ChannelType.GuildText, parent: categoria.id, permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks] }] });
     await crearPanelPingRoles(canal);
     return inter.editReply({ content: `✅ Canal reparado: ${canal}` });
   }
@@ -219,8 +210,9 @@ client.on(Events.InteractionCreate, async inter => {
     const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
     const canalLive = inter.guild.channels.cache.find(c => c.name.toLowerCase().includes('elcris-en-vivo'));
     if(!canalLive) return inter.reply({ content: '❌ No encontré canal elcris-en-vivo', flags: 64 });
-    await canalLive.send({ content: `🔴 **@everyone ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{});
-    return inter.reply({ content: `✅ Anuncio LIVE enviado a ${canalLive}`, flags: 64 });
+    // MODO PRUEBA SIN @everyone
+    await canalLive.send({ content: `🔴 **(PRUEBA) ELCRIS ESTÁ EN VIVO EN TIKTOK!**\nhttps://www.tiktok.com/@${tiktokUser}/live\n¡Vayan a apoyar!` }).catch(()=>{});
+    return inter.reply({ content: `✅ Anuncio LIVE de PRUEBA enviado a ${canalLive} (sin @everyone)`, flags: 64 });
   }
   if(inter.commandName === 'video'){
     await inter.deferReply({ flags: 64 });
@@ -236,7 +228,7 @@ client.on(Events.InteractionCreate, async inter => {
     }
     const details = await getVideoDetails(videoId, tiktokUser, url);
     await sendViralVideoAnnouncement(inter.guild, details);
-    return inter.editReply({ content: `✅ Video anunciado con aura V2 en clips-tiktok` });
+    return inter.editReply({ content: `✅ Video anunciado MODO PRUEBA (sin @everyone) en clips-tiktok` });
   }
   if(inter.commandName === 'ban'){ const user = inter.options.getMember('usuario'); const razon = inter.options.getString('razon')||'Sin razón'; if(user) await user.ban({ reason: razon }).catch(()=>{}); return inter.reply({ content: `🔨 Baneado ${user?.user.tag} - ${razon}` }); }
   if(inter.commandName === 'kick'){ const user = inter.options.getMember('usuario'); const razon = inter.options.getString('razon')||'Sin razón'; if(user) await user.kick(razon).catch(()=>{}); return inter.reply({ content: `👢 Kick a ${user?.user.tag}` }); }
@@ -247,44 +239,69 @@ client.on(Events.InteractionCreate, async inter => {
   if(inter.commandName === 'slowmode'){ const seg = inter.options.getInteger('segundos'); await inter.channel.setRateLimitPerUser(seg).catch(()=>{}); return inter.reply({ content: `⏳ Slowmode puesto a ${seg}s` }); }
 });
 
-// --- FUNCIONES AURA V2 - MENSAJE MEJORADO ---
+// --- FIX PORTADA + SIN EVERYONE PARA PRUEBAS ---
+
+async function fetchTikWMViaProxy(tiktokUser){
+  const tikwmUrl = `https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=3`;
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(tikwmUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(tikwmUrl)}`,
+  ];
+  for(const proxyUrl of proxies){
+    try{
+      const res = await axios.get(proxyUrl, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      let data = res.data;
+      if(typeof data === 'string'){ try{ data = JSON.parse(data); }catch{} }
+      if(data && data.data && data.data.videos && data.data.videos[0]) return data;
+    }catch(e){ console.log(`Proxy TikWM fail: ${e.message}`); }
+  }
+  return null;
+}
 
 async function getVideoDetails(videoId, tiktokUser, originalUrl){
   let title = null;
   let cover = null;
-  let desc = null;
+  console.log(`🔍 Buscando detalles para video ${videoId}...`);
+  try{
+    const data = await fetchTikWMViaProxy(tiktokUser);
+    if(data && data.data && data.data.videos){
+      const found = data.data.videos.find(v => v.video_id === videoId) || data.data.videos[0];
+      if(found){
+        if(found.cover) { cover = found.cover; console.log(`✅ Cover via TikWM proxy: ${cover.slice(0,80)}...`); }
+        if(found.title) title = found.title;
+      }
+    }
+  }catch(e){ console.log(`TikWM cover fail: ${e.message}`); }
 
-  const urlsToTry = [
-    `https://www.tiktok.com/@${tiktokUser}/video/${videoId}`,
-    originalUrl
-  ];
-
-  for(const url of urlsToTry){
-    if(!url || !url.includes('tiktok')) continue;
-    try{
-      const res = await axios.get(url, {
-        timeout: 15000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
-        },
-        maxRedirects: 5
-      });
-      const html = res.data;
-      const ogImageMatch = html.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i);
-      const ogTitleMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i);
-      const ogDescMatch = html.match(/<meta[^>]*property="og:description"[^>]*content="([^"]+)"/i);
-      if(ogImageMatch) cover = ogImageMatch[1];
-      if(ogTitleMatch) title = ogTitleMatch[1];
-      if(ogDescMatch) desc = ogDescMatch[1];
-      if(cover) break;
-    }catch(e){ console.log(`No OG de ${url}: ${e.message}`); }
+  if(!cover){
+    const urlsToTry = [
+      `https://www.tiktok.com/@${tiktokUser}/video/${videoId}`,
+      originalUrl
+    ];
+    for(const url of urlsToTry){
+      if(!url || !url.includes('tiktok')) continue;
+      try{
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        console.log(`🔄 Intentando OG via proxy: ${url}`);
+        const res = await axios.get(proxyUrl, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const html = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+        const ogImageRegex1 = /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i;
+        const ogImageRegex2 = /<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i;
+        const ogTitleRegex = /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i;
+        const match1 = html.match(ogImageRegex1);
+        const match2 = html.match(ogImageRegex2);
+        const titleMatch = html.match(ogTitleRegex);
+        if(match1 && match1[1]) { cover = match1[1]; console.log(`✅ OG:image via proxy 1`); }
+        else if(match2 && match2[1]) { cover = match2[1]; console.log(`✅ OG:image via proxy 2`); }
+        if(titleMatch && titleMatch[1] && !title) title = titleMatch[1];
+        if(cover) break;
+      }catch(e){ console.log(`OG proxy fail ${url}: ${e.message}`); }
+    }
   }
-
+  if(cover) cover = cover.replace(/&amp;/g, '&');
   return {
     videoId,
-    title: title || desc || 'Nuevo video de ElCris',
+    title: title || '¡Nuevo video del Papoi Mayor!',
     cover: cover,
     url: `https://www.tiktok.com/@${tiktokUser}/video/${videoId}`,
     originalUrl: originalUrl || `https://www.tiktok.com/@${tiktokUser}/video/${videoId}`
@@ -293,9 +310,8 @@ async function getVideoDetails(videoId, tiktokUser, originalUrl){
 
 async function sendViralVideoAnnouncement(guild, videoDetails){
   const canalClips = guild.channels.cache.find(c => c.name.toLowerCase().includes('clips-tiktok'));
-  if(!canalClips){ console.log('❌ No encontré canal clips-tiktok'); return; }
+  if(!canalClips){ console.log('❌ No canal clips-tiktok'); return; }
 
-  // FRASES ROTATIVAS - CADA VIDEO UNA DIFERENTE
   const frasesCTA = [
     'SOY PAPOI VERIFICADO ✅',
     'W PAPOI MAYOR 🔥',
@@ -308,13 +324,14 @@ async function sendViralVideoAnnouncement(guild, videoDetails){
   ];
   const fraseElegida = frasesCTA[Math.floor(Math.random() * frasesCTA.length)];
 
-  // Limpiar título: quitar "TikTok video #..." si viene sucio
   let tituloLimpio = videoDetails.title.replace(/TikTok video #\d+/i, '').trim();
   if(tituloLimpio.length > 90) tituloLimpio = tituloLimpio.slice(0, 90) + '...';
   if(!tituloLimpio || tituloLimpio.length < 5) tituloLimpio = '¡Nuevo video del Papoi Mayor!';
 
+  console.log(`📢 Anunciando video ${videoDetails.videoId} con cover: ${videoDetails.cover ? 'SI' : 'NO'}`);
+
   const embed = new EmbedBuilder()
-    .setColor(0xFFD700) // Dorado Papoi Mayor aura
+    .setColor(0xFFD700)
     .setAuthor({ name: '👑 PAPOI MAYOR HA SUBIDO VIDEO NUEVO', iconURL: guild.iconURL() })
     .setTitle(`🔥 ${tituloLimpio}`)
     .setDescription(
@@ -326,18 +343,21 @@ async function sendViralVideoAnnouncement(guild, videoDetails){
       `> A todos los que comenten les doy **cora ❤️**\n\n`+
       `Gracias familia Papoi por el apoyo siempre 👑\n`
     )
-    .setImage(videoDetails.cover || null)
     .setThumbnail(guild.iconURL())
-    .setFooter({ text: `Papois Empire • Comenta "${fraseElegida}" • ${new Date().toLocaleDateString('es-MX')}` })
+    .setFooter({ text: `Papois Empire • Comenta "${fraseElegida}" • ${new Date().toLocaleDateString('es-MX')} • MODO PRUEBA` })
     .setTimestamp()
     .setURL(videoDetails.url);
+
+  if(videoDetails.cover && videoDetails.cover.startsWith('https://')){
+    embed.setImage(videoDetails.cover);
+  }
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setLabel('🔥 Ver en TikTok').setStyle(ButtonStyle.Link).setURL(videoDetails.originalUrl),
   );
 
-  // SOLO 1 EVERYONE - en el contenido, no en el embed
-  const content = `@everyone 🔥 **NUEVO VIDEO DEL PAPOI MAYOR** 🔥\n${videoDetails.originalUrl}`;
+  // MODO PRUEBA SIN @everyone
+  const content = `🧪 **MODO PRUEBA - NUEVO VIDEO DEL PAPOI MAYOR** 🧪\n${videoDetails.originalUrl}`;
 
   await canalClips.send({ 
     content: content,
@@ -345,64 +365,46 @@ async function sendViralVideoAnnouncement(guild, videoDetails){
     components: [row]
   }).catch(e=>console.log('Error anuncio:', e.message));
 
-  console.log(`✅ Anuncio AURA V2 enviado: ${videoDetails.videoId} con frase ${fraseElegida}`);
-}
-
-// --- BYPASS ---
-async function fetchTikWMViaProxy(tiktokUser){
-  const tikwmUrl = `https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`;
-  const proxies = [
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(tikwmUrl)}`,
-    `https://corsproxy.io/?${encodeURIComponent(tikwmUrl)}`,
-  ];
-  for(const proxyUrl of proxies){
-    try{
-      const res = await axios.get(proxyUrl, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-      let data = res.data;
-      if(typeof data === 'string'){ try{ data = JSON.parse(data); }catch{} }
-      if(data && data.data && data.data.videos && data.data.videos[0]) return data;
-    }catch(e){ console.log(`Proxy falló: ${e.message}`); }
-  }
-  return null;
+  console.log(`✅ Anuncio PRUEBA enviado con cover: ${videoDetails.cover ? 'SI' : 'NO'}`);
 }
 
 async function scrapeTikTokDirect(tiktokUser){
   try{
     const res = await axios.get(`https://www.tiktok.com/@${tiktokUser}`, {
       timeout: 20000,
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept-Language': 'en-US,en;q=0.9,es;q=0.8' }
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9,es;q=0.8' }
     });
     const html = res.data;
     const regex = /\/video\/(\d{18,20})/g;
     let ids = []; let m;
     while((m = regex.exec(html)) !== null) ids.push(m[1]);
     ids = [...new Set(ids)];
-    const isLive = html.includes('"isLive":true') || html.includes('"is_live":true');
+    const isLive = html.includes('"isLive":true');
     return { videoIds: ids, isLive, htmlLength: html.length };
   }catch(e){
-    console.log(`Scrape falló: ${e.message}`);
+    console.log(`Scrape fail: ${e.message}`);
     return { videoIds: [], isLive: false, htmlLength: 0 };
   }
 }
 
 async function testTikTokAPIs(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  let result = `🧪 Probando @${tiktokUser} con BYPASS...\n\n`;
+  let result = `🧪 Probando @${tiktokUser} MODO PRUEBA...\n\n`;
   try{
     const res = await axios.get(`https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=1`, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.tikwm.com/' } });
     result += `✅ Directo tikwm: ${res.data?.data?.videos?.[0]?.video_id}\n`;
   }catch(e){ result += `❌ Directo tikwm: ${e.response?.status || e.message}\n`; }
   try{
     const data = await fetchTikWMViaProxy(tiktokUser);
-    if(data) result += `✅ Proxy allorigins: OK video=${data.data.videos[0].video_id}\n`;
-    else result += `❌ Proxy allorigins: sin datos\n`;
+    if(data) result += `✅ Proxy TikWM: OK video=${data.data.videos[0].video_id} cover=${data.data.videos[0].cover ? 'SI' : 'NO'}\n`;
+    else result += `❌ Proxy TikWM: sin datos\n`;
   }catch(e){ result += `❌ Proxy: ${e.message}\n`; }
   try{
-    const scrape = await scrapeTikTokDirect(tiktokUser);
-    if(scrape.videoIds.length > 0) result += `✅ Scrape tiktok.com: ${scrape.videoIds.length} videos, último=${scrape.videoIds[0]} isLive=${scrape.isLive}\n`;
-    else result += `⚠️ Scrape: HTML ${scrape.htmlLength} chars pero 0 videos\n`;
-  }catch(e){ result += `❌ Scrape: ${e.message}\n`; }
-  result += `\nCache: lastVideo=${tiktokCache.lastVideoId} isLive=${tiktokCache.isLiveNow}\n`;
+    const details = await getVideoDetails('7691863965617491218', tiktokUser, `https://www.tiktok.com/@${tiktokUser}/video/7691863965617491218`);
+    result += `✅ getVideoDetails: cover=${details.cover ? 'SI' : 'NO'} title=${details.title.slice(0,30)}\n`;
+  }catch(e){ result += `❌ getVideoDetails: ${e.message}\n`; }
+  result += `\nCache: lastVideo=${tiktokCache.lastVideoId}\n`;
+  result += `\nMODO PRUEBA: sin @everyone para no molestar`;
   return result;
 }
 
@@ -410,7 +412,7 @@ async function checkTikTok(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(!guild) return;
-  console.log(`🔍 [TikTok AURA V2] Check @${tiktokUser}...`);
+  console.log(`🔍 [TikTok PRUEBA] Check @${tiktokUser}...`);
   let videoId = null;
   const proxyData = await fetchTikWMViaProxy(tiktokUser);
   if(proxyData && proxyData.data && proxyData.data.videos && proxyData.data.videos[0]){
@@ -426,7 +428,7 @@ async function checkTikTok(){
       saveTikTok();
       console.log('💾 Primer video guardado');
     } else if(videoId !== tiktokCache.lastVideoId){
-      console.log('🎬 NUEVO VIDEO! Aura V2...');
+      console.log('🎬 NUEVO VIDEO! PRUEBA...');
       tiktokCache.lastVideoId = videoId;
       saveTikTok();
       const details = await getVideoDetails(videoId, tiktokUser, `https://www.tiktok.com/@${tiktokUser}/video/${videoId}`);
@@ -437,7 +439,7 @@ async function checkTikTok(){
 
 function startTikTokMonitor(){
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  console.log(`🎬 Monitor TikTok AURA V2 iniciado @${tiktokUser} cada 90s`);
+  console.log(`🎬 Monitor TikTok MODO PRUEBA iniciado @${tiktokUser} cada 90s SIN EVERYONE`);
   setTimeout(checkTikTok, 15000);
   setInterval(checkTikTok, 90000);
 }
