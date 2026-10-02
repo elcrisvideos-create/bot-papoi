@@ -571,7 +571,27 @@ async function sendViralVideoAnnouncement(guild, videoDetails){
 
 async function fetchTikWMViaProxy(tiktokUser){
   const tikwmUrl = `https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=3`;
-  const proxies = [`https://api.allorigins.win/raw?url=${encodeURIComponent(tikwmUrl)}`,`https://corsproxy.io/?${encodeURIComponent(tikwmUrl)}`];
+
+  // 1. Intenta directo sin proxy primero (a veces Railway sí deja)
+  try {
+    const res = await axios.get(tikwmUrl, {
+      timeout: 15000,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    if(res.data?.data?.videos?.[0]) {
+      console.log(`✅ TikWM directo OK: ${res.data.data.videos[0].video_id}`);
+      return res.data;
+    }
+  } catch(e){ console.log(`Direct fail: ${e.message}`); }
+
+  // 2. Prueba con 5 proxies diferentes
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(tikwmUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(tikwmUrl)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(tikwmUrl)}`,
+    `https://thingproxy.freeboard.name/fetch/${tikwmUrl}`,
+    `https://proxy.cors.sh/${tikwmUrl}`
+  ];
   for(const proxyUrl of proxies){
     try{ const res = await axios.get(proxyUrl, { timeout: 20000 }); let data = res.data; if(typeof data === 'string') try{ data = JSON.parse(data); }catch{} if(data?.data?.videos?.[0]) return data; }catch(e){ console.log(`Proxy fail: ${e.message}`); }
   }
