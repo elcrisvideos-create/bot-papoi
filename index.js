@@ -60,10 +60,15 @@ const CONFIG = {
     multimedia: ['multimedia'],
     clips: ['clips-tiktok', 'clips'],
     live: ['elcris-en-vivo', 'en-vivo', 'live'],
-    pingRoles: ['ping-roles']
+    pingRoles: ['ping-roles'],
+    staffChat: ['chat staff', 'staff-chat', '💬 | chat-staff'],
+    staffAnuncios: ['anuncios staff', 'anuncios-staff', '📢 | anuncios-staff'],
+    staffLogs: ['logs tickets', 'tickets-logs', '🎫 | logs-tickets'],
+    staffSanciones: ['sanciones', 'logs sanciones', '📝 | sanciones', 'sanciones-log', '📝 | sanciones-log']
   },
   categories: {
-    robaHuevo: ['roba un huevo', 'roba']
+    robaHuevo: ['roba un huevo', 'roba'],
+    staff: ['staff', '🔒 staff']
   }
 };
 
@@ -97,6 +102,32 @@ function findCategory(guild, nameList) {
 
 function findRole(guild, roleName) {
   return guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase()) || null;
+}
+
+function findStaffSancionesChannel(guild){
+  return findChannel(guild, CONFIG.channels.staffSanciones);
+}
+
+async function logSancion(guild, { tipo, moderador, usuario, razon, duracion, extra }){
+  try{
+    const canal = findStaffSancionesChannel(guild);
+    if(!canal) return;
+    const colores = { BAN: 0xED4245, KICK: 0xFEE75C, MUTE: 0x5865F2, UNMUTE: 0x57F287, WARN: 0xF1C40F, CLEAR: 0x99AAB5 };
+    const emojis = { BAN: '🔨', KICK: '👢', MUTE: '🔇', UNMUTE: '🔊', WARN: '⚠️', CLEAR: '🧹' };
+    const embed = new EmbedBuilder()
+     .setColor(colores[tipo] || 0xFFD700)
+     .setTitle(`${emojis[tipo] || '📝'} ${tipo} | ${usuario?.tag || usuario}`)
+     .setThumbnail(usuario?.displayAvatarURL? usuario.displayAvatarURL() : null)
+     .addFields(
+        { name: '👤 Usuario', value: `${usuario} (${usuario?.id || '?'})`, inline: true },
+        { name: '👮 Moderador', value: `${moderador}`, inline: true },
+        { name: '📄 Razón', value: (razon || 'Sin razón').slice(0, 1024) }
+      )
+     .setTimestamp();
+    if(duracion) embed.addFields({ name: '⏱️ Duración', value: duracion, inline: true });
+    if(extra) embed.addFields({ name: 'ℹ️ Extra', value: extra.slice(0, 1024) });
+    await canal.send({ embeds: [embed] }).catch(()=>{});
+  }catch(e){ console.log(`logSancion error: ${e.message}`); }
 }
 
 const client = new Client({
@@ -283,7 +314,8 @@ client.on(Events.ClientReady, async () => {
       { name: 'slowmode', description: 'Cambiar cooldown', options: [{ name: 'segundos', description: 'Segundos (0-21600)', type: 4, required: true, min_value: 0, max_value: 21600 }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
       { name: 'setup-pets', description: 'Crear panel de ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
-      { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+            { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'crear-categoria-staff', description: 'Crea categoría STAFF con chat, anuncios, logs y sanciones (privado solo mods)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-tiktok', description: 'Probar conexión con TikTok V6', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -525,6 +557,74 @@ client.on(Events.InteractionCreate, async inter => {
       await crearPanelPingRoles(canal);
       return inter.editReply({ content: `✅ Canal: ${canal}` });
     }
+        if(inter.commandName === 'crear-categoria-staff'){
+      await inter.deferReply({ flags: MessageFlags.Ephemeral });
+      const guild = inter.guild;
+      if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) {
+        return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
+      }
+      const modRole = findRole(guild, 'moderador');
+      const mayorRole = findRole(guild, 'papoi mayor');
+      if(!modRole) return inter.editReply({ content: '❌ No existe el rol `moderador`, créalo primero.' });
+      if(!mayorRole) return inter.editReply({ content: '❌ No existe el rol `papoi mayor`' });
+
+      let categoria = findCategory(guild, CONFIG.categories.staff);
+      if(!categoria){
+        categoria = await guild.channels.create({
+          name: '🔒 Staff',
+          type: ChannelType.GuildCategory,
+          permissionOverwrites: [
+            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+            { id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ManageChannels] },
+            { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageChannels] },
+          ]
+        });
+      }
+
+      let chatStaff = guild.channels.cache.find(c => c.parentId === categoria.id && CONFIG.channels.staffChat.some(n => c.name.toLowerCase().includes(n.toLowerCase())));
+      if(!chatStaff){
+        chatStaff = await guild.channels.create({ name: '💬 | chat-staff', type: ChannelType.GuildText, parent: categoria.id, topic: 'Chat privado solo para mods' });
+      }
+      let anunciosStaff = guild.channels.cache.find(c => c.parentId === categoria.id && CONFIG.channels.staffAnuncios.some(n => c.name.toLowerCase().includes(n.toLowerCase())));
+      if(!anunciosStaff){
+        anunciosStaff = await guild.channels.create({
+          name: '📢 | anuncios-staff', type: ChannelType.GuildText, parent: categoria.id, topic: 'Solo Papoi Mayor puede escribir aquí',
+          permissionOverwrites: [
+            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+            { id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
+            { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks] },
+          ]
+        });
+      }
+      let logsTickets = guild.channels.cache.find(c => c.parentId === categoria.id && CONFIG.channels.staffLogs.some(n => c.name.toLowerCase().includes(n.toLowerCase())));
+      if(!logsTickets){
+        logsTickets = await guild.channels.create({
+          name: '🎫 | logs-tickets', type: ChannelType.GuildText, parent: categoria.id, topic: 'Logs de Ticket King - Solo bots escriben',
+          permissionOverwrites: [
+            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+            { id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages] },
+            { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+          ]
+        });
+      }
+      let sanciones = findStaffSancionesChannel(guild) || guild.channels.cache.find(c => c.parentId === categoria.id && CONFIG.channels.staffSanciones.some(n => c.name.toLowerCase().includes(n.toLowerCase())));
+      if(!sanciones){
+        sanciones = await guild.channels.create({
+          name: '📝 | sanciones-log', type: ChannelType.GuildText, parent: categoria.id, topic: 'Logs automáticos de /ban /kick /mute /warn /clear - No escribir aquí',
+          permissionOverwrites: [
+            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+            { id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages] },
+            { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks] },
+          ]
+        });
+      }
+
+      return inter.editReply({ content: `✅ Categoría Staff creada:\n${categoria}\n- ${chatStaff} (todos hablan)\n- ${anunciosStaff} (solo tú escribes)\n- ${logsTickets} (para Ticket King)\n- ${sanciones} (logs automáticos de sanciones)\n\nConfigura Ticket King > Logs > ${logsTickets}` });
+    }
     if(!isMod(inter.member) &&!['rank','separar-papois-exacto','mis-pings'].includes(inter.commandName)){
       if(!inter.memberPermissions.has(PermissionFlagsBits.Administrator) && !isMod(inter.member)){ 
         return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: MessageFlags.Ephemeral }); 
@@ -582,15 +682,15 @@ client.on(Events.InteractionCreate, async inter => {
       await sendViralVideoAnnouncement(inter.guild, details);
       return inter.editReply({ content: `✅ Video cover: ${details.cover ? 'SI' : 'NO'} - ${details.title.slice(0,50)}` });
     }
-    if(inter.commandName === 'ban'){ 
-      const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon')||'Sin razón'; 
-      try { await inter.guild.members.ban(user.id, { reason: razon }); return inter.reply({ content: `🔨 ${user.tag} baneado - ${razon}` }); } 
+        if(inter.commandName === 'ban'){
+      const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon')||'Sin razón';
+      try { await inter.guild.members.ban(user.id, { reason: razon }); await logSancion(inter.guild, { tipo: 'BAN', moderador: inter.user, usuario: user, razon }); return inter.reply({ content: `🔨 ${user.tag} baneado - ${razon}` }); }
       catch (e) { return inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }); }
     }
-    if(inter.commandName === 'kick'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está en el server', flags: MessageFlags.Ephemeral }); await member.kick().catch(()=>{}); return inter.reply({ content: `👢 ${member.user.tag} kickeado` }); }
-    if(inter.commandName === 'mute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); const mins = inter.options.getInteger('minutos'); await member.timeout(mins*60*1000).catch(()=>{}); return inter.reply({ content: `🔇 ${member.user.tag} ${mins}m` }); }
-    if(inter.commandName === 'unmute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); await member.timeout(null).catch(()=>{}); return inter.reply({ content: `🔊 ${member.user.tag} desmuteado` }); }
-    if(inter.commandName === 'warn'){ const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon'); const canal = findChannel(inter.guild, CONFIG.channels.general); if(canal) canal.send({ content: `⚠ ${user} advertencia: ${razon}` }).catch(()=>{}); return inter.reply({ content: `⚠ Warn ${user.tag}`, flags: MessageFlags.Ephemeral }); }
+    if(inter.commandName === 'kick'){ const member = inter.options.getMember('usuario'); const razon = inter.options.getString('razon')||'Sin razón'; if(!member) return inter.reply({ content: '❌ No está en el server', flags: MessageFlags.Ephemeral }); await member.kick(razon).catch(()=>{}); await logSancion(inter.guild, { tipo: 'KICK', moderador: inter.user, usuario: member.user, razon }); return inter.reply({ content: `👢 ${member.user.tag} kickeado` }); }
+    if(inter.commandName === 'mute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); const mins = inter.options.getInteger('minutos'); const razon = inter.options.getString('razon')||'Sin razón'; await member.timeout(mins*60*1000, razon).catch(()=>{}); await logSancion(inter.guild, { tipo: 'MUTE', moderador: inter.user, usuario: member.user, razon, duracion: `${mins} minutos` }); return inter.reply({ content: `🔇 ${member.user.tag} ${mins}m` }); }
+    if(inter.commandName === 'unmute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); await member.timeout(null).catch(()=>{}); await logSancion(inter.guild, { tipo: 'UNMUTE', moderador: inter.user, usuario: member.user, razon: 'Desmuteado' }); return inter.reply({ content: `🔊 ${member.user.tag} desmuteado` }); }
+    if(inter.commandName === 'warn'){ const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon'); const canal = findChannel(inter.guild, CONFIG.channels.general); if(canal) canal.send({ content: `⚠ ${user} advertencia: ${razon}` }).catch(()=>{}); await logSancion(inter.guild, { tipo: 'WARN', moderador: inter.user, usuario: user, razon }); return inter.reply({ content: `⚠ Warn ${user.tag}`, flags: MessageFlags.Ephemeral }); }
     if(inter.commandName === 'clear'){ 
       const cant = inter.options.getInteger('cantidad'); 
       try {
@@ -599,7 +699,7 @@ client.on(Events.InteractionCreate, async inter => {
           for (const m of msgs.values()) { await m.delete().catch(()=>{}); count++; await new Promise(r=>setTimeout(r, 200)); }
           return { size: count };
         });
-        return inter.reply({ content: `🧹 ${deleted?.size || cant} borrados`, flags: MessageFlags.Ephemeral }); 
+                await logSancion(inter.guild, { tipo: 'CLEAR', moderador: inter.user, usuario: inter.user, razon: `Borrados ${deleted?.size || cant} mensajes`, extra: `Canal: #${inter.channel.name}` }); return inter.reply({ content: `🧹 ${deleted?.size || cant} borrados`, flags: MessageFlags.Ephemeral }); 
       } catch (e) { return inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }); }
     }
     if(inter.commandName === 'slowmode'){ const seg = inter.options.getInteger('segundos'); await inter.channel.setRateLimitPerUser(seg).catch(()=>{}); return inter.reply({ content: `⏳ Slowmode ${seg}s` }); }
