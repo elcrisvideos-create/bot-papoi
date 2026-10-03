@@ -329,11 +329,19 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if(!guild) return;
     const member = await guild.members.fetch(user.id).catch(()=>null);
     if(!member) return;
-    if(isPapoiMayor(member)) return;
+    if(isPapoiMayor(member)) return; // Papoi Mayor sí puede poner reacciones nuevas
+
+    // Si el contador es >1, significa que ese emoji YA EXISTÍA y el usuario solo le dio click -> PERMITIR
+    if(reaction.count > 1){
+      console.log(`✅ Reacción permitida ${reaction.emoji.name} de ${user.tag} count=${reaction.count}`);
+      return;
+    }
+
+    // Si contador ==1, es un emoji NUEVO que puso un usuario normal -> BORRAR
     const botMember = guild.members.me;
     if (!botMember.permissions.has(PermissionFlagsBits.ManageMessages)) return;
     await reaction.users.remove(user.id).catch(()=>{});
-    console.log(`🚫 Reacción de ${user.tag} borrada`);
+    console.log(`🚫 Reacción nueva de ${user.tag} borrada: ${reaction.emoji.name}`);
   }catch(e){
     console.log(`Error reacción: ${e.message}`);
   }
