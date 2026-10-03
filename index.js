@@ -388,15 +388,24 @@ client.on(Events.MessageCreate, async msg => {
       const contexto = hist ? [...hist.values()].reverse().map(m => `${m.author.username}: ${m.content.slice(0,80)}`).join('\n') : '';
       const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').trim().slice(0,300);
       if(!pregunta) return;
-      const chat = await groq.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: [
-          { role: "system", content: "Eres BotPapoi2026, Papoi Mayor bot, mexicano joven buena onda, dices 'papoi','w','🥚💛', max 2 lineas, nunca groserías, sabes todo de Roblox Steal a Brainrot, family friendly." },
-          { role: "user", content: `Chat reciente:\n${contexto}\n\nAhora ${msg.author.username} dice: ${pregunta}` }
-        ],
-        max_tokens: 120,
-        temperature: 0.85
-      });
+            const modelos = ["mixtral-8x7b-32768", "gemma2-9b-it", "llama3-8b-8192", "llama-3.1-8b-instant"];
+      let chat = null;
+      for(const m of modelos){
+        try{
+          chat = await groq.chat.completions.create({
+            model: m,
+            messages: [
+              { role: "system", content: "Eres BotPapoi2026, Papoi Mayor bot, mexicano joven buena onda, dices 'papoi','w','🥚💛', max 2 lineas, nunca groserías, sabes todo de Roblox Steal a Brainrot, family friendly." },
+              { role: "user", content: `Chat reciente:\n${contexto}\n\nAhora ${msg.author.username} dice: ${pregunta}` }
+            ],
+            max_tokens: 120,
+            temperature: 0.85
+          });
+          console.log(`✅ IA usando modelo ${m}`);
+          break;
+        }catch(e){ console.log(`Modelo ${m} fail: ${e.message.slice(0,100)}`); continue; }
+      }
+      if(!chat) throw new Error("Ningun modelo disponible");
       const respuesta = chat.choices[0]?.message?.content || "W papoi no entendí 🥚";
       await msg.reply({ content: respuesta.slice(0,400) });
       return;
