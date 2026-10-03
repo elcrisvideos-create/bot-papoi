@@ -489,10 +489,13 @@ REGLAS:
 
 async function crearPanelPingRoles(channel){
   const guild = channel.guild;
-  const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('🔗 | ping-roles — ¡Elige tus avisos!').setDescription(`**¡Bienvenido a Ping Roles!** 👋\n\nElige exactamente qué pets quieres que te avise.\n\n🍀 Secreto — 14 pets\n🚀 Eterno — 10 pets\n💎 Divino — 5 ULTRA raros`).setThumbnail(guild.iconURL() || client.user.displayAvatarURL()).setTimestamp();
-  const rowSecreto = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder('🍀 Huevo Secreto').setMinValues(1).setMaxValues(Math.min(PETS['Secreto'].length, 25)).addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, emoji: '🍀' }))));
-  const rowEterno = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder('🚀 Huevo Eterno').setMinValues(1).setMaxValues(Math.min(PETS['Eterno'].length, 25)).addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, emoji: '🚀' }))));
-  const rowDivino = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder('💎 Huevo Divino').setMinValues(1).setMaxValues(Math.min(PETS['Divino'].length, 25)).addOptions(PETS['Divino'].map(p => ({ label: p, value: p, emoji: '💎' }))));
+  const totalS = PETS['Secreto'].length;
+  const totalE = PETS['Eterno'].length;
+  const totalD = PETS['Divino'].length;
+  const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('🔗 | ping-roles — ¡Elige tus avisos!').setDescription(`**¡Bienvenido a Ping Roles!** 👋\n\nElige exactamente qué pets quieres que te avise.\n\n🍀 Secreto — ${totalS} pets\n🚀 Eterno — ${totalE} pets\n💎 Divino — ${totalD} ULTRA raros\n\n> Tip: puedes elegir varios a la vez`).setThumbnail(guild.iconURL() || client.user.displayAvatarURL()).setTimestamp().setFooter({ text: `Total: ${totalS+totalE+totalD} pets • Papois Empire` });
+  const rowSecreto = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder(`🍀 Huevo Secreto (${totalS})`).setMinValues(1).setMaxValues(Math.min(totalS, 25)).addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, emoji: '🍀' }))));
+  const rowEterno = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder(`🚀 Huevo Eterno (${totalE})`).setMinValues(1).setMaxValues(Math.min(totalE, 25)).addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, emoji: '🚀' }))));
+  const rowDivino = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder(`💎 Huevo Divino (${totalD})`).setMinValues(1).setMaxValues(Math.min(totalD, 25)).addOptions(PETS['Divino'].map(p => ({ label: p, value: p, emoji: '💎' }))));
   const rowBotones = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary));
   await channel.send({ embeds: [embed], components: [rowSecreto, rowEterno, rowDivino, rowBotones] });
 }
