@@ -398,8 +398,8 @@ client.on(Events.MessageCreate, async msg => {
               { role: "system", content: "Eres BotPapoi2026, Papoi Mayor bot, mexicano joven buena onda, dices 'papoi','w','🥚💛', max 2 lineas, nunca groserías, sabes todo de Roblox Steal a Brainrot, family friendly." },
               { role: "user", content: `Chat reciente:\n${contexto}\n\nAhora ${msg.author.username} dice: ${pregunta}` }
             ],
-            max_tokens: 120,
-            temperature: 0.85
+                        max_tokens: 512,
+            temperature: 0.7
           });
           console.log(`✅ IA usando modelo ${m}`);
           break;
