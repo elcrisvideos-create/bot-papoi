@@ -24,6 +24,23 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 
+// --- IA PAPOI V7 (GROQ) ---
+let Groq = null;
+let groq = null;
+let aiCooldown = new Map();
+const GROSIERIAS = ['verga','vrg','hdp','ptm','ctm','mierda','pito','puta','puto','chinga'];
+try {
+  Groq = require('groq-sdk');
+  if(process.env.GROQ_API_KEY){
+    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    console.log('✅ IA Papoi con Groq ACTIVA');
+  } else {
+    console.log('⚠ GROQ_API_KEY no encontrada - IA desactivada');
+  }
+} catch(e){
+  console.log('⚠ groq-sdk no instalado - IA desactivada');
+}
+
 // --- MONGODB (NUEVO V6) ---
 let mongoose = null;
 let XpModel = null;
@@ -352,6 +369,38 @@ client.on(Events.MessageCreate, async msg => {
       }
       return;
     }
+  }
+
+  // --- IA PAPOI V7 CON MEMORIA + ANTI-GROSERIAS ---
+  if(groq && (msg.mentions.has(client.user) || msg.content.toLowerCase().includes('papoi ia'))){
+    const texto = msg.content.toLowerCase();
+    if(GROSIERIAS.some(w => texto.includes(w))){
+      await msg.reply({ content: `${msg.author} sin groserías papoi 🙏 somos family friendly 💛` }).then(m=>setTimeout(()=>m.delete().catch(()=>{}),5000)).catch(()=>{});
+      return;
+    }
+    const keyAI = `ai-${msg.author.id}`;
+    if(Date.now() - (aiCooldown.get(keyAI)||0) < 10000) return;
+    aiCooldown.set(keyAI, Date.now());
+    if(texto.includes('discord.gg')) return;
+    try {
+      await msg.channel.sendTyping();
+      const hist = await msg.channel.messages.fetch({ limit: 6 }).catch(()=>null);
+      const contexto = hist ? [...hist.values()].reverse().map(m => `${m.author.username}: ${m.content.slice(0,80)}`).join('\n') : '';
+      const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').trim().slice(0,300);
+      if(!pregunta) return;
+      const chat = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: "Eres BotPapoi2026, Papoi Mayor bot, mexicano joven buena onda, dices 'papoi','w','🥚💛', max 2 lineas, nunca groserías, sabes todo de Roblox Steal a Brainrot, family friendly." },
+          { role: "user", content: `Chat reciente:\n${contexto}\n\nAhora ${msg.author.username} dice: ${pregunta}` }
+        ],
+        max_tokens: 120,
+        temperature: 0.85
+      });
+      const respuesta = chat.choices[0]?.message?.content || "W papoi no entendí 🥚";
+      await msg.reply({ content: respuesta.slice(0,400) });
+      return;
+    } catch(e){ console.log(`IA fail: ${e.message}`); }
   }
   
   const ahora = Date.now();
