@@ -389,7 +389,7 @@ client.on(Events.MessageCreate, async msg => {
       const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').trim().slice(0,300);
       if(!pregunta) return;
       const chat = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: [
           { role: "system", content: "Eres BotPapoi2026, Papoi Mayor bot, mexicano joven buena onda, dices 'papoi','w','🥚💛', max 2 lineas, nunca groserías, sabes todo de Roblox Steal a Brainrot, family friendly." },
           { role: "user", content: `Chat reciente:\n${contexto}\n\nAhora ${msg.author.username} dice: ${pregunta}` }
