@@ -388,7 +388,7 @@ client.on(Events.MessageCreate, async msg => {
       const contexto = hist ? [...hist.values()].reverse().map(m => `${m.author.username}: ${m.content.slice(0,80)}`).join('\n') : '';
       const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').trim().slice(0,300);
       if(!pregunta) return;
-            const modelos = ["mixtral-8x7b-32768", "gemma2-9b-it", "llama3-8b-8192", "llama-3.1-8b-instant"];
+            const modelos = ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "meta-llama/llama-4-scout-17b-16e-instruct", "qwen/qwen3-32b"];
       let chat = null;
       for(const m of modelos){
         try{
