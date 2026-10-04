@@ -332,7 +332,7 @@ async function checkButterflyEvent(){
     const role = findRole(guild, BUTTERFLY_ROLE_NAME);
     const ch = findChannel(guild, CONFIG.channels.butterfly) || findChannel(guild, CONFIG.channels.apariciones) || findChannel(guild, CONFIG.channels.general);
     if(!ch) return;
-    const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(`${BUTTERFLY_EMOJI} ¡Floración de Mariposas en 1 minuto!`).setDescription(`**¡Prepara tu red!** ${BUTTERFLY_EMOJI}\n\nEl evento **THE BUTTERFLY BLOOM HAS BEGUN!** empieza en **1 minuto**\n\n📍 Ve al **Enchanted Forest**\n${BUTTERFLY_EMOJI} ¡Agarra tu red y atrapa mariposas!\n\n> Evento global cada 30 minutos`).setFooter({ text: 'Papois Empire • :Mariposa: Floración de Mariposas' }).setTimestamp();
+    const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(`${BUTTERFLY_EMOJI} ¡Floración de Mariposas en 1 minuto!`).setDescription(`**¡Prepara tu red!** ${BUTTERFLY_EMOJI}\n\nEl evento **THE BUTTERFLY BLOOM HAS BEGUN!** empieza en **1 minuto**\n\n📍 Ve al **Enchanted Forest**\n${BUTTERFLY_EMOJI} ¡Agarra tu red y atrapa mariposas!\n\n> Evento global cada 30 minutos`).setFooter({ text: `Papois Empire • ${BUTTERFLY_EMOJI} Floración de Mariposas` }).setTimestamp();
     await ch.send({ content: role? `${role} ${BUTTERFLY_EMOJI} **¡El evento de mariposas empieza en 1 minuto, prepárate!**` : `${BUTTERFLY_EMOJI} **¡Evento en 1 minuto!**`, embeds: [embed] }).catch(()=>{});
   }catch(e){ console.log('Butterfly error', e.message); }
 }
@@ -638,8 +638,8 @@ async function crearPanelPingRoles(channel){
       ` → Si marcas ⭐ TODOS los Eterno, te damos **Huevo Eterno**\n`+
       ` → Si marcas ⭐ TODOS los Divino, te damos **Huevo Divino**\n`+
       ` → Si marcas ${BUTTERFLY_EMOJI}, te avisamos **1 min antes** del evento de mariposas\n\n`+
-      `> **:Mariposa: Evento mariposas: cada 30 min global**\n`+
-      `> **Te pingea 1 min antes con ":Mariposa: ¡Empieza en 1 min!"**\n\n`+
+            `> **${BUTTERFLY_EMOJI} Evento mariposas: cada 30 min global**\n`+
+      `> **Te pingea 1 min antes con "${BUTTERFLY_EMOJI} ¡Empieza en 1 min!"**\n\n`+
       `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 4 categorías.`
     )
    .setThumbnail(guild.iconURL() || client.user.displayAvatarURL())
@@ -669,9 +669,9 @@ async function mostrarMenuConfiguracion(interaction){
   };
   const buildEventosSelect = () => {
     const hasEvent = hasRole(BUTTERFLY_ROLE_NAME);
-    return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(hasEvent? '✅ Tienes ping de mariposas :Mariposa:' : ':Mariposa: Elige eventos').setMinValues(0).setMaxValues(1).addOptions([{ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes (global)', emoji: '🦋', default: hasEvent }]);
+        return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(hasEvent? `✅ Tienes ping de mariposas ${BUTTERFLY_EMOJI}` : `${BUTTERFLY_EMOJI} Elige eventos`).setMinValues(0).setMaxValues(1).addOptions([{ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes (global)', emoji: '🦋', default: hasEvent }]);
   };
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca :Mariposa: para el evento de mariposas\n\n**:Mariposa: Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca ${BUTTERFLY_EMOJI} para el evento de mariposas\n\n**${BUTTERFLY_EMOJI} Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
   const row2 = new ActionRowBuilder().addComponents(buildSelect('Eterno'));
   const row3 = new ActionRowBuilder().addComponents(buildSelect('Divino'));
@@ -718,7 +718,7 @@ client.on(Events.InteractionCreate, async inter => {
         const role = findRole(guild, BUTTERFLY_ROLE_NAME) || await ensureButterflyRole(guild);
         if(newHasEvent &&!oldHasEvent){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(BUTTERFLY_ROLE_NAME); } }
         else if(!newHasEvent && oldHasEvent){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(BUTTERFLY_ROLE_NAME); } }
-        let msg = `**:Mariposa: Eventos actualizado:**\n`;
+                let msg = `**${BUTTERFLY_EMOJI} Eventos actualizado:**\n`;
         if(agregados.length) msg += `✅ Ahora te avisamos de: **${agregados.join(', ')}**\n`;
         if(quitados.length) msg += `❌ Ya no te avisamos de: **${quitados.join(', ')}**\n`;
         if(!agregados.length &&!quitados.length) msg += `Sin cambios.`;
@@ -808,14 +808,14 @@ client.on(Events.InteractionCreate, async inter => {
       if(!canal){
         canal = await guild.channels.create({ name: BUTTERFLY_CHANNEL_NAME, type: ChannelType.GuildText, parent: categoria.id, topic: ':Mariposa: Floración de Mariposas cada 30 min GLOBAL - THE BUTTERFLY BLOOM HAS BEGUN!', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks] }] });
       }
-      return inter.editReply({ content: `✅ Canal: ${canal} | Rol: ${role? role.name : 'Floración Mariposas'} :Mariposa:` });
+            return inter.editReply({ content: `✅ Canal: ${canal} | Rol: ${role? role.name : 'Floración Mariposas'} ${BUTTERFLY_EMOJI}` });
     }
     if(inter.commandName === 'test-mariposas'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       const role = findRole(inter.guild, BUTTERFLY_ROLE_NAME) || await ensureButterflyRole(inter.guild);
       const canal = findChannel(inter.guild, CONFIG.channels.butterfly) || inter.channel;
-      const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(':Mariposa: ¡Floración en 1 minuto! [TEST]').setDescription(`**¡Prepara tu red!** :Mariposa:\nEl evento **THE BUTTERFLY BLOOM** empieza en 1 min - Global cada 30 min`);
-      await canal.send({ content: role? `${role} :Mariposa: **¡Empieza en 1 minuto, prepárate!**` : ':Mariposa: **¡Evento en 1 minuto!**', embeds: [embed] });
+            const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(`${BUTTERFLY_EMOJI} ¡Floración en 1 minuto! [TEST]`).setDescription(`**¡Prepara tu red!** ${BUTTERFLY_EMOJI}\nEl evento **THE BUTTERFLY BLOOM** empieza en 1 min - Global cada 30 min`);
+      await canal.send({ content: role? `${role} ${BUTTERFLY_EMOJI} **¡Empieza en 1 minuto, prepárate!**` : `${BUTTERFLY_EMOJI} **¡Evento en 1 minuto!**`, embeds: [embed] });
       return inter.editReply({ content: `✅ Test enviado a ${canal}` });
     }
 
