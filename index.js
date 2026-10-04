@@ -450,7 +450,7 @@ client.on(Events.MessageCreate, async msg => {
     }
   }
   
-    if(!isMod(member)){
+        if(!isMod(member)){
     const contenido = msg.content.toLowerCase().replace(/\s+/g, '');
     const tieneLink = /(https?:\/\/|www\.|discord\.gg|discord\.com\/invite|discordapp\.com\/invite|t\.me\/|discord\.io)/i.test(contenido);
     if(tieneLink){
@@ -461,6 +461,18 @@ client.on(Events.MessageCreate, async msg => {
         if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 5000);
       } catch(e){
         console.log(`❌ No pude borrar invite: ${e.message} - Revisa permiso Gestionar mensajes en #${msg.channel.name}`);
+      }
+      return;
+    }
+    const tieneEveryone = msg.mentions.everyone || msg.content.toLowerCase().includes('@everyone') || msg.content.toLowerCase().includes('@here');
+    if(tieneEveryone){
+      try {
+        await msg.delete();
+        console.log(`[ANTI-EVERYONE] Borrado @everyone/@here de ${msg.author.tag} en #${msg.channel.name}`);
+        const warn = await msg.channel.send({ content: `${msg.author} ❌ Solo **Papoi Mayor** y **Moderadores** pueden usar \`@everyone\` / \`@here\`.` }).catch(()=>{});
+        if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 7000);
+      } catch(e){
+        console.log(`❌ No pude borrar everyone: ${e.message}`);
       }
       return;
     }
