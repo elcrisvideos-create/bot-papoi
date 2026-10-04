@@ -278,7 +278,7 @@ const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 
 // --- V8: EVENTO MARIPOSAS GLOBAL + AUTO-ROL ---
 const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
-const BUTTERFLY_EMOJI = ':Mariposa:';
+const BUTTERFLY_EMOJI = '<:Mariposa:1556413173500739656>';
 const BUTTERFLY_CHANNEL_NAME = '🦋 | floracion-mariposas';
 
 function isOwner(id){ return id === process.env.OWNER_ID; }
