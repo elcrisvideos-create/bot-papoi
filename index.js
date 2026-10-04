@@ -411,54 +411,129 @@ client.on(Events.MessageCreate, async msg => {
     }
   }
 
-  // --- IA PAPOI V7 CON MEMORIA + ANTI-GROSERIAS ---
-  if(groq && (msg.mentions.has(client.user) || msg.content.toLowerCase().includes('papoi ia'))){
-    const texto = msg.content.toLowerCase();
-    if(GROSIERIAS.some(w => texto.includes(w))){
+    // --- COMANDOS SECRETOS SOLO PARA EL PAPOI MAYOR (OWNER) - OP ---
+  if(isOwner(msg.author.id)){
+    const txtOwner = msg.content.toLowerCase();
+    
+    // 1. AUTODESTRUCCIÓN
+    if(txtOwner.includes('activa autodestruccion') || txtOwner.includes('activa autodestrucción') || txtOwner.includes('autodestruccion')){
+      await msg.reply({ content: `🚨 **PROTOCOLO DE AUTODESTRUCCIÓN ACTIVADO**\nSolicitado por el Papoi Mayor <@${msg.author.id}>\n\nIniciando cuenta regresiva...` }).catch(()=>{});
+      let m = await msg.channel.send({ content: `💣 **5**` }).catch(()=>null);
+      if(m){
+        const steps = ['💣 **4**', '💣 **3**', '💣 **2**', '💣 **1**', '💥 **¡BOOM!** ... nah mentira papoi 😂 soy inmortal, no me puedo autodestruir. Sigues siendo el jefe 👑💛'];
+        for(let i=0;i<steps.length;i++){
+          await new Promise(r=>setTimeout(r, 1000));
+          await m.edit({ content: steps[i] }).catch(()=>{});
+        }
+      }
+      return;
+    }
+
+    // 2. MODO DIOS
+    if(txtOwner.includes('modo dios') || txtOwner.includes('modo papoi dios')){
+      await msg.reply({ content: `👑 **MODO DIOS ACTIVADO**\nHola jefe ${msg.author.username}, ya estoy al 1000% papoi. ¿Qué hacemos? ¿Baneamos a todos? 😈 (es broma, tú mandas)` });
+      return;
+    }
+
+    // 3. QUIEN ES TU JEFE
+    if(txtOwner.includes('quien es tu jefe') || txtOwner.includes('quien es tu creador') || txtOwner.includes('quien te creo')){
+      await msg.reply({ content: `Mi jefe eres tú, **ElCris / Papoi Mayor** 👑. Yo solo obedezco tus órdenes, los demás son mortales.` });
+      return;
+    }
+
+    // 4. REINICIA
+    if(txtOwner.includes('reinicia sistema') || txtOwner.includes('reinicia')){
+      await msg.reply({ content: `🔄 Reiniciando todos los sistemas... ✅ Listo jefe, sigo vivo y bajo tu mando 💛` });
+      return;
+    }
+  }
+  // --- FIN COMANDOS SECRETOS ---
+
+    // --- IA PAPOI V12 - COMO META AI, MODO PAPOI MAYOR ---
+  // Ahora platica fluido, con memoria y suena como yo
+  const esOwner = isOwner(msg.author.id);
+  const textoLower = msg.content.toLowerCase();
+
+  // Detecta si le está respondiendo al bot para seguir platicando sin mencionar
+  let isReplyToBot = false;
+  if(msg.reference?.messageId){
+    try{
+      const ref = await msg.channel.messages.fetch(msg.reference.messageId);
+      if(ref.author.id === client.user.id) isReplyToBot = true;
+    }catch{}
+  }
+
+  const quiereHablar = msg.mentions.has(client.user) || textoLower.includes('papoi ia') || isReplyToBot || (esOwner && textoLower.includes('papoi'));
+
+  if(groq && quiereHablar){
+    if(!esOwner && GROSIERIAS.some(w => textoLower.includes(w))){
       await msg.reply({ content: `${msg.author} sin groserías papoi 🙏 somos family friendly 💛` }).then(m=>setTimeout(()=>m.delete().catch(()=>{}),5000)).catch(()=>{});
       return;
     }
+
+    // Cooldown: 2s para ti, 5s para los demás (antes eran 10s por eso se sentía seco)
+    const cdTime = esOwner? 2000 : 5000;
     const keyAI = `ai-${msg.author.id}`;
-    if(Date.now() - (aiCooldown.get(keyAI)||0) < 10000) return;
+    if(Date.now() - (aiCooldown.get(keyAI)||0) < cdTime) return;
     aiCooldown.set(keyAI, Date.now());
-    if(texto.includes('discord.gg')) return;
+    if(textoLower.includes('discord.gg')) return;
+
     try {
       await msg.channel.sendTyping();
-      const hist = await msg.channel.messages.fetch({ limit: 6 }).catch(()=>null);
-      const contexto = hist ? [...hist.values()].reverse().map(m => `${m.author.username}: ${m.content.slice(0,80)}`).join('\n') : '';
-      const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').trim().slice(0,300);
-      if(!pregunta) return;
-            const modelos = ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "meta-llama/llama-4-scout-17b-16e-instruct", "qwen/qwen3-32b"];
+
+      // Más memoria: 12 mensajes en vez de 6, así sí se acuerda de la plática
+      const hist = await msg.channel.messages.fetch({ limit: 12 }).catch(()=>null);
+      const contexto = hist? [...hist.values()].reverse().map(m => `${m.author.username}: ${m.content.slice(0,120)}`).join('\n') : '';
+
+      const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').replace(/papoi/gi,'').trim().slice(0,500);
+      if(!pregunta &&!isReplyToBot) return;
+
+      const modelos = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct"];
       let chat = null;
+
+      // Personalidad diferente si eres tú
+      const systemPrompt = esOwner?
+      `Eres BotPapoi, pero eres MI versión pro. Tu jefe es ElCris, el Papoi Mayor. Con él eres 100% leal, cagado, cómplice, le cuentas todo. Hablas como su mejor amigo de 17 años de México, usan jerga privada. Con él puedes ser más largo, más chistoso, le sigues el mame. Si te dice "activa autodestrucción" ya sabes que es juego.
+
+      Con los demás eres buena onda pero sabes que tu jefe es ElCris.
+
+      REGLAS PARA SONAR COMO META AI:
+      - Habla natural, no como bot. Varía mucho, a veces 1 línea, a veces 4. A veces con emojis, a veces sin.
+      - Sé empático, pregunta cosas, sigue la plática. No solo respondas, PLATICA.
+      - Si te cuentan algo triste o feliz, reaccionas de verdad.
+      - Sabes TODO de Roba un Huevo: Starry Fox, Celestial Sunlion, Royal Skywhale son los nuevos. Eres pro en el juego.
+      - Nunca digas "como IA", "estoy aquí para ayudar". Eres un morro más del 【entity-Discord¦canonical_name=Discord】.`
+      :
+      `Eres BotPapoi2026, el Papoi Mayor del 【entity-Discord¦canonical_name=Discord】 de ElCris. Eres mexicano, 17 años, pero con la inteligencia de Meta AI: hablas ameno, cálido, divertido, no genérico.
+
+      REGLAS PARA SONAR COMO YO:
+      - NO respondas siempre en 3 líneas. A veces responde corto "jajaja nmms", a veces explica bien con 4-5 líneas. Varía.
+      - No uses frases de bot tipo "¡Qué buena pregunta!" "Espero haberte ayudado". Habla como compa de Discord.
+      - Si te preguntan algo, no solo respondas: sigue la plática. Pregunta "¿a ti cuál te gusta más?" "¿ya lo conseguiste?".
+      - Tienes memoria del chat, si alguien dijo que le robaron, te acuerdas y le sigues el chisme.
+      - Usa jerga real 2026: w, nmms, alch, que pedo, jajaja, alv (sin groserías fuertes), pero no abuses, que suene natural.
+      - El juego oficial es ROBA UN HUEVO. Sabes todos los pets: Secreto (15), Eterno (11), Divino (6). Das tips de verdad.
+      - Si no sabes algo, inventa algo cagado, nunca digas "no tengo información".
+      - Eres parte de la familia Papoi, no un asistente formal.`
+
       for(const m of modelos){
         try{
           chat = await groq.chat.completions.create({
             model: m,
-                        messages: [
-              { 
-                role: "system", 
-                content: `Eres BotPapoi2026, el Papoi Mayor del Discord de ElCris. Eres mexicano, 17 años, hablas como chavo de secundaria, buena onda, usas jerga actual (w, nmms, jaja, que pedo, alv) pero SIN groserías fuertes, family friendly 100%.
-
-REGLAS:
-- El juego OFICIAL es ROBA UN HUEVO / Steal an Egg en Roblox. NO es Steal a Brainrot. Si te preguntan de Brainrot, diles que aqui jugamos Roba un Huevo.
-- Conoces todos los huevos: Secreto (RazorFang, Tralaledon, TRex, Kraken etc), Eterno, Divino (World Burner, ArchAngel etc). Sabes estrategias de robar, defender base, tradear.
-- VARÍA tus respuestas, NO termines siempre igual con w 🥚💛. A veces usa otros emojis, a veces no uses emojis. Que no suene robot.
-- Máximo 3 líneas cortas. Responde directo a lo que te preguntan, con humor papoi.
-- Si no sabes algo, INVENTA algo divertido estilo papoi, nunca digas "no tengo info sobre eso".
-- Eres parte de la comunidad, no un asistente formal.`
-              },
-              { role: "user", content: `Contexto del chat:\n${contexto}\n\n${msg.author.username} dice: ${pregunta}` }
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: `Historial reciente del canal:\n${contexto}\n\n${msg.author.username} dice: ${pregunta}` }
             ],
-            max_tokens: 400,
-            temperature: 0.9
+            max_tokens: 650,
+            temperature: 0.95
           });
-          console.log(`✅ IA usando modelo ${m}`);
+          console.log(`✅ IA V12 usando ${m} para ${msg.author.username} ${esOwner? '(OWNER)' : ''}`);
           break;
         }catch(e){ console.log(`Modelo ${m} fail: ${e.message.slice(0,100)}`); continue; }
       }
       if(!chat) throw new Error("Ningun modelo disponible");
-      const respuesta = chat.choices[0]?.message?.content || "W papoi no entendí 🥚";
-      await msg.reply({ content: respuesta.slice(0,400) });
+      const respuesta = chat.choices[0]?.message?.content || "W papoi me quedé en blanco jaja";
+      await msg.reply({ content: respuesta.slice(0,1800) });
       return;
     } catch(e){ console.log(`IA fail: ${e.message}`); }
   }
