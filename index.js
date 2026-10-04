@@ -266,7 +266,13 @@ const PETS = {
   'Eterno': ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'],
   'Divino': ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn']
 };
-const ALL_PETS = [...PETS['Secreto'], ...PETS['Eterno'], ...PETS['Divino']];
+const CATEGORY_ROLES = {
+  'Secreto': 'Huevo Secreto',
+  'Eterno': 'Huevo Eterno',
+  'Divino': 'Huevo Divino'
+};
+const CATEGORY_EMOJI = { Secreto: '🍀', Eterno: '🚀', Divino: '💎' };
+const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 
 function isOwner(id){ return id === process.env.OWNER_ID; }
 function isMod(member){
@@ -564,38 +570,113 @@ client.on(Events.MessageCreate, async msg => {
 
 async function crearPanelPingRoles(channel){
   const guild = channel.guild;
-  const totalS = PETS['Secreto'].length;
-  const totalE = PETS['Eterno'].length;
-  const totalD = PETS['Divino'].length;
-  const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('🔗 | ping-roles — ¡Elige tus avisos!').setDescription(`**¡Bienvenido a Ping Roles!** 👋\n\nElige exactamente qué pets quieres que te avise.\n\n🍀 Secreto — ${totalS} pets\n🚀 Eterno — ${totalE} pets\n💎 Divino — ${totalD} ULTRA raros\n\n> Tip: puedes elegir varios a la vez`).setThumbnail(guild.iconURL() || client.user.displayAvatarURL()).setTimestamp().setFooter({ text: `Total: ${totalS+totalE+totalD} pets • Papois Empire` });
-  const rowSecreto = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Secreto').setPlaceholder(`🍀 Huevo Secreto (${totalS})`).setMinValues(1).setMaxValues(Math.min(totalS, 25)).addOptions(PETS['Secreto'].map(p => ({ label: p, value: p, emoji: '🍀' }))));
-  const rowEterno = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Eterno').setPlaceholder(`🚀 Huevo Eterno (${totalE})`).setMinValues(1).setMaxValues(Math.min(totalE, 25)).addOptions(PETS['Eterno'].map(p => ({ label: p, value: p, emoji: '🚀' }))));
-  const rowDivino = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('pets_Divino').setPlaceholder(`💎 Huevo Divino (${totalD})`).setMinValues(1).setMaxValues(Math.min(totalD, 25)).addOptions(PETS['Divino'].map(p => ({ label: p, value: p, emoji: '💎' }))));
-  const rowBotones = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary));
-  await channel.send({ embeds: [embed], components: [rowSecreto, rowEterno, rowDivino, rowBotones] });
+  const embed = new EmbedBuilder()
+   .setColor(0xFFD700)
+   .setTitle('🔔 NOTIFICACIONES DE HUEVOS - SUPER FÁCIL')
+   .setDescription(
+      `**¿Quieres que te avisemos cuando salga un huevo bueno? Haz esto:**\n\n`+
+      `**1️⃣** Presiona el botón verde **⚙️ Configurar notificaciones** de abajo\n`+
+      `**2️⃣** Se te abrirá un menú **solo para ti** (nadie más lo ve)\n`+
+      `**3️⃣** Ahí verás 3 listas:\n`+
+      ` 🍀 **Secreto** - ${PETS.Secreto.length} huevos\n`+
+      ` 🚀 **Eterno** - ${PETS.Eterno.length} huevos\n`+
+      ` 💎 **Divino** - ${PETS.Divino.length} huevos\n\n`+
+      `**4️⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
+      `**5️⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
+      `**6️⃣** ¿Quieres TODO de una categoría? Marca **⭐ TODOS**\n`+
+      ` → Si marcas ⭐ TODOS los Secreto, te damos **Huevo Secreto**\n`+
+      ` → Si marcas ⭐ TODOS los Eterno, te damos **Huevo Eterno**\n`+
+      ` → Si marcas ⭐ TODOS los Divino, te damos **Huevo Divino**\n\n`+
+      `> **Si quitas el check, automáticamente se te quita el rol.**\n`+
+      `> **No necesitas marcar uno por uno si ya tienes el rol de TODOS.**\n\n`+
+      `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 3 categorías.`
+    )
+   .setThumbnail(guild.iconURL() || client.user.displayAvatarURL())
+   .setFooter({ text: 'Papois Empire • Toca Configurar para empezar' })
+   .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_configurar_notis').setLabel('⚙️ Configurar notificaciones').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary)
+  );
+  await channel.send({ embeds: [embed], components: [row] });
+}
+
+async function mostrarMenuConfiguracion(interaction){
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const hasRole = (name) => member.roles.cache.some(r => r.name.toLowerCase() === name.toLowerCase());
+  const buildSelect = (categoria) => {
+    const catRoleName = CATEGORY_ROLES[categoria];
+    const hasCatRole = hasRole(catRoleName);
+    const options = [];
+    options.push({ label: `⭐ TODOS los ${categoria} (${catRoleName})`, value: `ALL_${categoria}`, description: `Avisa de cualquier huevo ${categoria}`, emoji: '⭐', default: hasCatRole });
+    for(const pet of PETS[categoria]){
+      const hasPet = hasRole(pet);
+      options.push({ label: pet, value: pet, emoji: CATEGORY_EMOJI[categoria], default: hasCatRole? false : hasPet });
+    }
+    return new StringSelectMenuBuilder().setCustomId(`select_${categoria}`).setPlaceholder(hasCatRole? `✅ Ya tienes TODOS los ${categoria}` : `Elige ${categoria} - ya tienes ${options.filter(o=>o.default).length}`).setMinValues(0).setMaxValues(options.length).addOptions(options);
+  };
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo de esa categoría\n\n*El bot guarda en cuanto seleccionas.*`);
+  const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
+  const row2 = new ActionRowBuilder().addComponents(buildSelect('Eterno'));
+  const row3 = new ActionRowBuilder().addComponents(buildSelect('Divino'));
+  const row4 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Ver Mis Pings').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('btn_cerrar').setLabel('Cerrar').setStyle(ButtonStyle.Danger));
+  return { embeds: [embed], components: [row1, row2, row3, row4], flags: MessageFlags.Ephemeral };
 }
 
 client.on(Events.InteractionCreate, async inter => {
   try {
+        if(inter.isButton() && inter.customId === 'btn_configurar_notis'){
+      const data = await mostrarMenuConfiguracion(inter); return inter.reply(data);
+    }
+    if(inter.isButton() && inter.customId === 'btn_cerrar'){
+      return inter.update({ content: '✅ Cerrado. Vuelve a presionar ⚙️ Configurar cuando quieras.', embeds: [], components: [] });
+    }
     if(inter.isButton() && inter.customId === 'btn_my_pings'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
-      const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
-      if(!rolesPet.length) return inter.editReply({ content: '📭 No tienes pings activos.' });
-      return inter.editReply({ content: `📋 Tus pings (${rolesPet.length}): ${rolesPet.join(', ')}` });
+      const member = await inter.guild.members.fetch(inter.user.id);
+      const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
+      const buildCatText = (cat) => {
+        const catRole = CATEGORY_ROLES[cat];
+        if(hasRole(catRole)) return `⭐ **${catRole}**\n→ Recibes **TODOS** los de ${cat}. No necesitas los individuales.`;
+        const pets = PETS[cat].filter(p => hasRole(p));
+        if(pets.length === 0) return `*Ninguno activado*\n→ Toca ⚙️ Configurar para elegir`;
+        return pets.map(p => `• ${p}`).join('\n');
+      };
+      const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields({ name: `🍀 Secreto`, value: buildCatText('Secreto'), inline: false },{ name: `🚀 Eterno`, value: buildCatText('Eterno'), inline: false },{ name: `💎 Divino`, value: buildCatText('Divino'), inline: false },).setFooter({ text: 'Si tienes Huevo Secreto / Eterno / Divino ya recibes todo de esa categoría' }).setTimestamp();
+      return inter.editReply({ embeds: [embed] });
     }
-    if(inter.isStringSelectMenu() && inter.customId.startsWith('pets_')){
+    if(inter.isStringSelectMenu() && inter.customId.startsWith('select_')){
+      const categoria = inter.customId.split('_')[1];
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
-      let agregados = []; let quitados = [];
-      for(const petName of inter.values){
-        const rol = findRole(inter.guild, petName);
-        if(!rol) continue;
-        if(inter.member.roles.cache.has(rol.id)){ await inter.member.roles.remove(rol).catch(()=>{}); quitados.push(petName); }
-        else { await inter.member.roles.add(rol).catch(()=>{}); agregados.push(petName); }
+      const member = await inter.guild.members.fetch(inter.user.id);
+      const guild = inter.guild;
+      const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
+      const catRoleName = CATEGORY_ROLES[categoria];
+      const selectedValues = inter.values;
+      const newHasAll = selectedValues.includes(`ALL_${categoria}`);
+      const oldHasAll = hasRole(catRoleName);
+      const newPets = selectedValues.filter(v =>!v.startsWith('ALL_'));
+      const oldPets = PETS[categoria].filter(p => hasRole(p));
+      let agregados = [], quitados = [];
+      if(newHasAll &&!oldHasAll){
+        const role = findRole(guild, catRoleName); if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(catRoleName); }
+        for(const pet of PETS[categoria]){ const r = findRole(guild, pet); if(r && hasRole(pet)){ await member.roles.remove(r).catch(()=>{}); quitados.push(pet); } }
+      } else if(!newHasAll && oldHasAll){
+        const role = findRole(guild, catRoleName); if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(catRoleName); }
       }
-      let msg = ``;
-      if(agregados.length) msg += `✅ Ahora: **${agregados.join(', ')}**\n`;
-      if(quitados.length) msg += `❌ Ya no: **${quitados.join(', ')}**\n`;
-      return inter.editReply({ content: msg || 'Hecho' });
+      if(!newHasAll){
+        const toAdd = newPets.filter(p =>!oldPets.includes(p));
+        const toRemove = oldPets.filter(p =>!newPets.includes(p));
+        for(const pet of toAdd){ const r = findRole(guild, pet); if(r){ await member.roles.add(r).catch(()=>{}); agregados.push(pet); } }
+        for(const pet of toRemove){ const r = findRole(guild, pet); if(r){ await member.roles.remove(r).catch(()=>{}); quitados.push(pet); } }
+      }
+      let msg = `**${CATEGORY_EMOJI[categoria]} ${categoria} actualizado:**\n`;
+      if(agregados.length) msg += `✅ Ahora te avisamos de: **${agregados.join(', ')}**\n`;
+      if(quitados.length) msg += `❌ Ya no te avisamos de: **${quitados.join(', ')}**\n`;
+      if(agregados.length===0 && quitados.length===0) msg += `Sin cambios.`;
+      const updatedMenu = await mostrarMenuConfiguracion(inter);
+      await inter.editReply({ content: msg,...updatedMenu }); return;
     }
     if(!inter.isChatInputCommand()) return;
     
