@@ -60,7 +60,9 @@ const CONFIG = {
     multimedia: ['multimedia'],
     clips: ['clips-tiktok', 'clips'],
     live: ['elcris-en-vivo', 'en-vivo', 'live'],
-    pingRoles: ['ping-roles'],
+        pingRoles: ['ping-roles'],
+    butterfly: ['floracion-mariposas', 'floración-mariposas', 'mariposas', 'butterfly', 'butterfly-bloom', 'evento-mariposas'],
+    apariciones: ['apariciones-en-vivo', 'ultimas-apariciones'],
     staffChat: ['chat staff', 'staff-chat', '💬 | chat-staff'],
     staffAnuncios: ['anuncios staff', 'anuncios-staff', '📢 | anuncios-staff'],
     staffLogs: ['logs tickets', 'tickets-logs', '🎫 | logs-tickets'],
@@ -274,6 +276,11 @@ const CATEGORY_ROLES = {
 const CATEGORY_EMOJI = { Secreto: '🍀', Eterno: '🚀', Divino: '💎' };
 const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 
+// --- V8: EVENTO MARIPOSAS GLOBAL + AUTO-ROL ---
+const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
+const BUTTERFLY_EMOJI = ':Mariposa:';
+const BUTTERFLY_CHANNEL_NAME = '🦋 | floracion-mariposas';
+
 function isOwner(id){ return id === process.env.OWNER_ID; }
 function isMod(member){
   if(!member) return false;
@@ -295,6 +302,44 @@ function checkCooldown(userId, command, seconds) {
   }
   commandCooldown.set(key, now);
   return 0;
+}
+
+// --- SCHEDULER GLOBAL CADA 30 MIN ---
+let lastButterflyPingKey = null;
+async function ensureButterflyRole(guild){
+  let role = findRole(guild, BUTTERFLY_ROLE_NAME);
+  if(!role){
+    try{
+      role = await guild.roles.create({ name: BUTTERFLY_ROLE_NAME, color: 0x8A2BE2, reason: 'Rol para evento Floración Mariposas :Mariposa:', mentionable: true });
+      console.log(`✅ Rol auto-creado: ${BUTTERFLY_ROLE_NAME}`);
+    }catch(e){ console.log('Error creando rol mariposas', e.message); return null; }
+  }
+  return role;
+}
+async function checkButterflyEvent(){
+  try{
+    const now = new Date();
+    const m = now.getUTCMinutes();
+    const h = now.getUTCHours();
+    if(m!== 14 && m!== 44) return;
+    const eventMinute = m === 14? 15 : 45;
+    const key = `${h}:${eventMinute}`;
+    if(lastButterflyPingKey === key) return;
+    lastButterflyPingKey = key;
+    const guild = client.guilds.cache.get(process.env.GUILD_ID);
+    if(!guild) return;
+    await ensureButterflyRole(guild);
+    const role = findRole(guild, BUTTERFLY_ROLE_NAME);
+    const ch = findChannel(guild, CONFIG.channels.butterfly) || findChannel(guild, CONFIG.channels.apariciones) || findChannel(guild, CONFIG.channels.general);
+    if(!ch) return;
+    const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(`${BUTTERFLY_EMOJI} ¡Floración de Mariposas en 1 minuto!`).setDescription(`**¡Prepara tu red!** ${BUTTERFLY_EMOJI}\n\nEl evento **THE BUTTERFLY BLOOM HAS BEGUN!** empieza en **1 minuto**\n\n📍 Ve al **Enchanted Forest**\n${BUTTERFLY_EMOJI} ¡Agarra tu red y atrapa mariposas!\n\n> Evento global cada 30 minutos`).setFooter({ text: 'Papois Empire • :Mariposa: Floración de Mariposas' }).setTimestamp();
+    await ch.send({ content: role? `${role} ${BUTTERFLY_EMOJI} **¡El evento de mariposas empieza en 1 minuto, prepárate!**` : `${BUTTERFLY_EMOJI} **¡Evento en 1 minuto!**`, embeds: [embed] }).catch(()=>{});
+  }catch(e){ console.log('Butterfly error', e.message); }
+}
+function startButterflyScheduler(){
+  console.log('🦋 Scheduler Mariposas GLOBAL iniciado :14 y :44 UTC = 1 min antes');
+  setTimeout(checkButterflyEvent, 5000);
+  setInterval(checkButterflyEvent, 30000);
 }
 
 client.on(Events.ClientReady, async () => {
@@ -321,6 +366,8 @@ client.on(Events.ClientReady, async () => {
       { name: 'setup-pets', description: 'Crear panel de ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
             { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'crear-canal-mariposas', description: 'Crea el canal y rol de floracion-mariposas :Mariposa:', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'test-mariposas', description: 'Probar ping del evento de mariposas', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'crear-categoria-staff', description: 'Crea categoría STAFF con chat, anuncios, logs y sanciones (privado solo mods)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-tiktok', description: 'Probar conexión con TikTok V6', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -332,8 +379,9 @@ client.on(Events.ClientReady, async () => {
     console.error('❌ Error registrando comandos:', e.message);
   }
 
-  const guild = client.guilds.cache.get(process.env.GUILD_ID);
+   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(guild){
+    await ensureButterflyRole(guild);
     const general = findChannel(guild, CONFIG.channels.general);
     if(general) {
       await general.setRateLimitPerUser(10).catch(()=>{});
@@ -341,6 +389,7 @@ client.on(Events.ClientReady, async () => {
     }
   }
   startTikTokMonitor();
+  startButterflyScheduler();
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -571,25 +620,27 @@ client.on(Events.MessageCreate, async msg => {
 async function crearPanelPingRoles(channel){
   const guild = channel.guild;
   const embed = new EmbedBuilder()
-   .setColor(0xFFD700)
-   .setTitle('🔔 NOTIFICACIONES DE HUEVOS - SUPER FÁCIL')
-   .setDescription(
-      `**¿Quieres que te avisemos cuando salga un huevo bueno? Haz esto:**\n\n`+
+  .setColor(0xFFD700)
+  .setTitle('🔔 NOTIFICACIONES DE HUEVOS Y EVENTOS - SUPER FÁCIL')
+  .setDescription(
+      `**¿Quieres que te avisemos cuando salga un huevo bueno o evento? Haz esto:**\n\n`+
       `**1️⃣** Presiona el botón verde **⚙️ Configurar notificaciones** de abajo\n`+
       `**2️⃣** Se te abrirá un menú **solo para ti** (nadie más lo ve)\n`+
-      `**3️⃣** Ahí verás 3 listas:\n`+
+      `**3️⃣** Ahí verás 4 listas:\n`+
       ` 🍀 **Secreto** - ${PETS.Secreto.length} huevos\n`+
       ` 🚀 **Eterno** - ${PETS.Eterno.length} huevos\n`+
-      ` 💎 **Divino** - ${PETS.Divino.length} huevos\n\n`+
+      ` 💎 **Divino** - ${PETS.Divino.length} huevos\n`+
+      ` ${BUTTERFLY_EMOJI} **Eventos** - Floración Mariposas (cada 30 min)\n\n`+
       `**4️⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
       `**5️⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
       `**6️⃣** ¿Quieres TODO de una categoría? Marca **⭐ TODOS**\n`+
       ` → Si marcas ⭐ TODOS los Secreto, te damos **Huevo Secreto**\n`+
       ` → Si marcas ⭐ TODOS los Eterno, te damos **Huevo Eterno**\n`+
-      ` → Si marcas ⭐ TODOS los Divino, te damos **Huevo Divino**\n\n`+
-      `> **Si quitas el check, automáticamente se te quita el rol.**\n`+
-      `> **No necesitas marcar uno por uno si ya tienes el rol de TODOS.**\n\n`+
-      `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 3 categorías.`
+      ` → Si marcas ⭐ TODOS los Divino, te damos **Huevo Divino**\n`+
+      ` → Si marcas ${BUTTERFLY_EMOJI}, te avisamos **1 min antes** del evento de mariposas\n\n`+
+      `> **:Mariposa: Evento mariposas: cada 30 min global**\n`+
+      `> **Te pingea 1 min antes con ":Mariposa: ¡Empieza en 1 min!"**\n\n`+
+      `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 4 categorías.`
     )
    .setThumbnail(guild.iconURL() || client.user.displayAvatarURL())
    .setFooter({ text: 'Papois Empire • Toca Configurar para empezar' })
@@ -616,12 +667,17 @@ async function mostrarMenuConfiguracion(interaction){
     }
     return new StringSelectMenuBuilder().setCustomId(`select_${categoria}`).setPlaceholder(hasCatRole? `✅ Ya tienes TODOS los ${categoria}` : `Elige ${categoria} - ya tienes ${options.filter(o=>o.default).length}`).setMinValues(0).setMaxValues(options.length).addOptions(options);
   };
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo de esa categoría\n\n*El bot guarda en cuanto seleccionas.*`);
+  const buildEventosSelect = () => {
+    const hasEvent = hasRole(BUTTERFLY_ROLE_NAME);
+    return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(hasEvent? '✅ Tienes ping de mariposas :Mariposa:' : ':Mariposa: Elige eventos').setMinValues(0).setMaxValues(1).addOptions([{ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes (global)', emoji: '🦋', default: hasEvent }]);
+  };
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca :Mariposa: para el evento de mariposas\n\n**:Mariposa: Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
   const row2 = new ActionRowBuilder().addComponents(buildSelect('Eterno'));
   const row3 = new ActionRowBuilder().addComponents(buildSelect('Divino'));
-  const row4 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Ver Mis Pings').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('btn_cerrar').setLabel('Cerrar').setStyle(ButtonStyle.Danger));
-  return { embeds: [embed], components: [row1, row2, row3, row4], flags: MessageFlags.Ephemeral };
+  const row4 = new ActionRowBuilder().addComponents(buildEventosSelect());
+  const row5 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Ver Mis Pings').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('btn_cerrar').setLabel('Cerrar').setStyle(ButtonStyle.Danger));
+  return { embeds: [embed], components: [row1, row2, row3, row4, row5], flags: MessageFlags.Ephemeral };
 }
 
 client.on(Events.InteractionCreate, async inter => {
@@ -632,7 +688,7 @@ client.on(Events.InteractionCreate, async inter => {
     if(inter.isButton() && inter.customId === 'btn_cerrar'){
       return inter.update({ content: '✅ Cerrado. Vuelve a presionar ⚙️ Configurar cuando quieras.', embeds: [], components: [] });
     }
-    if(inter.isButton() && inter.customId === 'btn_my_pings'){
+        if(inter.isButton() && inter.customId === 'btn_my_pings'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       const member = await inter.guild.members.fetch(inter.user.id);
       const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
@@ -640,14 +696,35 @@ client.on(Events.InteractionCreate, async inter => {
         const catRole = CATEGORY_ROLES[cat];
         if(hasRole(catRole)) return `⭐ **${catRole}**\n→ Recibes **TODOS** los de ${cat}. No necesitas los individuales.`;
         const pets = PETS[cat].filter(p => hasRole(p));
-        if(pets.length === 0) return `*Ninguno activado*\n→ Toca ⚙️ Configurar para elegir`;
+        if(pets.length === 0) return `*Ninguno activado*\n→ Toca ⚙ Configurar para elegir`;
         return pets.map(p => `• ${p}`).join('\n');
       };
-      const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields({ name: `🍀 Secreto`, value: buildCatText('Secreto'), inline: false },{ name: `🚀 Eterno`, value: buildCatText('Eterno'), inline: false },{ name: `💎 Divino`, value: buildCatText('Divino'), inline: false },).setFooter({ text: 'Si tienes Huevo Secreto / Eterno / Divino ya recibes todo de esa categoría' }).setTimestamp();
+      const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
+      const butterflyText = hasButterfly? `✅ **${BUTTERFLY_ROLE_NAME}**\n→ Te avisamos 1 min antes ${BUTTERFLY_EMOJI}` : `*Ninguno activado*\n→ Toca ⚙ Configurar y marca ${BUTTERFLY_EMOJI}`;
+      const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields({ name: `🍀 Secreto`, value: buildCatText('Secreto'), inline: false },{ name: `🚀 Eterno`, value: buildCatText('Eterno'), inline: false },{ name: `💎 Divino`, value: buildCatText('Divino'), inline: false },{ name: `${BUTTERFLY_EMOJI} Eventos`, value: butterflyText, inline: false },).setFooter({ text: 'Si tienes Huevo Secreto / Eterno / Divino ya recibes todo de esa categoría' }).setTimestamp();
       return inter.editReply({ embeds: [embed] });
     }
-    if(inter.isStringSelectMenu() && inter.customId.startsWith('select_')){
+        if(inter.isStringSelectMenu() && inter.customId.startsWith('select_')){
       const categoria = inter.customId.split('_')[1];
+      if(categoria === 'Eventos'){
+        await inter.deferReply({ flags: MessageFlags.Ephemeral });
+        const member = await inter.guild.members.fetch(inter.user.id);
+        const guild = inter.guild;
+        const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
+        const selectedValues = inter.values;
+        const newHasEvent = selectedValues.includes(BUTTERFLY_ROLE_NAME);
+        const oldHasEvent = hasRole(BUTTERFLY_ROLE_NAME);
+        let agregados = [], quitados = [];
+        const role = findRole(guild, BUTTERFLY_ROLE_NAME) || await ensureButterflyRole(guild);
+        if(newHasEvent &&!oldHasEvent){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(BUTTERFLY_ROLE_NAME); } }
+        else if(!newHasEvent && oldHasEvent){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(BUTTERFLY_ROLE_NAME); } }
+        let msg = `**:Mariposa: Eventos actualizado:**\n`;
+        if(agregados.length) msg += `✅ Ahora te avisamos de: **${agregados.join(', ')}**\n`;
+        if(quitados.length) msg += `❌ Ya no te avisamos de: **${quitados.join(', ')}**\n`;
+        if(!agregados.length &&!quitados.length) msg += `Sin cambios.`;
+        const updatedMenu = await mostrarMenuConfiguracion(inter);
+        await inter.editReply({ content: msg,...updatedMenu }); return;
+      }
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       const member = await inter.guild.members.fetch(inter.user.id);
       const guild = inter.guild;
@@ -687,11 +764,15 @@ client.on(Events.InteractionCreate, async inter => {
       }
     }
 
-    if(inter.commandName === 'mis-pings'){
+        if(inter.commandName === 'mis-pings'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
-      if(!rolesPet.length) return inter.editReply({ content: '📭 No tienes pings activos.' });
-      return inter.editReply({ content: `📋 Tus pings: ${rolesPet.join(', ')}` });
+      const hasButterfly = inter.member.roles.cache.some(r => r.name.toLowerCase() === BUTTERFLY_ROLE_NAME.toLowerCase());
+      if(!rolesPet.length &&!hasButterfly) return inter.editReply({ content: '📭 No tienes pings activos.' });
+      let texto = '';
+      if(rolesPet.length) texto += `📋 Tus pings: ${rolesPet.join(', ')}`;
+      if(hasButterfly) texto += `${texto? '\n' : ''}${BUTTERFLY_EMOJI} Eventos: ${BUTTERFLY_ROLE_NAME}`;
+      return inter.editReply({ content: texto });
     }
     if(inter.commandName === 'crear-canal-ping-roles'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
@@ -716,6 +797,28 @@ client.on(Events.InteractionCreate, async inter => {
       await crearPanelPingRoles(canal);
       return inter.editReply({ content: `✅ Canal: ${canal}` });
     }
+
+        if(inter.commandName === 'crear-canal-mariposas'){
+      await inter.deferReply({ flags: MessageFlags.Ephemeral });
+      const guild = inter.guild;
+      let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+      if(!categoria) return inter.editReply({ content: '❌ No encontré categoría ROBA UN HUEVO.' });
+      const role = await ensureButterflyRole(guild);
+      let canal = findChannel(guild, CONFIG.channels.butterfly);
+      if(!canal){
+        canal = await guild.channels.create({ name: BUTTERFLY_CHANNEL_NAME, type: ChannelType.GuildText, parent: categoria.id, topic: ':Mariposa: Floración de Mariposas cada 30 min GLOBAL - THE BUTTERFLY BLOOM HAS BEGUN!', permissionOverwrites: [{ id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks] }] });
+      }
+      return inter.editReply({ content: `✅ Canal: ${canal} | Rol: ${role? role.name : 'Floración Mariposas'} :Mariposa:` });
+    }
+    if(inter.commandName === 'test-mariposas'){
+      await inter.deferReply({ flags: MessageFlags.Ephemeral });
+      const role = findRole(inter.guild, BUTTERFLY_ROLE_NAME) || await ensureButterflyRole(inter.guild);
+      const canal = findChannel(inter.guild, CONFIG.channels.butterfly) || inter.channel;
+      const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(':Mariposa: ¡Floración en 1 minuto! [TEST]').setDescription(`**¡Prepara tu red!** :Mariposa:\nEl evento **THE BUTTERFLY BLOOM** empieza en 1 min - Global cada 30 min`);
+      await canal.send({ content: role? `${role} :Mariposa: **¡Empieza en 1 minuto, prepárate!**` : ':Mariposa: **¡Evento en 1 minuto!**', embeds: [embed] });
+      return inter.editReply({ content: `✅ Test enviado a ${canal}` });
+    }
+
         if(inter.commandName === 'crear-categoria-staff'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       const guild = inter.guild;
