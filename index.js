@@ -70,7 +70,7 @@ const CONFIG = {
     fusiones: ['fusiones', '🔀│fusiones', '🔀 | fusiones', 'fusion'],
     fusionesLogs: ['fusiones-logs', 'logs-fusiones', '📋│fusiones-logs', 'fusiones-log'],
     chambeadoresRecluta: ['reclutamiento-chambeadores', '💼│reclutamiento-chambeadores', 'reclutamiento'],
-    chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos', 'chambeadores'],
+    chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos'],
     chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores']
   },
   categories: {
@@ -475,6 +475,7 @@ async function ensureChambeadoresChannels(guild){
   if(baneadoRole && recluta) await recluta.permissionOverwrites.edit(baneadoRole.id, { ViewChannel: false }).catch(()=>{});
 
   let activos = findChannel(guild, CONFIG.channels.chambeadoresActivos);
+  if(activos && recluta && activos.id === recluta.id) activos = null;
   if(!activos){
     const overwritesActivos = [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
