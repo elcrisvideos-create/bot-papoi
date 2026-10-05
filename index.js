@@ -346,6 +346,40 @@ async function ensureButterflyRole(guild){
   }
   return role;
 }
+
+async function ensureFusionesChannel(guild){
+  let canal = findChannel(guild, CONFIG.channels.fusiones);
+  const modRole = findRole(guild, 'moderador');
+  const mayorRole = findRole(guild, 'papoi mayor');
+
+  if(canal){
+    try{
+      await canal.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(()=>{});
+      await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, ManageMessages: true, AttachFiles: true, ManageChannels: true }).catch(()=>{});
+      if(modRole) await canal.permissionOverwrites.edit(modRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true }).catch(()=>{});
+      if(mayorRole) await canal.permissionOverwrites.edit(mayorRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true, ManageChannels: true }).catch(()=>{});
+      await canal.setTopic('🔀 Centro de Fusiones - Solo el bot publica. Usa los botones. Prohibido @everyone').catch(()=>{});
+    }catch{}
+    return canal;
+  }
+
+  let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+  const overwrites = [
+    { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ManageChannels] },
+  ];
+  if(modRole) overwrites.push({ id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+  if(mayorRole) overwrites.push({ id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] });
+
+  canal = await guild.channels.create({
+    name: '🔀│fusiones',
+    type: ChannelType.GuildText,
+    parent: categoria?.id || null,
+    topic: '🔀 Centro de Fusiones - Solo el bot publica búsquedas. Usa los botones para buscar pareja. Prohibido @everyone.',
+    permissionOverwrites: overwrites
+  }).catch(()=>null);
+  return canal;
+}
 async function checkButterflyEvent(){
   try{
     const now = new Date();
@@ -380,7 +414,14 @@ function checkCompatibilidad(fusionId, haveA, haveB){
   return haveA!== haveB;
 }
 async function crearPanelFusiones(channel){
-  const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle('🔀 Centro de Fusiones Papoi').setDescription(`**¿Qué fusión buscas hacer?**\n\n😇 **Angeles y Demonios**\n💀 Eterna: Skeleton Horse + Pegasus\n😇 Divina: ArchAngel + World Burner\n\n🌲 **Enchanted Forest**\nRoyal Skywhale + Celestial Sunlion (ambos jugadores necesitan AMBOS)\n\n**¿Tienes los 2?** Hay gente que tiene los 2 divinos/eternos y no encuentra pareja. Dale a **Tengo AMBOS** y te emparejamos con cualquiera.\n\n👇 Elige bioma:`).setThumbnail(channel.guild.iconURL()).setFooter({ text: '1 búsqueda activa por persona • Auto-cierre 24h' }).setTimestamp();
+  try{
+    const msgs = await channel.messages.fetch({ limit: 25 }).catch(()=>null);
+    if(msgs){
+      const old = msgs.filter(m => m.author.id === client.user.id && m.embeds[0]?.title?.includes('Centro de Fusiones'));
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
+    }
+  }catch{}
+  const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle('🔀 Centro de Fusiones Papoi').setDescription(`**¿Qué fusión buscas hacer?**\n\n😇 **Angeles y Demonios**\n💀 Eterna: Skeleton Horse + Pegasus\n😇 Divina: ArchAngel + World Burner\n\n🌲 **Enchanted Forest**\nRoyal Skywhale + Celestial Sunlion (ambos necesitan AMBOS)\n\n**¿Tienes los 2?** Dale a **Tengo AMBOS** y te emparejamos con cualquiera.\n\n👇 Elige bioma:`).setThumbnail(channel.guild.iconURL()).setFooter({ text: '1 búsqueda activa por persona • Auto-cierre 24h • Solo el bot escribe aquí' }).setTimestamp();
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('fusion_bioma_angeles').setLabel('😇 Angeles y Demonios').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('fusion_bioma_enchanted').setLabel('🌲 Enchanted Forest').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('fusion_mis').setLabel('📋 Mis Búsquedas').setStyle(ButtonStyle.Secondary));
   await channel.send({ embeds: [embed], components: [row] });
 }
@@ -948,12 +989,15 @@ client.on(Events.InteractionCreate, async inter => {
       }
     }
 
-        if(inter.commandName === 'setup-fusiones'){
+                if(inter.commandName === 'setup-fusiones'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
-          const canal = findChannel(inter.guild, CONFIG.channels.fusiones);
-          if(!canal) return inter.editReply({ content: '❌ Crea el canal #fusiones primero (nombre exacto).' });
+          if (!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) {
+            return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
+          }
+          const canal = await ensureFusionesChannel(inter.guild);
+          if(!canal) return inter.editReply({ content: '❌ No pude crear/configurar #🔀│fusiones. Revisa permisos.' });
           await crearPanelFusiones(canal);
-          return inter.editReply({ content: `✅ Panel creado en ${canal}` });
+          return inter.editReply({ content: `✅ Canal ${canal} creado/configurado automáticamente:\n- @everyone solo ve, no escribe (anti-spam @everyone)\n- Solo bot publica búsquedas\n- Mods/Papoi Mayor pueden moderar\nPanel listo.` });
         }
         if(inter.commandName === 'mis-fusiones'){
           const mine = fusionesQueue.filter(r=>r.userId===inter.user.id);
