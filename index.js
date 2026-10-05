@@ -60,7 +60,7 @@ const CONFIG = {
     multimedia: ['multimedia'],
     clips: ['clips-tiktok', 'clips'],
     live: ['elcris-en-vivo', 'en-vivo', 'live'],
-        pingRoles: ['ping-roles'],
+        pingRoles: ['ping-roles', '🔗 | ping-roles', '🔗│ping-roles'],
     butterfly: ['floracion-mariposas', 'floración-mariposas', 'mariposas', 'butterfly', 'butterfly-bloom', 'evento-mariposas'],
     apariciones: ['apariciones-en-vivo', 'ultimas-apariciones'],
     staffChat: ['chat staff', 'staff-chat', '💬 | chat-staff'],
@@ -559,6 +559,14 @@ function isMensajeChambeadoresEnGeneral(msg){
   if((txt.includes('trabajo') || txt.includes('trabajador')) && (txt.includes('busco') || txt.includes('quiero') || txt.includes('necesito') || txt.includes('alguien'))) return true;
   if(txt.includes('robux') && (txt.includes('regala') || txt.includes('dona') || txt.includes('gratis') || txt.includes('busco') || txt.includes('quiero') || txt.includes('me das'))) return true;
   return false;
+}
+function isPreguntaNotificaciones(msg){
+  if(!msg.guild) return false;
+  const name = msg.channel.name.toLowerCase();
+  if(!name.includes('general')) return false;
+  let txt = msg.content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const claves = ['notificacion','notificaciones','noti','notis','no me llega','no me suena','no suena','no me avisa','no avisa','no me notifica','activar not','como activo','como prendo','como pongo','ping roles','ping-roles','notificaciones no'];
+  return claves.some(k => txt.includes(k));
 }
 async function checkButterflyEvent(){
   try{
@@ -1159,9 +1167,10 @@ client.on(Events.GuildMemberAdd, async member => {
     const rolPapoi = findRole(guild, 'papoi');
     if(rolPapoi) await member.roles.add(rolPapoi).catch(()=>{});
     const bienvenida = findChannel(guild, CONFIG.channels.bienvenida);
+    const pingCanal = findChannel(guild, CONFIG.channels.pingRoles);
     if(bienvenida){
-      const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando.`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
-      await bienvenida.send({ content: `${member}`, embeds: [embed] }).catch(()=>{});
+      const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando\n\n🔔 **IMPORTANTE - ACTIVA TUS NOTIFICACIONES:**\nVe a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙ Configurar notificaciones**\n\n> Si no lo activas, NO te suena el teléfono y te pierdes los huevos buenos y eventos de mariposas 🦋`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
+      await bienvenida.send({ content: `${member} 🔔 ve a ${pingCanal? `<#${pingCanal.id}>` : '#ping-roles'}`, embeds: [embed] }).catch(()=>{});
     }
   } catch (e) {
     console.log(`Error bienvenida: ${e.message}`);
@@ -1278,6 +1287,15 @@ client.on(Events.MessageCreate, async msg => {
       return;
     }
 
+        // --- AUTO-HELP NOTIFICACIONES -> MANDAR A #PING-ROLES ---
+    if(isPreguntaNotificaciones(msg)){
+      const canalPings = findChannel(msg.guild, CONFIG.channels.pingRoles);
+      const cd = checkCooldown(msg.author.id, 'help_notis', 30);
+      if(cd===0){
+        const warn = await msg.channel.send({ content: `${msg.author} 🔔 Ey papoi, para que te suene el teléfono ve a ${canalPings? `<#${canalPings.id}>` : '#🔗│ping-roles'}\n\n**Ahí está el tutorial paso a paso** 📱 (activar notis del server + del celular + elegir huevos)\n\n> Si no activas eso, aunque elijas huevos no te va a sonar.` }).catch(()=>{});
+        if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 20000);
+      }
+    }
         // --- ANTI-SPAM CHAMBEADORES / TRABAJO / ROBUX -> MANDAR A #RECLUTAMIENTO ---
     if(isMensajeChambeadoresEnGeneral(msg)){
       const canalChamba = findChannel(msg.guild, CONFIG.channels.chambeadoresRecluta);
@@ -1457,9 +1475,31 @@ client.on(Events.MessageCreate, async msg => {
 
 async function crearPanelPingRoles(channel){
   const guild = channel.guild;
+  try{
+    const msgs = await channel.messages.fetch({ limit: 30 }).catch(()=>null);
+    if(msgs){
+      const old = msgs.filter(m => m.author.id === client.user.id);
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
+    }
+  }catch{}
+  const tutorial = new EmbedBuilder()
+ .setColor(0xED4245)
+ .setTitle('📱 TUTORIAL: COMO HACER QUE TE SUENE EL TELÉFONO')
+ .setDescription(
+      `**Si no haces esto, NO te llegan los pings aunque elijas huevos**\n\n`+
+      `**PASO 1 - Activa notificaciones del servidor (OBLIGATORIO):**\n`+
+      `**En CELULAR:** Mantén presionado el icono de **Papois Empire** arriba a la izquierda > **Notificaciones** > **Todos los mensajes** + Activa **@mentions**\n`+
+      `**En PC:** Click derecho en Papois Empire > **Ajustes de notificación** > **Todos los mensajes**\n\n`+
+      `**PASO 2 - Activa notificaciones de Discord en tu celular:**\n`+
+      `Ajustes de tu teléfono > Apps > Discord > **Permitir notificaciones** > Activa **Sonido y Ventanas emergentes**\n`+
+      `Si lo tienes en **Silenciado** o **Sin sonido**, nunca te va a sonar.\n\n`+
+      `**PASO 3 - Elige tus huevos ABAJO 👇:**\n`+
+      `Después de hacer paso 1 y 2, dale a **⚙ Configurar notificaciones** y elige Secreto/Eterno/Divino/Eventos\n\n`+
+      `> 💡 **Tip:** Si ya hiciste esto y aún no suena, salte de Discord y vuelve a entrar.`
+  );
   const embed = new EmbedBuilder()
-  .setColor(0xFFD700)
-  .setTitle('🔔 NOTIFICACIONES DE HUEVOS Y EVENTOS - SUPER FÁCIL')
+ .setColor(0xFFD700)
+ .setTitle('🔔 NOTIFICACIONES DE HUEVOS Y EVENTOS - SUPER FÁCIL')
   .setDescription(
       `**¿Quieres que te avisemos cuando salga un huevo bueno o evento? Haz esto:**\n\n`+
       `**1️⃣** Presiona el botón verde **⚙️ Configurar notificaciones** de abajo\n`+
@@ -1484,10 +1524,11 @@ async function crearPanelPingRoles(channel){
    .setFooter({ text: 'Papois Empire • Toca Configurar para empezar' })
    .setTimestamp();
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_configurar_notis').setLabel('⚙️ Configurar notificaciones').setStyle(ButtonStyle.Success),
+    const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_configurar_notis').setLabel('⚙ Configurar notificaciones').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary)
   );
+  await channel.send({ embeds: [tutorial] });
   await channel.send({ embeds: [embed], components: [row] });
 }
 
@@ -1791,8 +1832,9 @@ client.on(Events.InteractionCreate, async inter => {
     }
     if(inter.commandName === 'test-bienvenida'){
       const bienvenida = findChannel(inter.guild, CONFIG.channels.bienvenida);
+      const pingCanal = findChannel(inter.guild, CONFIG.channels.pingRoles);
       if(!bienvenida) return inter.reply({ content: '❌ No canal bienvenida', flags: MessageFlags.Ephemeral });
-      const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${inter.user.username}`).setDescription(`Ya eres **Papoi**!`).setThumbnail(inter.user.displayAvatarURL()).setTimestamp();
+      const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${inter.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando\n\n🔔 **ACTIVA TUS NOTIFICACIONES:** Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a ⚙ Configurar`).setThumbnail(inter.user.displayAvatarURL()).setTimestamp();
       await bienvenida.send({ content: `${inter.user}`, embeds: [embed] }).catch(()=>{});
       return inter.reply({ content: `✅ Enviado a ${bienvenida}`, flags: MessageFlags.Ephemeral });
     }
