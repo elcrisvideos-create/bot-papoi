@@ -371,7 +371,7 @@ async function ensureFusionesChannel(guild){
   if(modRole) overwrites.push({ id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
   if(mayorRole) overwrites.push({ id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] });
 
-  canal = await guild.channels.create({
+    canal = await guild.channels.create({
     name: '🔀│fusiones',
     type: ChannelType.GuildText,
     parent: categoria?.id || null,
@@ -379,6 +379,32 @@ async function ensureFusionesChannel(guild){
     permissionOverwrites: overwrites
   }).catch(()=>null);
   return canal;
+}
+
+function isMensajeFusionesEnGeneral(msg){
+  if(!msg.guild) return false;
+  const name = msg.channel.name.toLowerCase();
+  if(name.includes('fusiones') || name.includes('fusion-')) return false;
+  // Quita acentos para que fusión = fusion
+  let txt = msg.content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+
+  const claves = [
+    'fusion','fucion','fuscion','fussion','fushion','fusiom','fusi0n','fucio','ritual','rituals','ritualito','rituall','ritial','rritual',
+    'pegasus','pegaso','pegasu','pegaus','skeleton','esqueleto','eskelet','skelet','skel','caballo','esquelet',
+    'archangel','world burner','world','skywhale','sunlion','celestial','eterna','divina','enchanted','juntar','combinar','mezclar'
+  ];
+  const verbos = ['tengo','tenqo','busco','buscko','bucso','necesito','nesesito','alguien','quien','qien','trade','cambio','kanbio','ofrezco','quiero','kiero','vendo','hago','tiene','tienes'];
+
+  const tieneClave = claves.some(k => txt.includes(k));
+  const tieneVerbo = verbos.some(v => txt.includes(v));
+
+  // Caso 1: ritual/fusion + verbo = 100% spam de fusiones
+  if(tieneClave && tieneVerbo) return true;
+  // Caso 2: mensaje cortito tipo "ritual?", "alguien ritual", "fusion?"
+  if((txt.includes('ritual') || txt.includes('fusion') || txt.includes('fucion')) && txt.length < 35) return true;
+  // Caso 3: caballo + pegasus aunque sin verbo
+  if(txt.includes('caballo') && txt.includes('pegas')) return true;
+  return false;
 }
 async function checkButterflyEvent(){
   try{
@@ -673,7 +699,7 @@ client.on(Events.MessageCreate, async msg => {
       }
       return;
     }
-    const tieneEveryone = msg.mentions.everyone || msg.content.toLowerCase().includes('@everyone') || msg.content.toLowerCase().includes('@here');
+        const tieneEveryone = msg.mentions.everyone || msg.content.toLowerCase().includes('@everyone') || msg.content.toLowerCase().includes('@here');
     if(tieneEveryone){
       try {
         await msg.delete();
@@ -683,6 +709,17 @@ client.on(Events.MessageCreate, async msg => {
       } catch(e){
         console.log(`❌ No pude borrar everyone: ${e.message}`);
       }
+      return;
+    }
+    // --- ANTI-SPAM FUSIONES EN GENERAL -> MANDAR A #FUSIONES ---
+    if(isMensajeFusionesEnGeneral(msg)){
+      const canalFusiones = findChannel(msg.guild, CONFIG.channels.fusiones);
+      try{
+        await msg.delete().catch(()=>{});
+        console.log(`[ANTI-FUSION] Borrado de ${msg.author.tag} en #${msg.channel.name}: ${msg.content.slice(0,100)}`);
+        const warn = await msg.channel.send({ content: `${msg.author} 🔀 Ey papoi, las **fusiones** no van aquí\nVe a ${canalFusiones ? `<#${canalFusiones.id}>` : '#🔀│fusiones'} y dale al botón del bioma, el bot te busca pareja auto. 🙏` }).catch(()=>{});
+        if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 12000);
+      }catch(e){ console.log('anti-fusion error', e.message); }
       return;
     }
   }
