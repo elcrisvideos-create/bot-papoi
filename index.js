@@ -432,6 +432,18 @@ function startButterflyScheduler(){
   setInterval(checkButterflyEvent, 30000);
 }
 
+function esRobloxUsernameValido(input){
+  const raw = input.trim();
+  if(raw.length < 3 || raw.length > 20) return { valid: false, reason: '❌ Tu user de Roblox debe tener entre 3 y 20 caracteres.' };
+  if(raw.includes(' ')) return { valid: false, reason: '❌ No pongas espacios ni frases. Solo tu username, ej: `Nico123`' };
+  if(!/^[a-zA-Z0-9_]+$/.test(raw)) return { valid: false, reason: '❌ Solo letras, números y _ . Sin emojis, sin frases.' };
+  const lower = raw.toLowerCase();
+  // Bloquea si escribe pets o frases comunes
+  const bloqueadas = ['necesito','nesecito','tengo','busco','quiero','vendo','cambio','divino','eterno','secreto','enchanted','royal','celestial','skeleton','pegasus','archangel','world','burner','los','las','yo'];
+  if(bloqueadas.some(p => lower.includes(p)) && raw.length > 8) return { valid: false, reason: '❌ Escribe SOLO tu username de Roblox, no qué necesitas.' };
+  return { valid: true, value: raw };
+}
+
 function usuarioTieneFusion(userId){
   if(fusionesQueue.some(r=>r.userId===userId)) return true;
   for(const data of fusionesActivas.values()){
@@ -564,7 +576,8 @@ async function handleFusionesInteraction(inter){
       if(inter.customId.startsWith('fusion_have_')){
         let fusionId, havePet; if(inter.customId.includes('angeles_eterna')){ fusionId='angeles_eterna'; havePet=inter.customId.replace(`fusion_have_${fusionId}_`,''); } else if(inter.customId.includes('angeles_divina')){ fusionId='angeles_divina'; havePet=inter.customId.replace(`fusion_have_${fusionId}_`,''); } else { fusionId='enchanted'; havePet='AMBOS'; } havePet=havePet.replace(/_/g,' ');
         if(usuarioTieneFusion(inter.user.id)) return inter.reply({ content: '❌ Ya tienes búsqueda activa.', flags: MessageFlags.Ephemeral });
-                const modal=new ModalBuilder().setCustomId(`modal_fusion_${fusionId}_${havePet.replace(/\s+/g,'_')}`).setTitle(`Fusión ${FUSIONES[fusionId].label}`); const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de Roblox').setStyle(TextInputStyle.Short).setRequired(true); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
+                const modal=new ModalBuilder().setCustomId(`modal_fusion_${fusionId}_${havePet.replace(/\s+/g,'_')}`).setTitle(`Fusión ${FUSIONES[fusionId].label}`);
+const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de Roblox').setPlaceholder('Ej: Nico123 - SOLO username').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(20); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
       }
       if(inter.customId.startsWith('fusion_join_') &&!inter.customId.includes('_have_')){
         const ownerId=inter.customId.replace('fusion_join_',''); const req=fusionesQueue.find(r=>r.userId===ownerId); if(!req) return inter.reply({ content: '❌ Ya no existe.', flags: MessageFlags.Ephemeral }); if(req.userId===inter.user.id) return inter.reply({ content: '❌ No puedes contigo mismo.', flags: MessageFlags.Ephemeral });
@@ -574,7 +587,8 @@ async function handleFusionesInteraction(inter){
       }
       if(inter.customId.startsWith('fusion_join_have_')){
         const rest=inter.customId.replace('fusion_join_have_',''); const ownerId=rest.split('_')[0]; const havePet=rest.replace(`${ownerId}_`,'').replace(/_/g,' ');
-                const modal=new ModalBuilder().setCustomId(`modal_fusion_join_${ownerId}_${havePet.replace(/\s+/g,'_')}`).setTitle('Roblox User'); const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de Roblox').setStyle(TextInputStyle.Short).setRequired(true); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
+                const modal=new ModalBuilder().setCustomId(`modal_fusion_join_${ownerId}_${havePet.replace(/\s+/g,'_')}`).setTitle('Roblox User');
+const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de Roblox').setPlaceholder('Ej: Nico123 - SOLO username').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(20); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
       }
       if(inter.customId.startsWith('fusion_cancel_')){
         const ownerId=inter.customId.replace('fusion_cancel_',''); if(inter.user.id!==ownerId &&!isMod(inter.member)) return inter.reply({ content: '❌ No puedes.', flags: MessageFlags.Ephemeral });
@@ -597,21 +611,30 @@ async function handleFusionesInteraction(inter){
         }
       }
     }
-    if(inter.isModalSubmit() && inter.customId.startsWith('modal_fusion_')){
+        if(inter.isModalSubmit() && inter.customId.startsWith('modal_fusion_')){
       if(inter.customId.startsWith('modal_fusion_join_')){
-        const rest=inter.customId.replace('modal_fusion_join_',''); const ownerId=rest.split('_')[0]; const havePet=rest.replace(`${ownerId}_`,'').replace(/_/g,' '); const robloxUser=inter.fields.getTextInputValue('robloxUser').trim();
+        const rest=inter.customId.replace('modal_fusion_join_',''); const ownerId=rest.split('_')[0]; const havePet=rest.replace(`${ownerId}_`,'').replace(/_/g,' ');
+        const robloxUser=inter.fields.getTextInputValue('robloxUser').trim();
+        const check = esRobloxUsernameValido(robloxUser);
+        if(!check.valid){
+          return inter.reply({ content: check.reason + '\n\n> Ej válido: `Nico123`', flags: MessageFlags.Ephemeral });
+        }
         const ownerReq=fusionesQueue.find(r=>r.userId===ownerId); if(!ownerReq) return inter.reply({ content: '❌ Ya no existe.', flags: MessageFlags.Ephemeral });
         if(!checkCompatibilidad(ownerReq.fusionId, ownerReq.have, havePet)) return inter.reply({ content: `❌ No compatible.`, flags: MessageFlags.Ephemeral });
-        const myReq={ userId: inter.user.id, fusionId: ownerReq.fusionId, have: havePet, robloxUser, createdAt: Date.now(), messageId: null };
+        const myReq={ userId: inter.user.id, fusionId: ownerReq.fusionId, have: havePet, robloxUser: check.value, createdAt: Date.now(), messageId: null };
         await inter.reply({ content: '✅ Match! Creando canal...', flags: MessageFlags.Ephemeral }); await crearCanalFusionPrivado(guild, ownerReq, myReq); return;
       } else {
         let fusionId, havePet; const rest=inter.customId.replace('modal_fusion_',''); if(rest.startsWith('angeles_eterna_')){ fusionId='angeles_eterna'; havePet=rest.replace('angeles_eterna_','').replace(/_/g,' '); } else if(rest.startsWith('angeles_divina_')){ fusionId='angeles_divina'; havePet=rest.replace('angeles_divina_','').replace(/_/g,' '); } else { fusionId='enchanted'; havePet='AMBOS'; }
         const robloxUser=inter.fields.getTextInputValue('robloxUser').trim();
+        const check = esRobloxUsernameValido(robloxUser);
+        if(!check.valid){
+          return inter.reply({ content: check.reason, flags: MessageFlags.Ephemeral });
+        }
         const compatibleReq=fusionesQueue.find(r=>r.fusionId===fusionId && r.userId!==inter.user.id && checkCompatibilidad(fusionId, r.have, havePet));
-        if(compatibleReq){ const myReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser, createdAt: Date.now() }; await inter.reply({ content: '✅ Pareja instantánea! Creando canal...', flags: MessageFlags.Ephemeral }); await crearCanalFusionPrivado(guild, compatibleReq, myReq); }
-        else { 
-  if(usuarioTieneFusion(inter.user.id)) return inter.reply({ content: '❌ Ya tienes búsqueda activa.', flags: MessageFlags.Ephemeral });
-  const newReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser, createdAt: Date.now(), messageId: null }; fusionesQueue.push(newReq); await saveFusiones(); await postBusquedaFusion(guild, newReq); return inter.reply({ content: `✅ Publicado en #fusiones - ${FUSIONES[fusionId].label} teniendo ${havePet}`, flags: MessageFlags.Ephemeral }); }
+        if(compatibleReq){ const myReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser: check.value, createdAt: Date.now() }; await inter.reply({ content: '✅ Pareja instantánea! Creando canal...', flags: MessageFlags.Ephemeral }); await crearCanalFusionPrivado(guild, compatibleReq, myReq); }
+        else {
+          if(usuarioTieneFusion(inter.user.id)) return inter.reply({ content: '❌ Ya tienes búsqueda activa.', flags: MessageFlags.Ephemeral });
+          const newReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser: check.value, createdAt: Date.now(), messageId: null }; fusionesQueue.push(newReq); await saveFusiones(); await postBusquedaFusion(guild, newReq); return inter.reply({ content: `✅ Publicado en #fusiones - ${FUSIONES[fusionId].label} teniendo ${havePet}`, flags: MessageFlags.Ephemeral }); }
       }
     }
   }catch(e){ console.log('Fusiones error', e); if(!inter.replied) inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
