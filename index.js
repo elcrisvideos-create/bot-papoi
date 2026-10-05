@@ -546,6 +546,19 @@ function isMensajeFusionesEnGeneral(msg){
   if(txt.includes('caballo') && txt.includes('pegas')) return true;
   return false;
 }
+function isMensajeChambeadoresEnGeneral(msg){
+  if(!msg.guild) return false;
+  const name = msg.channel.name.toLowerCase();
+  if(name.includes('chambeador') || name.includes('reclutamiento') || name.includes('chambeadores-activos') || name.includes('chambeadores-logs')) return false;
+  if(name.includes('fusiones') || name.includes('fusion-')) return false;
+  let txt = msg.content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const clavesChamba = ['busco chamba','buscan chamba','necesito chamba','quiero chamba','hay chamba','busco chambita','busco chambas','chambas','chambeador','chambeadores','chambiador','chambiadores','chambreador','chambeadore','chambeo','chambear','chambeando','trabajador','trabajadores','trabajo','busco trabajo','buscan trabajo','quiero trabajo','necesito trabajo','busco jale','busco curro','alguien busca chambeador','alguien busca chambeadores','alguien busca trabajador','alguien necesita chambeador','buscan chambeadores','busco chambeadores','necesito chambeador','me regala robux','me regalan robux','regala robux','regalan robux','alguien me regala','dona robux','donan robux','me donas robux','me donas','alguien dona','robux gratis','regalame robux','regalen robux','quiero ser chambeador','como ser chambeador','quiero chambear','como chambear','quiero ser trabajador','quiero ser chambiador','pagan robux','paga robux','pago robux','pagan por huevo','trabajo por robux','chamba por robux'];
+  if(clavesChamba.some(k => txt.includes(k))) return true;
+  if(txt.includes('chamba') && txt.length < 80) return true;
+  if((txt.includes('trabajo') || txt.includes('trabajador')) && (txt.includes('busco') || txt.includes('quiero') || txt.includes('necesito') || txt.includes('alguien'))) return true;
+  if(txt.includes('robux') && (txt.includes('regala') || txt.includes('dona') || txt.includes('gratis') || txt.includes('busco') || txt.includes('quiero') || txt.includes('me das'))) return true;
+  return false;
+}
 async function checkButterflyEvent(){
   try{
     const now = new Date();
@@ -1263,6 +1276,18 @@ client.on(Events.MessageCreate, async msg => {
       }
       return;
     }
+
+        // --- ANTI-SPAM CHAMBEADORES / TRABAJO / ROBUX -> MANDAR A #RECLUTAMIENTO ---
+    if(isMensajeChambeadoresEnGeneral(msg)){
+      const canalChamba = findChannel(msg.guild, CONFIG.channels.chambeadoresRecluta);
+      try{
+        await msg.delete().catch(()=>{});
+        console.log(`[ANTI-CHAMBA] Borrado de ${msg.author.tag} en #${msg.channel.name}: ${msg.content.slice(0,100)}`);
+        const warn = await msg.channel.send({ content: `${msg.author} 💼 Ey papoi, eso de **chamba / chambeadores / trabajo / robux** no va aquí\nVe a ${canalChamba ? `<#${canalChamba.id}>` : '#💼│reclutamiento-chambeadores'} y registra tu @ de Roblox ahí. 🙏` }).catch(()=>{});
+        if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 12000);
+      }catch(e){ console.log('anti-chamba error', e.message); }
+      return;
+    }
     // --- ANTI-SPAM FUSIONES EN GENERAL -> MANDAR A #FUSIONES ---
     if(isMensajeFusionesEnGeneral(msg)){
       const canalFusiones = findChannel(msg.guild, CONFIG.channels.fusiones);
@@ -1274,6 +1299,8 @@ client.on(Events.MessageCreate, async msg => {
       }catch(e){ console.log('anti-fusion error', e.message); }
       return;
     }
+
+    
   }
 
     // --- COMANDOS SECRETOS SOLO PARA EL PAPOI MAYOR (OWNER) - OP ---
