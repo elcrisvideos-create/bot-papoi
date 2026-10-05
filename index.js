@@ -68,7 +68,10 @@ const CONFIG = {
     staffLogs: ['logs tickets', 'tickets-logs', '🎫 | logs-tickets'],
         staffSanciones: ['sanciones', 'logs sanciones', '📝 | sanciones', 'sanciones-log', '📝 | sanciones-log'],
     fusiones: ['fusiones', '🔀│fusiones', '🔀 | fusiones', 'fusion'],
-    fusionesLogs: ['fusiones-logs', 'logs-fusiones', '📋│fusiones-logs', 'fusiones-log']
+    fusionesLogs: ['fusiones-logs', 'logs-fusiones', '📋│fusiones-logs', 'fusiones-log'],
+    chambeadoresRecluta: ['reclutamiento-chambeadores', '💼│reclutamiento-chambeadores', 'reclutamiento'],
+    chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos', 'chambeadores'],
+    chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores']
   },
   categories: {
     robaHuevo: ['roba un huevo', 'roba'],
@@ -187,6 +190,21 @@ const saveFusiones = async () => {
   }
 };
 
+// --- CHAMBEADORES PERSISTENCIA ---
+const CHAMBEADORES_PATH = path.join(DATA_DIR, 'chambeadores.json');
+let chambeadoresData = safeLoadJSON(CHAMBEADORES_PATH, {});
+let ChambeadorModel = null;
+const saveChambeadores = async () => {
+  safeSaveJSON(CHAMBEADORES_PATH, chambeadoresData);
+  if (useMongo && ChambeadorModel) {
+    try {
+      for(const [userId, data] of Object.entries(chambeadoresData)){
+        await ChambeadorModel.findOneAndUpdate({ userId }, {...data, userId }, { upsert: true });
+      }
+    } catch(e){ console.log('Error chambeadores Mongo', e.message); }
+  }
+};
+
 async function initMongo() {
   if (!process.env.MONGO_URI || !mongoose) {
     console.log('📁 Usando archivos locales (sin MONGO_URI) - V5 mode');
@@ -239,6 +257,20 @@ async function initMongo() {
       safeSaveJSON(FUSIONES_PATH, fusionesQueue);
     } else if(fusionesQueue.length > 0){
       await FusionModel.insertMany(fusionesQueue);
+    }
+
+    const chambeadorSchema = new mongoose.Schema({ userId: String, robloxUser: String, puntos: Number, baneado: Boolean, lastReport: Number, createdAt: Number }, { strict: false });
+    ChambeadorModel = mongoose.model('Chambeador', chambeadorSchema);
+    const chambeadoresMongo = await ChambeadorModel.find({});
+    if(chambeadoresMongo.length > 0){
+      chambeadoresData = {};
+      chambeadoresMongo.forEach(d=>{ chambeadoresData[d.userId] = { robloxUser: d.robloxUser, puntos: d.puntos||0, baneado: d.baneado||false, lastReport: d.lastReport||0, createdAt: d.createdAt||Date.now() }; });
+      console.log(`✅ ${chambeadoresMongo.length} chambeadores cargados desde MongoDB`);
+      safeSaveJSON(CHAMBEADORES_PATH, chambeadoresData);
+    } else if(Object.keys(chambeadoresData).length > 0){
+      for(const [userId, data] of Object.entries(chambeadoresData)){
+        await ChambeadorModel.findOneAndUpdate({ userId }, {...data, userId }, { upsert: true });
+      }
     }
 
   } catch (e) {
@@ -311,6 +343,26 @@ const FUSIONES = {
   enchanted: { id: 'enchanted', bioma: 'Enchanted Forest', label: 'Enchanted', emoji: '🌲', pets: ['Royal Skywhale','Celestial Sunlion'], requiresBoth: true }
 };
 
+// --- V10: CHAMBEADORES - CONFIG ---
+const CHAMBEADORES_ROLES = {
+  novato: '💼 Chambeador Novato',
+  experimentado: '💼💼 Experimentado',
+  veterano: '💼💼💼 Veterano',
+  confianza: '👑 De Confianza',
+  baneado: '🚫 Baneado Chambeador'
+};
+const CHAMBEADORES_HUEVOS_INTERES = {
+  divinos: ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn'],
+  eternos: ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger']
+};
+const CHAMBEADORES_LINKS = {
+  robloxProfile: 'https://www.roblox.com/es/users/10164957828/profile',
+  comunidad: 'https://www.roblox.com/share/g/782782955',
+  tiktok1: 'https://www.tiktok.com/@elcrisvideos/video/7690834090748087560',
+  tiktok2: 'https://www.tiktok.com/@elcrisvideos/video/7688420085509213461'
+};
+const CHAMBEADORES_PAGO = { eterno: 100, divino: 200 };
+
 function isOwner(id){ return id === process.env.OWNER_ID; }
 function isMod(member){
   if(!member) return false;
@@ -381,6 +433,94 @@ async function ensureFusionesChannel(guild){
   return canal;
 }
 
+async function ensureChambeadorRoles(guild){
+  const rolesToCreate = [
+    { name: CHAMBEADORES_ROLES.novato, color: 0x2ECC71, reason: 'Rol Chambeador Novato' },
+    { name: CHAMBEADORES_ROLES.experimentado, color: 0x3498DB, reason: 'Rol Chambeador Experimentado' },
+    { name: CHAMBEADORES_ROLES.veterano, color: 0x9B59B6, reason: 'Rol Chambeador Veterano' },
+    { name: CHAMBEADORES_ROLES.confianza, color: 0xF1C40F, reason: 'Rol Chambeador De Confianza' },
+    { name: CHAMBEADORES_ROLES.baneado, color: 0xED4245, reason: 'Rol Chambeador Baneado' },
+  ];
+  for(const r of rolesToCreate){
+    if(!findRole(guild, r.name)){
+      await guild.roles.create({ name: r.name, color: r.color, reason: r.reason, mentionable: false }).catch(()=>{});
+      await new Promise(res=>setTimeout(res, 300));
+    }
+  }
+}
+
+async function ensureChambeadoresChannels(guild){
+  await ensureChambeadorRoles(guild);
+  const ownerId = process.env.OWNER_ID;
+  let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+  const baneadoRole = findRole(guild, CHAMBEADORES_ROLES.baneado);
+  const novatoRole = findRole(guild, CHAMBEADORES_ROLES.novato);
+  const expRole = findRole(guild, CHAMBEADORES_ROLES.experimentado);
+  const vetRole = findRole(guild, CHAMBEADORES_ROLES.veterano);
+  const confRole = findRole(guild, CHAMBEADORES_ROLES.confianza);
+
+  let recluta = findChannel(guild, CONFIG.channels.chambeadoresRecluta);
+  if(!recluta){
+    recluta = await guild.channels.create({
+      name: '💼│reclutamiento-chambeadores',
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: 'Reclutamiento Chambeadores - Solo bot publica. Registra tu @ de Roblox.',
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      ]
+    }).catch(()=>null);
+  }
+  if(baneadoRole && recluta) await recluta.permissionOverwrites.edit(baneadoRole.id, { ViewChannel: false }).catch(()=>{});
+
+  let activos = findChannel(guild, CONFIG.channels.chambeadoresActivos);
+  if(!activos){
+    const overwritesActivos = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages] },
+    ];
+    if(novatoRole) overwritesActivos.push({ id: novatoRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+    if(expRole) overwritesActivos.push({ id: expRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+    if(vetRole) overwritesActivos.push({ id: vetRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+    if(confRole) overwritesActivos.push({ id: confRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] });
+    if(baneadoRole) overwritesActivos.push({ id: baneadoRole.id, deny: [PermissionFlagsBits.ViewChannel] });
+    activos = await guild.channels.create({
+      name: '🥚│chambeadores-activos',
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: 'Solo chambeadores. Botón reporte + renunciar. Pago 100/200 Robux.',
+      permissionOverwrites: overwritesActivos
+    }).catch(()=>null);
+  }
+
+  let logs = findChannel(guild, CONFIG.channels.chambeadoresLogs);
+  if(!logs){
+    logs = await guild.channels.create({
+      name: '📋│chambeadores-logs',
+      type: ChannelType.GuildText,
+      parent: null,
+      topic: 'Logs privados Chambeadores - SOLO OWNER',
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] },
+        { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
+      ]
+    }).catch(()=>null);
+  } else {
+    try{
+      await logs.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false }).catch(()=>{});
+      await logs.permissionOverwrites.edit(ownerId, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true }).catch(()=>{});
+      const modRole = findRole(guild, 'moderador');
+      const mayorRole = findRole(guild, 'papoi mayor');
+      if(modRole) await logs.permissionOverwrites.edit(modRole.id, { ViewChannel: false }).catch(()=>{});
+      if(mayorRole && mayorRole.id!== ownerId) await logs.permissionOverwrites.edit(mayorRole.id, { ViewChannel: false }).catch(()=>{});
+    }catch{}
+  }
+  return { recluta, activos, logs };
+}
+
 function isMensajeFusionesEnGeneral(msg){
   if(!msg.guild) return false;
   const name = msg.channel.name.toLowerCase();
@@ -436,12 +576,43 @@ function esRobloxUsernameValido(input){
   const raw = input.trim();
   if(raw.length < 3 || raw.length > 20) return { valid: false, reason: '❌ Tu user de Roblox debe tener entre 3 y 20 caracteres.' };
   if(raw.includes(' ')) return { valid: false, reason: '❌ No pongas espacios ni frases. Solo tu username, ej: `Nico123`' };
-  if(!/^[a-zA-Z0-9_]+$/.test(raw)) return { valid: false, reason: '❌ Solo letras, números y _ . Sin emojis, sin frases.' };
+  if(!/^[a-zA-Z0-9_]+$/.test(raw)) return { valid: false, reason: '❌ Solo letras, números y _. Sin emojis, sin frases.' };
   const lower = raw.toLowerCase();
-  // Bloquea si escribe pets o frases comunes
   const bloqueadas = ['necesito','nesecito','tengo','busco','quiero','vendo','cambio','divino','eterno','secreto','enchanted','royal','celestial','skeleton','pegasus','archangel','world','burner','los','las','yo'];
   if(bloqueadas.some(p => lower.includes(p)) && raw.length > 8) return { valid: false, reason: '❌ Escribe SOLO tu username de Roblox, no qué necesitas.' };
   return { valid: true, value: raw };
+}
+
+function esRobloxArrobaValido(input){
+  let raw = input.trim();
+  if(raw.startsWith('@')) raw = raw.slice(1);
+  if(raw.length < 3 || raw.length > 20) return { valid: false, reason: '❌ Tu @ de Roblox debe tener entre 3 y 20 caracteres. Ej: `@Joss123`' };
+  if(raw.includes(' ')) return { valid: false, reason: '❌ No pongas espacios. Solo tu @, ej: `@Joss123` - es el @, no el display name.' };
+  if(!/^[a-zA-Z0-9_]+$/.test(raw)) return { valid: false, reason: '❌ Solo letras, números y _. Es el @, no el display name.' };
+  const lower = raw.toLowerCase();
+  const bloqueadas = ['necesito','nesecito','tengo','busco','quiero','vendo','cambio','divino','eterno','secreto','enchanted','royal','celestial','skeleton','pegasus','archangel','world','burner','los','las','yo','https','roblox.com'];
+  if(bloqueadas.some(p => lower.includes(p)) && raw.length > 8) return { valid: false, reason: '❌ Escribe SOLO tu @ de Roblox, no frases. Ej: `@Joss123`' };
+  return { valid: true, value: raw };
+}
+
+function getRangoChambeador(puntos){
+  if(puntos >= 11) return CHAMBEADORES_ROLES.confianza;
+  if(puntos >= 6) return CHAMBEADORES_ROLES.veterano;
+  if(puntos >= 3) return CHAMBEADORES_ROLES.experimentado;
+  return CHAMBEADORES_ROLES.novato;
+}
+
+async function actualizarRolChambeador(guild, member, puntos){
+  try{
+    const roles = Object.values(CHAMBEADORES_ROLES).filter(r=>r!==CHAMBEADORES_ROLES.baneado);
+    for(const rn of roles){
+      const ro = findRole(guild, rn);
+      if(ro && member.roles.cache.has(ro.id)) await member.roles.remove(ro.id).catch(()=>{});
+    }
+    const nuevo = getRangoChambeador(puntos);
+    const rolNuevo = findRole(guild, nuevo);
+    if(rolNuevo) await member.roles.add(rolNuevo).catch(()=>{});
+  }catch{}
 }
 
 function getGrupoFusion(fusionId){
@@ -520,6 +691,70 @@ async function crearPanelFusiones(channel){
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('fusion_bioma_angeles').setLabel('😇 Angeles y Demonios').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('fusion_bioma_enchanted').setLabel('🌲 Enchanted Forest').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('fusion_mis').setLabel('📋 Mis Búsquedas').setStyle(ButtonStyle.Secondary));
   await channel.send({ embeds: [embed], components: [row] });
 }
+
+async function crearPanelReclutamiento(channel){
+  try{
+    const msgs = await channel.messages.fetch({ limit: 30 }).catch(()=>null);
+    if(msgs){
+      const old = msgs.filter(m => m.author.id === client.user.id && m.embeds[0]?.title?.includes('CHAMBEADOR'));
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
+    }
+  }catch{}
+  const embed1 = new EmbedBuilder().setColor(0xF1C40F).setTitle('💼 CONVIÉRTETE EN CHAMBEADOR DEL PAPOI MAYOR').setDescription(
+    `Busco huevos gigantes de esta lista. Si encuentras uno, me avisas y te pago en Robux.\n\n`+
+    `**🥚 BUSCO SOLO ESTO:**\n**Divinos:** ${CHAMBEADORES_HUEVOS_INTERES.divinos.join(', ')}\n**Eternos:** ${CHAMBEADORES_HUEVOS_INTERES.eternos.join(', ')}\n\n`+
+    `**📏 REFERENCIA:**\n${CHAMBEADORES_LINKS.tiktok1}\n${CHAMBEADORES_LINKS.tiktok2}\n\n`+
+    `**💰 PAGO:** En Robux (monto lo ves cuando ya eres chambeador)\nSolo se paga a 1 persona y solo DESPUÉS de que me lo haya llevado.`
+  ).setThumbnail(channel.guild.iconURL()).setFooter({ text: 'Papois Empire • Chambeadores' }).setTimestamp();
+  const embed2 = new EmbedBuilder().setColor(0x2ECC71).setTitle('✅ OBLIGATORIO PARA PAGARTE Y UNIRME').setDescription(
+    `**1. Sígueme en Roblox:**\n${CHAMBEADORES_LINKS.robloxProfile}\n\n`+
+    `**2. Únete a mi comunidad (OBLIGATORIO PARA PAGARTE):**\n${CHAMBEADORES_LINKS.comunidad}\nSi no estás dentro, no puedo pagarte por Payouts.\n\n`+
+    `**3. Activa en Roblox > Privacidad > Visibilidad:**\nMostrar juego actual -> Amigos y personas que sigo\nEstado de conexión -> Amigos y personas que sigo\nCompartir actualizaciones -> PRENDIDO\n\n> Si lo dejas en "Nadie" no puedo unirme.`
+  );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('chambeador_registrar').setLabel('📝 Registrar mi @ de Roblox').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('chambeador_corregir').setLabel('✏️ Corregir mi @').setStyle(ButtonStyle.Secondary)
+  );
+  await channel.send({ embeds: [embed1, embed2], components: [row] });
+}
+
+async function crearPanelActivos(channel){
+  try{
+    const msgs = await channel.messages.fetch({ limit: 20 }).catch(()=>null);
+    if(msgs){
+      const old = msgs.filter(m => m.author.id === client.user.id && m.embeds[0]?.title?.includes('ZONA DE CHAMBA'));
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
+    }
+  }catch{}
+  const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 ZONA DE CHAMBA ACTIVA').setDescription(
+    `**💎 PAGO CONFIRMADO:**\nEterno gigante = **${CHAMBEADORES_PAGO.eterno} Robux**\nDivino gigante = **${CHAMBEADORES_PAGO.divino} Robux**\n\n`+
+    `Debes estar dentro de mi comunidad:\n${CHAMBEADORES_LINKS.comunidad}\n\n`+
+    `Cuando veas uno de la lista, pícale abajo y quédate sin salirte.\nCooldown: 1 minuto.`
+  ).setThumbnail(channel.guild.iconURL()).setFooter({ text: 'Pago solo después de llevármelo' }).setTimestamp();
+  const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('chambeador_reporte').setLabel('🥚 ¡ENCONTRÉ HUEVO GIGANTE!').setStyle(ButtonStyle.Success));
+  const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('chambeador_renunciar').setLabel('🚪 Renunciar a ser Chambeador').setStyle(ButtonStyle.Danger));
+  await channel.send({ embeds: [embed], components: [row1, row2] });
+}
+
+async function postReporteChambeador(guild, userId){
+  const data = chambeadoresData[userId];
+  if(!data) return;
+  const logs = findChannel(guild, CONFIG.channels.chambeadoresLogs);
+  if(!logs) return;
+  const puntos = data.puntos||0;
+  const rango = getRangoChambeador(puntos);
+  const embed = new EmbedBuilder().setColor(0xED4245).setTitle('🚨 ¡CHAMBA ENCONTRADA!').setDescription(
+    `<@${process.env.OWNER_ID}> 🚨 **¡CHAMBA!**\n\n**De:** <@${userId}> | Roblox: **${data.robloxUser}**\n**Rango oculto:** ${rango} (${puntos} pts)\n**Hora:** <t:${Math.floor(Date.now()/1000)}:T>\n\n> Copia: \`${data.robloxUser}\``
+  ).setTimestamp();
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`chambeador_confirm_${userId}_eterno`).setLabel(`✅ Cierto Eterno ${CHAMBEADORES_PAGO.eterno}R$`).setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`chambeador_confirm_${userId}_divino`).setLabel(`✅ Cierto Divino ${CHAMBEADORES_PAGO.divino}R$`).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`chambeador_ban_${userId}`).setLabel('❌ Mentira - Banear').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`chambeador_copy_${userId}`).setLabel('📋 Copiar @').setStyle(ButtonStyle.Secondary)
+  );
+  await logs.send({ content: `<@${process.env.OWNER_ID}> 🚨`, embeds: [embed], components: [row] }).catch(()=>{});
+}
+
 async function postBusquedaFusion(guild, req){
   const canal = findChannel(guild, CONFIG.channels.fusiones); if(!canal) return null;
   const fusion = FUSIONES[req.fusionId];
@@ -721,6 +956,135 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
   }catch(e){ console.log('Fusiones error', e); if(!inter.replied) inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
 }
 
+async function handleChambeadoresInteraction(inter){
+  const guild = inter.guild;
+  try{
+    if(inter.isButton()){
+      if(inter.customId === 'chambeador_registrar'){
+        if(chambeadoresData[inter.user.id]?.baneado) return inter.reply({ content: '🚫 Estás baneado.', flags: MessageFlags.Ephemeral });
+        if(chambeadoresData[inter.user.id]) return inter.reply({ content: `Ya estás como \`${chambeadoresData[inter.user.id].robloxUser}\`. Usa Corregir.`, flags: MessageFlags.Ephemeral });
+        const modal = new ModalBuilder().setCustomId('modal_chambeador_registrar').setTitle('Registrar @ de Roblox');
+        const input = new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu @ de Roblox (con o sin @)').setPlaceholder('Ej: @Joss123').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(22);
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return inter.showModal(modal);
+      }
+      if(inter.customId === 'chambeador_corregir'){
+        if(!chambeadoresData[inter.user.id]) return inter.reply({ content: '❌ No estás registrado.', flags: MessageFlags.Ephemeral });
+        if(chambeadoresData[inter.user.id]?.baneado) return inter.reply({ content: '🚫 Baneado.', flags: MessageFlags.Ephemeral });
+        const modal = new ModalBuilder().setCustomId('modal_chambeador_corregir').setTitle('Corregir @ de Roblox');
+        const input = new TextInputBuilder().setCustomId('robloxUser').setLabel('Nuevo @').setPlaceholder('Ej: @Joss123').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(22);
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return inter.showModal(modal);
+      }
+      if(inter.customId === 'chambeador_reporte'){
+        const data = chambeadoresData[inter.user.id];
+        if(!data || data.baneado) return inter.reply({ content: '❌ No eres chambeador. Ve a #💼│reclutamiento-chambeadores', flags: MessageFlags.Ephemeral });
+        const cd = checkCooldown(inter.user.id, 'chambeador_reporte', 60);
+        if(cd>0) return inter.reply({ content: `⏳ Espera ${cd}s.`, flags: MessageFlags.Ephemeral });
+        await postReporteChambeador(guild, inter.user.id);
+        chambeadoresData[inter.user.id].lastReport = Date.now();
+        await saveChambeadores();
+        return inter.reply({ content: `✅ Reporte enviado al dueño! Quédate en tu server. \`${data.robloxUser}\``, flags: MessageFlags.Ephemeral });
+      }
+      if(inter.customId === 'chambeador_renunciar'){
+        if(!chambeadoresData[inter.user.id]) return inter.reply({ content: '❌ No eres chambeador.', flags: MessageFlags.Ephemeral });
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('chambeador_renunciar_confirm').setLabel('Sí, renunciar').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('chambeador_renunciar_cancel').setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+        );
+        return inter.reply({ content: '⚠ ¿Seguro? Perderás rol y XP se reinicia a 0.', components: [row], flags: MessageFlags.Ephemeral });
+      }
+      if(inter.customId === 'chambeador_renunciar_confirm'){
+        const data = chambeadoresData[inter.user.id];
+        if(!data) return inter.reply({ content: '❌ No eres chambeador.', flags: MessageFlags.Ephemeral });
+        const member = guild.members.cache.get(inter.user.id) || await guild.members.fetch(inter.user.id).catch(()=>null);
+        if(member){
+          for(const rn of Object.values(CHAMBEADORES_ROLES)){
+            if(rn===CHAMBEADORES_ROLES.baneado) continue;
+            const ro = findRole(guild, rn);
+            if(ro && member.roles.cache.has(ro.id)) await member.roles.remove(ro.id).catch(()=>{});
+          }
+        }
+        delete chambeadoresData[inter.user.id];
+        if(ChambeadorModel) await ChambeadorModel.deleteOne({ userId: inter.user.id }).catch(()=>{});
+        await saveChambeadores();
+        return inter.update({ content: '✅ Renunciaste. Progreso borrado a 0. Ya no ves #🥚│chambeadores-activos.', components: [] });
+      }
+      if(inter.customId === 'chambeador_renunciar_cancel'){
+        return inter.update({ content: '❌ Cancelado.', components: [] });
+      }
+      if(inter.customId.startsWith('chambeador_confirm_')){
+        if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo dueño.', flags: MessageFlags.Ephemeral });
+        const userId = inter.customId.split('_')[2];
+        const tipo = inter.customId.split('_')[3];
+        const data = chambeadoresData[userId];
+        if(!data) return inter.reply({ content: '❌ No encontrado.', flags: MessageFlags.Ephemeral });
+        data.puntos = (data.puntos||0)+1;
+        await saveChambeadores();
+        const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
+        if(member) await actualizarRolChambeador(guild, member, data.puntos);
+        const pago = tipo==='divino'? CHAMBEADORES_PAGO.divino : CHAMBEADORES_PAGO.eterno;
+        await inter.reply({ content: `✅ Confirmado ${tipo.toUpperCase()} - ${pago} R$. <@${userId}> ahora ${data.puntos} pts -> ${getRangoChambeador(data.puntos)}. Págale en ${CHAMBEADORES_LINKS.comunidad}` });
+        return;
+      }
+      if(inter.customId.startsWith('chambeador_ban_')){
+        if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo dueño.', flags: MessageFlags.Ephemeral });
+        const userId = inter.customId.replace('chambeador_ban_','');
+        const data = chambeadoresData[userId] || { robloxUser: 'desconocido', puntos: 0 };
+        chambeadoresData[userId] = {...data, baneado: true, puntos: 0 };
+        await saveChambeadores();
+        const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
+        if(member){
+          for(const rn of Object.values(CHAMBEADORES_ROLES)){
+            if(rn===CHAMBEADORES_ROLES.baneado) continue;
+            const ro = findRole(guild, rn);
+            if(ro && member.roles.cache.has(ro.id)) await member.roles.remove(ro.id).catch(()=>{});
+          }
+          const banRole = findRole(guild, CHAMBEADORES_ROLES.baneado);
+          if(banRole) await member.roles.add(banRole).catch(()=>{});
+        }
+        const recluta = findChannel(guild, CONFIG.channels.chambeadoresRecluta);
+        const activos = findChannel(guild, CONFIG.channels.chambeadoresActivos);
+        const bRole = findRole(guild, CHAMBEADORES_ROLES.baneado);
+        if(recluta && bRole) await recluta.permissionOverwrites.edit(bRole.id, { ViewChannel: false }).catch(()=>{});
+        if(activos && bRole) await activos.permissionOverwrites.edit(bRole.id, { ViewChannel: false }).catch(()=>{});
+        await inter.reply({ content: `🚫 <@${userId}> baneado. No ve canales chambeadores.` });
+        return;
+      }
+      if(inter.customId.startsWith('chambeador_copy_')){
+        const userId = inter.customId.replace('chambeador_copy_','');
+        const data = chambeadoresData[userId];
+        if(!data) return inter.reply({ content: '❌ No data', flags: MessageFlags.Ephemeral });
+        return inter.reply({ content: `\`${data.robloxUser}\``, flags: MessageFlags.Ephemeral });
+      }
+    }
+    if(inter.isModalSubmit()){
+      if(inter.customId === 'modal_chambeador_registrar' || inter.customId === 'modal_chambeador_corregir'){
+        const input = inter.fields.getTextInputValue('robloxUser').trim();
+        const check = esRobloxArrobaValido(input);
+        if(!check.valid) return inter.reply({ content: check.reason, flags: MessageFlags.Ephemeral });
+        if(chambeadoresData[inter.user.id]?.baneado) return inter.reply({ content: '🚫 Baneado.', flags: MessageFlags.Ephemeral });
+        const isNew =!chambeadoresData[inter.user.id];
+        chambeadoresData[inter.user.id] = {
+          robloxUser: check.value,
+          puntos: chambeadoresData[inter.user.id]?.puntos||0,
+          baneado: false,
+          lastReport: chambeadoresData[inter.user.id]?.lastReport||0,
+          createdAt: chambeadoresData[inter.user.id]?.createdAt||Date.now()
+        };
+        await saveChambeadores();
+        const member = guild.members.cache.get(inter.user.id) || await guild.members.fetch(inter.user.id).catch(()=>null);
+        if(member){
+          const banRole = findRole(guild, CHAMBEADORES_ROLES.baneado);
+          if(banRole && member.roles.cache.has(banRole.id)) await member.roles.remove(banRole.id).catch(()=>{});
+          await actualizarRolChambeador(guild, member, chambeadoresData[inter.user.id].puntos);
+        }
+        return inter.reply({ content: isNew? `✅ Registrado como \`${check.value}\`. Ve a <#${findChannel(guild, CONFIG.channels.chambeadoresActivos)?.id||'chambeadores-activos'}> - Únete a ${CHAMBEADORES_LINKS.comunidad} para cobrar.` : `✅ Corregido a \`${check.value}\`.`, flags: MessageFlags.Ephemeral });
+      }
+    }
+  }catch(e){ console.log('Chambeadores error', e); if(!inter.replied) inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
+}
+
 client.on(Events.ClientReady, async () => {
   await initMongo();
   const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
@@ -750,6 +1114,7 @@ client.on(Events.ClientReady, async () => {
             { name: 'crear-categoria-staff', description: 'Crea categoría STAFF con chat, anuncios, logs y sanciones (privado solo mods)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-fusiones', description: 'Crea el panel de fusiones en #fusiones', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
+      { name: 'setup-chambeadores', description: 'Crea canales y paneles de Chambeadores (reclutamiento + activos + logs solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-tiktok', description: 'Probar conexión con TikTok V6', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -792,8 +1157,14 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.GuildMemberRemove, async member => {
   try{
     const guild = member.guild;
+    if(chambeadoresData[member.id]){
+      delete chambeadoresData[member.id];
+      if(ChambeadorModel) await ChambeadorModel.deleteOne({ userId: member.id }).catch(()=>{});
+      await saveChambeadores();
+      console.log(`🧹 Chambeador ${member.user.tag} borrado por salir - progreso reseteado`);
+    }
     const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
-    
+
     // 1. Borra de la cola de búsqueda
     const borradas = fusionesQueue.filter(r => r.userId === member.id);
     for(const r of borradas){
@@ -1121,6 +1492,10 @@ async function mostrarMenuConfiguracion(interaction){
 
 client.on(Events.InteractionCreate, async inter => {
   try {
+    if((inter.customId && inter.customId.startsWith('chambeador_')) || (inter.isModalSubmit() && inter.customId.startsWith('modal_chambeador_'))){
+      await handleChambeadoresInteraction(inter);
+      return;
+    }
     if((inter.customId && inter.customId.startsWith('fusion_')) || (inter.isModalSubmit() && inter.customId.startsWith('modal_fusion_')) || (inter.customId && inter.customId.startsWith('select_fusion_'))){
       await handleFusionesInteraction(inter);
       return;
@@ -1216,6 +1591,19 @@ client.on(Events.InteractionCreate, async inter => {
           if(!canal) return inter.editReply({ content: '❌ No pude crear/configurar #🔀│fusiones. Revisa permisos.' });
           await crearPanelFusiones(canal);
           return inter.editReply({ content: `✅ Canal ${canal} creado/configurado automáticamente:\n- @everyone solo ve, no escribe (anti-spam @everyone)\n- Solo bot publica búsquedas\n- Mods/Papoi Mayor pueden moderar\nPanel listo.` });
+        }
+        if(inter.commandName === 'setup-chambeadores'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if (!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels) ||!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
+          }
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo el dueño (OWNER_ID) puede crear chambeadores.' });
+          const { recluta, activos, logs } = await ensureChambeadoresChannels(inter.guild);
+          if(!recluta ||!activos ||!logs) return inter.editReply({ content: '❌ No pude crear los 3 canales. Revisa permisos.' });
+          await crearPanelReclutamiento(recluta);
+          await crearPanelActivos(activos);
+          await logs.send({ content: `✅ Logs privados Chambeadores inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
+          return inter.editReply({ content: `✅ Chambeadores V6.5:\n- ${recluta} (público registro + corregir)\n- ${activos} (solo chambeadores, reporte + renunciar, pago 100/200)\n- ${logs} (SOLO TU - OWNER)\nRoles: ${Object.values(CHAMBEADORES_ROLES).join(', ')}\n\nComunidad para pagar: ${CHAMBEADORES_LINKS.comunidad}` });
         }
         if(inter.commandName === 'mis-fusiones'){
           const mine = fusionesQueue.filter(r=>r.userId===inter.user.id);
