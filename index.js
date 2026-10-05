@@ -432,7 +432,13 @@ function startButterflyScheduler(){
   setInterval(checkButterflyEvent, 30000);
 }
 
-// --- FUSIONES V7 - FUNCIONES ---
+function usuarioTieneFusion(userId){
+  if(fusionesQueue.some(r=>r.userId===userId)) return true;
+  for(const data of fusionesActivas.values()){
+    if(data.users.includes(userId)) return true;
+  }
+  return false;
+}
 function checkCompatibilidad(fusionId, haveA, haveB){
   const f = FUSIONES[fusionId]; if(!f) return false;
   if(f.id==='enchanted') return haveA==='AMBOS' && haveB==='AMBOS';
@@ -447,17 +453,38 @@ async function crearPanelFusiones(channel){
       for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
     }
   }catch{}
-  const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle('🔀 Centro de Fusiones Papoi').setDescription(`**¿Qué fusión buscas hacer?**\n\n😇 **Angeles y Demonios**\n💀 Eterna: Skeleton Horse + Pegasus\n😇 Divina: ArchAngel + World Burner\n\n🌲 **Enchanted Forest**\nRoyal Skywhale + Celestial Sunlion (ambos necesitan AMBOS)\n\n**¿Tienes los 2?** Dale a **Tengo AMBOS** y te emparejamos con cualquiera.\n\n👇 Elige bioma:`).setThumbnail(channel.guild.iconURL()).setFooter({ text: '1 búsqueda activa por persona • Auto-cierre 24h • Solo el bot escribe aquí' }).setTimestamp();
+  const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle('🔀 Centro de Fusiones Papoi').setDescription(
+    `**¿Qué fusión buscas hacer?**\n\n`+
+    `😇 **Angeles y Demonios**\n`+
+    `💀 Eterna: Skeleton Horse + Pegasus\n`+
+    `😇 Divina: ArchAngel + World Burner\n\n`+
+    `🌲 **Enchanted Forest**\n`+
+    `Royal Skywhale + Celestial Sunlion (ambos necesitan AMBOS)\n\n`+
+    `⚠️ **NOTA ANGELES Y DEMONIOS:**\n`+
+    `> No importa el peso/tamaño del pet de tu pareja. Si TÚ metes un pet gigante, a TI te toca fusión gigante. Si tu pareja mete uno chico, a ÉL le toca chica. No busques pareja por peso, los creadores fueron listos.\n\n`+
+    `**¿Tienes los 2?** Dale a **Tengo AMBOS** y te emparejamos con cualquiera.\n\n`+
+    `👇 Elige bioma:`).setThumbnail(channel.guild.iconURL()).setFooter({ text: '1 búsqueda activa por persona • Auto-cierre 24h • Solo el bot escribe aquí' }).setTimestamp();
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('fusion_bioma_angeles').setLabel('😇 Angeles y Demonios').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('fusion_bioma_enchanted').setLabel('🌲 Enchanted Forest').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('fusion_mis').setLabel('📋 Mis Búsquedas').setStyle(ButtonStyle.Secondary));
   await channel.send({ embeds: [embed], components: [row] });
 }
 async function postBusquedaFusion(guild, req){
   const canal = findChannel(guild, CONFIG.channels.fusiones); if(!canal) return null;
-  const fusion = FUSIONES[req.fusionId]; const tieneTxt = req.have==='AMBOS'? `AMBOS (${fusion.pets.join(' + ')})` : req.have;
-  const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle(`${fusion.emoji} BUSCANDO - ${fusion.bioma} ${fusion.label}`).setDescription(`👤 <@${req.userId}> | Tiene: **${tieneTxt}**\n🎮 Roblox: **${req.robloxUser}**\n⏳ En espera...`).setFooter({ text: `ID: ${req.userId}` }).setTimestamp();
-  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_join_${req.userId}`).setLabel('🙋 Yo tengo lo que busca!').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`fusion_cancel_${req.userId}`).setLabel('❌ Cancelar').setStyle(ButtonStyle.Danger));
+  const fusion = FUSIONES[req.fusionId];
+  const tieneTxt = req.have==='AMBOS'? `AMBOS (${fusion.pets.join(' + ')})` : req.have;
+  // V6.2: Mostramos Discord SI, ocultamos Roblox hasta el privado
+  const embed = new EmbedBuilder()
+   .setColor(0x9B59B6)
+   .setTitle(`${fusion.emoji} BUSCANDO - ${fusion.bioma} ${fusion.label}`)
+   .setDescription(`👤 <@${req.userId}> | Tiene: **${tieneTxt}**\n⏳ En espera de pareja compatible...\n\n> 🔒 Tu user de Roblox solo se mostrará cuando se abra el canal privado.`)
+   .setFooter({ text: `Fusión: ${fusion.label} • Activa 24h` })
+   .setTimestamp();
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`fusion_join_${req.userId}`).setLabel('🙋 Yo tengo lo que busca!').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`fusion_cancel_${req.userId}`).setLabel('❌ Cancelar').setStyle(ButtonStyle.Danger)
+  );
   const msg = await canal.send({ embeds: [embed], components: [row] }).catch(()=>null);
-  if(msg){ req.messageId=msg.id; req.channelId=canal.id; await saveFusiones(); } return msg;
+  if(msg){ req.messageId=msg.id; req.channelId=canal.id; await saveFusiones(); }
+  return msg;
 }
 async function crearCanalFusionPrivado(guild, req1, req2){
   let categoria = findCategory(guild, CONFIG.categories.fusionesActivas);
@@ -469,7 +496,8 @@ async function crearCanalFusionPrivado(guild, req1, req2){
   const canal = await guild.channels.create({ name: `🔀│fusion-${Math.floor(Math.random()*9000)+1000}`, type: ChannelType.GuildText, parent: categoria?.id, permissionOverwrites: overwrites, topic: `Fusión ${req1.fusionId}` }).catch(()=>null);
   if(!canal) return null;
   const fusion = FUSIONES[req1.fusionId];
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle(`✅ ¡PAREJA ENCONTRADA! ${fusion.emoji} ${fusion.label}`).setDescription(`**Fusión:** ${fusion.bioma} - ${fusion.label} (${fusion.pets.join(' + ')})\n\n**Jugador 1:** <@${req1.userId}> - Tiene: **${req1.have}**\n🎮 Roblox: **${req1.robloxUser}**\n\n**Jugador 2:** <@${req2.userId}> - Tiene: **${req2.have}**\n🎮 Roblox: **${req2.robloxUser}**\n\n**Instrucciones:**\n1. Agréguense en Roblox\n2. Entren al juego\n3. Hagan la fusión\n\nConfirmen cuando terminen.`).setTimestamp();
+  const notaPeso = fusion.bioma === 'Angeles y Demonios'? `\n\n⚠️ **IMPORTANTE:** El peso NO se cruza. Si tú metes gigante, te toca gigante a ti, aunque tu pareja meta chico. No discutan por peso.` : '';
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle(`✅ ¡PAREJA ENCONTRADA! ${fusion.emoji} ${fusion.label}`).setDescription(`**Fusión:** ${fusion.bioma} - ${fusion.label} (${fusion.pets.join(' + ')})\n\n**Jugador 1:** <@${req1.userId}> - Tiene: **${req1.have}**\n🎮 Roblox: **${req1.robloxUser}**\n\n**Jugador 2:** <@${req2.userId}> - Tiene: **${req2.have}**\n🎮 Roblox: **${req2.robloxUser}**${notaPeso}\n\n**Instrucciones:**\n1. Agréguense en Roblox\n2. Entren al juego\n3. Hagan la fusión\n\nConfirmen cuando terminen.`).setTimestamp();
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_confirm_yes_${canal.id}`).setLabel('✅ Ya fusionamos').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`fusion_confirm_no_${canal.id}`).setLabel('❌ Ya no quiero').setStyle(ButtonStyle.Danger));
   const rowMod = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_mod_success_${canal.id}`).setLabel('✅ Mod: Exitosa').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`fusion_mod_fail_${canal.id}`).setLabel('❌ Mod: Fallida').setStyle(ButtonStyle.Secondary));
   await canal.send({ content: `<@${req1.userId}> <@${req2.userId}>`, embeds: [embed], components: [row, rowMod] }).catch(()=>{});
@@ -484,6 +512,19 @@ function startFusionesScheduler(){
   setInterval(async ()=>{
     try{
       const guild = client.guilds.cache.get(process.env.GUILD_ID); if(!guild) return;
+      const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
+      
+      // Limpieza de gente que se salió y quedó con mensaje <@numero>
+      for(const req of [...fusionesQueue]){
+        const stillHere = guild.members.cache.get(req.userId) || await guild.members.fetch(req.userId).catch(()=>null);
+        if(!stillHere){
+          if(canalFusiones && req.messageId) canalFusiones.messages.delete(req.messageId).catch(()=>{});
+          fusionesQueue = fusionesQueue.filter(r => r.userId !== req.userId);
+          await saveFusiones();
+          console.log(`🧹 Auto-borrado ${req.userId} por leave`);
+        }
+      }
+
       for(const [chanId, data] of fusionesActivas.entries()){
         const canal = guild.channels.cache.get(chanId); if(!canal){ fusionesActivas.delete(chanId); continue; }
         if(Date.now()-data.lastPing > 60*60*1000){
@@ -494,7 +535,7 @@ function startFusionesScheduler(){
         }
       }
       const now=Date.now(); const toRemove=fusionesQueue.filter(r=>now-r.createdAt>24*60*60*1000);
-      for(const r of toRemove){ const ch=findChannel(guild, CONFIG.channels.fusiones); if(ch&&r.messageId) ch.messages.delete(r.messageId).catch(()=>{}); }
+      for(const r of toRemove){ const ch=canalFusiones; if(ch&&r.messageId) ch.messages.delete(r.messageId).catch(()=>{}); }
       if(toRemove.length){ fusionesQueue=fusionesQueue.filter(r=>now-r.createdAt<=24*60*60*1000); await saveFusiones(); }
     }catch(e){ console.log('Fusiones scheduler', e.message); }
   }, 60*1000);
@@ -522,12 +563,12 @@ async function handleFusionesInteraction(inter){
       }
       if(inter.customId.startsWith('fusion_have_')){
         let fusionId, havePet; if(inter.customId.includes('angeles_eterna')){ fusionId='angeles_eterna'; havePet=inter.customId.replace(`fusion_have_${fusionId}_`,''); } else if(inter.customId.includes('angeles_divina')){ fusionId='angeles_divina'; havePet=inter.customId.replace(`fusion_have_${fusionId}_`,''); } else { fusionId='enchanted'; havePet='AMBOS'; } havePet=havePet.replace(/_/g,' ');
-        if(fusionesQueue.some(r=>r.userId===inter.user.id)) return inter.reply({ content: '❌ Ya tienes búsqueda activa.', flags: MessageFlags.Ephemeral });
+        if(usuarioTieneFusion(inter.user.id)) return inter.reply({ content: '❌ Ya tienes búsqueda activa.', flags: MessageFlags.Ephemeral });
                 const modal=new ModalBuilder().setCustomId(`modal_fusion_${fusionId}_${havePet.replace(/\s+/g,'_')}`).setTitle(`Fusión ${FUSIONES[fusionId].label}`); const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de Roblox').setStyle(TextInputStyle.Short).setRequired(true); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
       }
       if(inter.customId.startsWith('fusion_join_') &&!inter.customId.includes('_have_')){
         const ownerId=inter.customId.replace('fusion_join_',''); const req=fusionesQueue.find(r=>r.userId===ownerId); if(!req) return inter.reply({ content: '❌ Ya no existe.', flags: MessageFlags.Ephemeral }); if(req.userId===inter.user.id) return inter.reply({ content: '❌ No puedes contigo mismo.', flags: MessageFlags.Ephemeral });
-        if(fusionesQueue.some(r=>r.userId===inter.user.id)) return inter.reply({ content: '❌ Cancela tu búsqueda primero.', flags: MessageFlags.Ephemeral });
+        if(usuarioTieneFusion(inter.user.id)) return inter.reply({ content: '❌ Cancela tu búsqueda primero.', flags: MessageFlags.Ephemeral });
                 const fusion=FUSIONES[req.fusionId]; const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_${fusion.pets[0].replace(/\s+/g,'_')}`).setLabel(`Tengo ${fusion.pets[0]}`).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_${fusion.pets[1].replace(/\s+/g,'_')}`).setLabel(`Tengo ${fusion.pets[1]}`).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_AMBOS`).setLabel(`Tengo AMBOS`).setStyle(ButtonStyle.Success));
         return inter.reply({ content: `Vas con <@${ownerId}> que tiene ${req.have}`, components: [row], flags: MessageFlags.Ephemeral });
       }
@@ -568,7 +609,9 @@ async function handleFusionesInteraction(inter){
         const robloxUser=inter.fields.getTextInputValue('robloxUser').trim();
         const compatibleReq=fusionesQueue.find(r=>r.fusionId===fusionId && r.userId!==inter.user.id && checkCompatibilidad(fusionId, r.have, havePet));
         if(compatibleReq){ const myReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser, createdAt: Date.now() }; await inter.reply({ content: '✅ Pareja instantánea! Creando canal...', flags: MessageFlags.Ephemeral }); await crearCanalFusionPrivado(guild, compatibleReq, myReq); }
-        else { const newReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser, createdAt: Date.now(), messageId: null }; fusionesQueue.push(newReq); await saveFusiones(); await postBusquedaFusion(guild, newReq); return inter.reply({ content: `✅ Publicado en #fusiones - ${FUSIONES[fusionId].label} teniendo ${havePet}`, flags: MessageFlags.Ephemeral }); }
+        else { 
+  if(usuarioTieneFusion(inter.user.id)) return inter.reply({ content: '❌ Ya tienes búsqueda activa.', flags: MessageFlags.Ephemeral });
+  const newReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser, createdAt: Date.now(), messageId: null }; fusionesQueue.push(newReq); await saveFusiones(); await postBusquedaFusion(guild, newReq); return inter.reply({ content: `✅ Publicado en #fusiones - ${FUSIONES[fusionId].label} teniendo ${havePet}`, flags: MessageFlags.Ephemeral }); }
       }
     }
   }catch(e){ console.log('Fusiones error', e); if(!inter.replied) inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
@@ -640,6 +683,40 @@ client.on(Events.GuildMemberAdd, async member => {
   } catch (e) {
     console.log(`Error bienvenida: ${e.message}`);
   }
+});
+
+client.on(Events.GuildMemberRemove, async member => {
+  try{
+    const guild = member.guild;
+    const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
+    
+    // 1. Borra de la cola de búsqueda
+    const borradas = fusionesQueue.filter(r => r.userId === member.id);
+    for(const r of borradas){
+      if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{});
+    }
+    if(borradas.length){
+      fusionesQueue = fusionesQueue.filter(r => r.userId !== member.id);
+      await saveFusiones();
+      console.log(`🧹 Fusión de ${member.user.tag} borrada por salir del server`);
+    }
+
+    // 2. Si estaba en canal activo, cierra y regresa al otro a la cola
+    for(const [chanId, data] of fusionesActivas.entries()){
+      if(data.users.includes(member.id)){
+        const canal = guild.channels.cache.get(chanId);
+        const otherId = data.users.find(id => id !== member.id);
+        const otherReq = data.reqs.find(r => r.userId === otherId);
+        if(otherReq){
+          fusionesQueue.push({...otherReq, createdAt: Date.now(), messageId: null });
+          await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]);
+          if(canal) canal.send({ content: `👋 <@${member.id}> se salió del server. <@${otherId}> regresó a #fusiones.` }).catch(()=>{});
+        }
+        setTimeout(()=>{ if(canal) canal.delete().catch(()=>{}); fusionesActivas.delete(chanId); }, 5000);
+        await saveFusiones();
+      }
+    }
+  }catch(e){ console.log('Leave cleanup error', e.message); }
 });
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
