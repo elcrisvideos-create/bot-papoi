@@ -724,7 +724,8 @@ async function crearPanelFusiones(channel){
     `💀 Eterna: Skeleton Horse + Pegasus\n`+
     `😇 Divina: ArchAngel + World Burner\n\n`+
     `🌲 **Enchanted Forest**\n`+
-    `Royal Skywhale + Celestial Sunlion (ambos necesitan AMBOS)\n\n`+
+    `Royal Skywhale + Celestial Sunlion\n`+
+    `⚠ **OBLIGATORIO tener los 2 (Royal + Celestial) - NO se puede con 1 solo**\n\n`+
     `⚠️ **NOTA ANGELES Y DEMONIOS:**\n`+
     `> No importa el peso/tamaño del pet de tu pareja. Si TÚ metes un pet gigante, a TI te toca fusión gigante. Si tu pareja mete uno chico, a ÉL le toca chica. No busques pareja por peso, los creadores fueron listos.\n\n`+
     `**¿Tienes los 2?** Dale a **Tengo AMBOS** y te emparejamos con cualquiera.\n\n`+
@@ -838,10 +839,10 @@ async function crearCanalFusionPrivado(guild, req1, req2){
   await saveFusiones(); return canal;
 }
 function startFusionesScheduler(){
-  console.log('🔀 Scheduler Fusiones V6.4 iniciado - Anti duplicados + leave fix');
+  console.log('🔀 Scheduler Fusiones V6.5 iniciado - caza fantasmas cada 30s');
   setTimeout(async ()=>{
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
-    if(guild){ const elim = limpiarDuplicadosFusiones(); if(elim>0) console.log(`🧹 ${elim} duplicados limpiados al iniciar`); }
+    if(guild){ const elim = limpiarDuplicadosFusiones(); if(elim>0) console.log(`🧹 ${elim} duplicados al iniciar`); }
   }, 8000);
   setInterval(async ()=>{
     try{
@@ -856,12 +857,15 @@ function startFusionesScheduler(){
       }
       for(const userId of toDeleteUser){
         const borradas = fusionesQueue.filter(r => r.userId === userId);
-        for(const r of borradas){ if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{}); }
-        if(borradas.length){ fusionesQueue = fusionesQueue.filter(r => r.userId !== userId); console.log(`🧹 Auto-borrado V6.4 ${userId} por leave (${borradas.length})`); }
+        for(const r of borradas){
+          if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{});
+          if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{});
+        }
+        if(borradas.length){ fusionesQueue = fusionesQueue.filter(r => r.userId!== userId); console.log(`🧹 Auto-borrado 30s ${userId} (${borradas.length})`); }
       }
       if(toDeleteUser.size>0) await saveFusiones();
       limpiarDuplicadosFusiones();
-      for(const [chanId, data] of fusionesActivas.entries()){
+      for(const [chanId, data] of [...fusionesActivas.entries()]){
         const canal = guild.channels.cache.get(chanId); if(!canal){ fusionesActivas.delete(chanId); continue; }
         for(const uid of data.users){
           const mem = guild.members.cache.get(uid) || await guild.members.fetch(uid).catch(()=>null);
@@ -873,14 +877,13 @@ function startFusionesScheduler(){
             break;
           }
         }
-        if(Date.now()-data.lastPing > 60*60*1000){ await canal.send({ content: `<@${data.users[0]}> <@${data.users[1]}> ⏰ ¿Siguen aquí? Confirmen con ✅ o ❌.` }).catch(()=>{}); data.lastPing=Date.now(); }
-        if(Date.now()-data.createdAt > 3*60*60*1000){ await canal.send({ content: `⏰ Cierre automático por inactividad.` }).catch(()=>{}); await canal.delete().catch(()=>{}); fusionesActivas.delete(chanId); }
       }
-      const now=Date.now(); const toRemove=fusionesQueue.filter(r=>now-r.createdAt>24*60*60*1000);
-      for(const r of toRemove){ if(canalFusiones&&r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{}); }
-      if(toRemove.length){ fusionesQueue=fusionesQueue.filter(r=>now-r.createdAt<=24*60*60*1000); await saveFusiones(); }
-    }catch(e){ console.log('Fusiones scheduler V6.4', e.message); }
-  }, 60*1000);
+      const now=Date.now();
+      const toRemove=fusionesQueue.filter(r=>now-r.createdAt> 2*60*60*1000); // 2h en vez de 24h para limpiar raids
+      for(const r of toRemove){ if(canalFusiones&&r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{}); if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{}); }
+      if(toRemove.length){ fusionesQueue=fusionesQueue.filter(r=>now-r.createdAt<=2*60*60*1000); await saveFusiones(); console.log(`🧹 Limpieza 2h: ${toRemove.length} búsquedas viejas`); }
+    }catch(e){ console.log('Fusiones scheduler V6.5', e.message); }
+  }, 30*1000);
 }
 
 async function handleFusionesInteraction(inter){
@@ -897,8 +900,8 @@ async function handleFusionesInteraction(inter){
         return inter.reply({ content: '😇 **Angeles y Demonios**', components: [row], flags: MessageFlags.Ephemeral });
       }
       if(inter.customId==='fusion_bioma_enchanted'){
-        const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_have_enchanted_AMBOS`).setLabel(`Tengo Royal + Celestial (AMBOS)`).setStyle(ButtonStyle.Success));
-        return inter.reply({ content: `🌲 **Enchanted Forest**\nNecesitas: Royal Skywhale + Celestial Sunlion`, components: [row], flags: MessageFlags.Ephemeral });
+        const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_have_enchanted_AMBOS`).setLabel(`Tengo Royal + Celestial (AMBOS - OBLIGATORIO)`).setStyle(ButtonStyle.Success));
+        return inter.reply({ content: `🌲 **Enchanted Forest**\n⚠ **OBLIGATORIO tener AMBOS**\nNecesitas: Royal Skywhale + Celestial Sunlion\n\n> No puedes entrar si solo tienes 1, necesitas los 2.`, components: [row], flags: MessageFlags.Ephemeral });
       }
       if(inter.customId==='fusion_mis'){
         const mine=fusionesQueue.filter(r=>r.userId===inter.user.id); if(!mine.length) return inter.reply({ content: '📭 Sin búsquedas.', flags: MessageFlags.Ephemeral });
@@ -923,7 +926,12 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
         if(contarFusionesUsuario(inter.user.id) >= 2){
           return inter.reply({ content: `❌ Ya tienes 2 fusiones activas.`, flags: MessageFlags.Ephemeral });
         }
-                const fusion=FUSIONES[req.fusionId]; const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_${fusion.pets[0].replace(/\s+/g,'_')}`).setLabel(`Tengo ${fusion.pets[0]}`).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_${fusion.pets[1].replace(/\s+/g,'_')}`).setLabel(`Tengo ${fusion.pets[1]}`).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_AMBOS`).setLabel(`Tengo AMBOS`).setStyle(ButtonStyle.Success));
+                const fusion=FUSIONES[req.fusionId];
+                if(fusion.requiresBoth){
+                  const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_AMBOS`).setLabel(`Tengo AMBOS (Royal + Celestial) - OBLIGATORIO`).setStyle(ButtonStyle.Success));
+                  return inter.reply({ content: `🌲 **Enchanted Forest es OBLIGATORIO tener AMBOS**\nVas con <@${ownerId}> que tiene ${req.have}\n> Necesitas Royal Skywhale + Celestial Sunlion`, components: [row], flags: MessageFlags.Ephemeral });
+                }
+                const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_${fusion.pets[0].replace(/\s+/g,'_')}`).setLabel(`Tengo ${fusion.pets[0]}`).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_${fusion.pets[1].replace(/\s+/g,'_')}`).setLabel(`Tengo ${fusion.pets[1]}`).setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`fusion_join_have_${ownerId}_AMBOS`).setLabel(`Tengo AMBOS`).setStyle(ButtonStyle.Success));
         return inter.reply({ content: `Vas con <@${ownerId}> que tiene ${req.have}`, components: [row], flags: MessageFlags.Ephemeral });
       }
       if(inter.customId.startsWith('fusion_join_have_')){
@@ -1198,37 +1206,36 @@ client.on(Events.GuildMemberAdd, async member => {
 client.on(Events.GuildMemberRemove, async member => {
   try{
     const guild = member.guild;
-    if(chambeadoresData[member.id]){
-      delete chambeadoresData[member.id];
-      if(ChambeadorModel) await ChambeadorModel.deleteOne({ userId: member.id }).catch(()=>{});
+    const userId = member.id;
+    // Chambeadores
+    if(chambeadoresData[userId]){
+      delete chambeadoresData[userId];
+      if(ChambeadorModel) await ChambeadorModel.deleteOne({ userId }).catch(()=>{});
       await saveChambeadores();
-      console.log(`🧹 Chambeador ${member.user.tag} borrado por salir - progreso reseteado`);
     }
+    // FUSIONES: borrado INSTANTANEO + Mongo + mensaje
     const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
-
-    // 1. Borra de la cola de búsqueda
-    const borradas = fusionesQueue.filter(r => r.userId === member.id);
-    for(const r of borradas){
-      if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{});
-    }
+    const borradas = fusionesQueue.filter(r => r.userId === userId);
     if(borradas.length){
-      fusionesQueue = fusionesQueue.filter(r => r.userId !== member.id);
+      for(const r of borradas){
+        if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{});
+        if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{});
+      }
+      fusionesQueue = fusionesQueue.filter(r => r.userId!== userId);
       await saveFusiones();
-      console.log(`🧹 Fusión de ${member.user.tag} borrada por salir del server`);
+      console.log(`🧹 LEAVE FIX: ${member.user.tag} (${userId}) borrado ${borradas.length} fusiones al salir`);
     }
-
-    // 2. Si estaba en canal activo, cierra y regresa al otro a la cola
-    for(const [chanId, data] of fusionesActivas.entries()){
-      if(data.users.includes(member.id)){
+    for(const [chanId, data] of [...fusionesActivas.entries()]){
+      if(data.users.includes(userId)){
         const canal = guild.channels.cache.get(chanId);
-        const otherId = data.users.find(id => id !== member.id);
-        const otherReq = data.reqs.find(r => r.userId === otherId);
+        const otherId = data.users.find(id => id!== userId);
+        const otherReq = data.reqs.find(r=>r.userId===otherId);
         if(otherReq){
           fusionesQueue.push({...otherReq, createdAt: Date.now(), messageId: null });
           await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]);
-          if(canal) canal.send({ content: `👋 <@${member.id}> se salió del server. <@${otherId}> regresó a #fusiones.` }).catch(()=>{});
+          if(canal) canal.send({ content: `👋 <@${userId}> se salió del server. <@${otherId}> regresó a #fusiones.` }).catch(()=>{});
         }
-        setTimeout(()=>{ if(canal) canal.delete().catch(()=>{}); fusionesActivas.delete(chanId); }, 5000);
+        setTimeout(()=>{ if(canal) canal.delete().catch(()=>{}); fusionesActivas.delete(chanId); }, 3000);
         await saveFusiones();
       }
     }
