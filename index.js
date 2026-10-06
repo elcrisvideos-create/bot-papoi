@@ -1286,6 +1286,7 @@ client.on(Events.ClientReady, async () => {
   const rest = new REST({version:'10'}).setToken(process.env.DISCORD_TOKEN);
   try {
     await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
+      { name: 'fix-papois', description: 'Fix: pone rol Papoi a todos los que entraron con bot offline', default_member_permissions: PermissionFlagsBits.ManageRoles.toString() },
       { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
       { name: 'rank', description: 'Ver tu XP y nivel', options: [{ name: 'usuario', description: 'Usuario a consultar', type: 6, required: false }] },
       { name: 'ban', description: 'Banear usuario', options: [{ name: 'usuario', description: 'Usuario a banear', type: 6, required: true }, { name: 'razon', description: 'Razón', type: 3, required: false }], default_member_permissions: PermissionFlagsBits.BanMembers.toString() },
@@ -1297,10 +1298,10 @@ client.on(Events.ClientReady, async () => {
       { name: 'slowmode', description: 'Cambiar cooldown', options: [{ name: 'segundos', description: 'Segundos (0-21600)', type: 4, required: true, min_value: 0, max_value: 21600 }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
       { name: 'setup-pets', description: 'Crear panel de ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
-            { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'crear-canal-mariposas', description: 'Crea el canal y rol de floracion-mariposas :Mariposa:', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-mariposas', description: 'Probar ping del evento de mariposas', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-            { name: 'crear-categoria-staff', description: 'Crea categoría STAFF con chat, anuncios, logs y sanciones (privado solo mods)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'crear-categoria-staff', description: 'Crea categoría STAFF con chat, anuncios, logs y sanciones (privado solo mods)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-fusiones', description: 'Crea el panel de fusiones en #fusiones', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
       { name: 'setup-chambeadores', description: 'Crea canales y paneles de Chambeadores (reclutamiento + activos + logs solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -1313,9 +1314,11 @@ client.on(Events.ClientReady, async () => {
     console.error('❌ Error registrando comandos:', e.message);
   }
 
-    await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
-      { name: 'fix-papois', description: 'Fix: pone rol Papoi a todos los que entraron con bot offline', default_member_permissions: PermissionFlagsBits.ManageRoles.toString() },
-      { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
+  const guild = client.guilds.cache.get(process.env.GUILD_ID);
+  if(guild){
+    await ensureButterflyRole(guild);
+    await fixPapoisAlIniciar(guild).catch(e=>console.log('fixPapois', e.message));
+    const general = findChannel(guild, CONFIG.channels.general);
     if(general) {
       await general.setRateLimitPerUser(10).catch(()=>{});
       console.log(`✅ Slowmode 10s en #${general.name}`);
