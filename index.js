@@ -1157,7 +1157,6 @@ client.on(Events.ClientReady, async () => {
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
       { name: 'setup-chambeadores', description: 'Crea canales y paneles de Chambeadores (reclutamiento + activos + logs solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-      { name: 'test-tiktok', description: 'Probar conexión con TikTok V6', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     ]});
@@ -1175,7 +1174,7 @@ client.on(Events.ClientReady, async () => {
       console.log(`✅ Slowmode 10s en #${general.name}`);
     }
   }
-    startTikTokMonitor();
+  // startTikTokMonitor deshabilitado - solo manual /video y /live
   startButterflyScheduler();
   startFusionesScheduler();
 });
@@ -1870,11 +1869,7 @@ client.on(Events.InteractionCreate, async inter => {
       await bienvenida.send({ content: `${inter.user}`, embeds: [embed] }).catch(()=>{});
       return inter.reply({ content: `✅ Enviado a ${bienvenida}`, flags: MessageFlags.Ephemeral });
     }
-    if(inter.commandName === 'test-tiktok'){
-      await inter.deferReply({ flags: MessageFlags.Ephemeral });
-      const result = await testTikTokAPIs();
-      return inter.editReply({ content: result.slice(0,1900) });
-    }
+    
     if(inter.commandName === 'live'){
       const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
       const canalLive = findChannel(inter.guild, CONFIG.channels.live);
@@ -1958,84 +1953,13 @@ async function sendViralVideoAnnouncement(guild, videoDetails){
   await canalClips.send({ content: `@everyone 🔥 **NUEVO VIDEO DEL PAPOI MAYOR** 🔥\n${videoDetails.originalUrl}`, embeds: [embed], components: [row] }).catch(e=>console.log(e.message));
 }
 
-async function fetchTikWMViaProxy(tiktokUser){
-  const tikwmUrl = `https://www.tikwm.com/api/user/posts?unique_id=${tiktokUser}&count=3`;
-
-  // 1. Intenta directo sin proxy primero (a veces Railway sí deja)
-  try {
-    const res = await axios.get(tikwmUrl, {
-      timeout: 15000,
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    if(res.data?.data?.videos?.[0]) {
-      console.log(`✅ TikWM directo OK: ${res.data.data.videos[0].video_id}`);
-      return res.data;
-    }
-  } catch(e){ console.log(`Direct fail: ${e.message}`); }
-
-  // 2. Prueba con 5 proxies diferentes
-  const proxies = [
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(tikwmUrl)}`,
-    `https://corsproxy.io/?${encodeURIComponent(tikwmUrl)}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(tikwmUrl)}`,
-    `https://thingproxy.freeboard.name/fetch/${tikwmUrl}`,
-    `https://proxy.cors.sh/${tikwmUrl}`
-  ];
-  for(const proxyUrl of proxies){
-    try{ const res = await axios.get(proxyUrl, { timeout: 20000 }); let data = res.data; if(typeof data === 'string') try{ data = JSON.parse(data); }catch{} if(data?.data?.videos?.[0]) return data; }catch(e){ console.log(`Proxy fail: ${e.message}`); }
-  }
-  return null;
-}
-
-async function scrapeTikTokDirect(tiktokUser){
-  try{
-    const res = await axios.get(`https://www.tiktok.com/@${tiktokUser}`, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' } });
-    const html = res.data; const regex = /\/video\/(\d{18,20})/g; let ids = []; let m; while((m = regex.exec(html)) !== null) ids.push(m[1]); ids = [...new Set(ids)];
-    const isLive = html.includes('"isLive":true') || html.includes('"is_live":true');
-    return { videoIds: ids, isLive, htmlLength: html.length };
-  }catch(e){ return { videoIds: [], isLive: false, htmlLength: 0 }; }
-}
-
-async function testTikTokAPIs(){
-  const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  let result = `🧪 V6 100% PERFECTO @${tiktokUser}...\n\nMongo: ${useMongo ? 'ACTIVO ✅' : 'Archivos (pon MONGO_URI)'}\n`;
-  try{ const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(`https://www.tiktok.com/@${tiktokUser}/video/7691863965617491218`)}`; const res = await axios.get(oembedUrl, { timeout: 10000 }); result += `✅ oEmbed: cover=${res.data.thumbnail_url ? 'SI' : 'NO'}\n`; }catch(e){ result += `❌ oEmbed: ${e.message}\n`; }
-  result += `Cache: ${tiktokCache.lastVideoId} Live:${tiktokCache.isLiveNow}\nData: ${DATA_DIR}\n`;
-  return result;
-}
-
-async function checkTikTok(){
-  const tiktokUser = process.env.TIKTOK_USERNAME || 'elcrisvideos';
-  const guild = client.guilds.cache.get(process.env.GUILD_ID);
-  if(!guild) return;
-  console.log(`🔍 [V6] Check @${tiktokUser}...`);
-  let videoId = null; let isLiveNow = false;
-  const proxyData = await fetchTikWMViaProxy(tiktokUser);
-  if(proxyData?.data?.videos?.[0]) videoId = proxyData.data.videos[0].video_id;
-  else { const scrape = await scrapeTikTokDirect(tiktokUser); if(scrape.videoIds.length > 0) videoId = scrape.videoIds[0]; isLiveNow = scrape.isLive; }
-  
-  if (isLiveNow && !tiktokCache.isLiveNow) {
-    const canalLive = findChannel(guild, CONFIG.channels.live);
-    if (canalLive) await canalLive.send({ content: `🔴 **@everyone ELCRIS EN VIVO!**\nhttps://www.tiktok.com/@${tiktokUser}/live 🔥` }).catch(()=>{});
-    tiktokCache.isLiveNow = true; await saveTikTok();
-  } else if (!isLiveNow && tiktokCache.isLiveNow) {
-    tiktokCache.isLiveNow = false; await saveTikTok();
-  }
-  
-  if(videoId){
-    if(tiktokCache.lastVideoId === null){ tiktokCache.lastVideoId = videoId; await saveTikTok(); }
-    else if(videoId !== tiktokCache.lastVideoId){
-      tiktokCache.lastVideoId = videoId; await saveTikTok();
-      const details = await getVideoDetails(videoId, tiktokUser, `https://www.tiktok.com/@${tiktokUser}/video/${videoId}`);
-      await sendViralVideoAnnouncement(guild, details);
-    }
-  }
-}
-
+// --- TIKTOK AUTO-MONITOR DESHABILITADO - SOLO MANUAL /video y /live ---
+async function fetchTikWMViaProxy(){ return null; }
+async function scrapeTikTokDirect(){ return { videoIds: [], isLive: false }; }
+async function testTikTokAPIs(){ return 'Auto-monitor deshabilitado, usa /video y /live manual'; }
+async function checkTikTok(){ return; }
 function startTikTokMonitor(){
-  console.log(`🎬 Monitor V6 iniciado cada 90s | Mongo: ${useMongo ? 'SI' : 'NO (usa archivos)'}`);
-  setTimeout(checkTikTok, 15000);
-  setInterval(checkTikTok, 90000);
+  console.log('🎬 Monitor TikTok DESHABILITADO - modo manual /video y /live activo');
 }
 
 client.login(process.env.DISCORD_TOKEN);
