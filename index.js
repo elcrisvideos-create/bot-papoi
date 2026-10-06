@@ -134,7 +134,7 @@ async function logSancion(guild, { tipo, moderador, usuario, razon, duracion, ex
      .setTimestamp();
     if(duracion) embed.addFields({ name: '⏱️ Duración', value: duracion, inline: true });
     if(extra) embed.addFields({ name: 'ℹ️ Extra', value: extra.slice(0, 1024) });
-    await canal.send({ embeds: [embed] }).catch(()=>{});
+    await canal.send({ embeds: [embed] }).catch(e=>console.log(`logSancion fail: ${e.message}`));
   }catch(e){ console.log(`logSancion error: ${e.message}`); }
 }
 
@@ -189,9 +189,6 @@ let FusionActivaModel = null;
 
 const saveFusiones = async () => {
   safeSaveJSON(FUSIONES_PATH, fusionesQueue);
-  if (useMongo && FusionModel) {
-    try { await FusionModel.deleteMany({}); if(fusionesQueue.length) await FusionModel.insertMany(fusionesQueue); } catch(e){ console.log('Error fusiones Mongo', e.message); }
-  }
 };
 const saveFusionesActivas = async () => {
   const arr = [...fusionesActivas.values()];
@@ -205,12 +202,17 @@ const saveFusionesActivas = async () => {
 const CHAMBEADORES_PATH = path.join(DATA_DIR, 'chambeadores.json');
 let chambeadoresData = safeLoadJSON(CHAMBEADORES_PATH, {});
 let ChambeadorModel = null;
-const saveChambeadores = async () => {
+const saveChambeadores = async (soloUserId = null) => {
   safeSaveJSON(CHAMBEADORES_PATH, chambeadoresData);
   if (useMongo && ChambeadorModel) {
     try {
-      for(const [userId, data] of Object.entries(chambeadoresData)){
-        await ChambeadorModel.findOneAndUpdate({ userId }, {...data, userId }, { upsert: true });
+      if(soloUserId){
+        const data = chambeadoresData[soloUserId];
+        if(data) await ChambeadorModel.findOneAndUpdate({ userId: soloUserId }, {...data, userId: soloUserId }, { upsert: true });
+      } else {
+        for(const [userId, data] of Object.entries(chambeadoresData)){
+          await ChambeadorModel.findOneAndUpdate({ userId }, {...data, userId }, { upsert: true });
+        }
       }
     } catch(e){ console.log('Error chambeadores Mongo', e.message); }
   }
@@ -332,6 +334,13 @@ const saveTikTok = async () => {
 
 const lastXP = new Map();
 const commandCooldown = new Map();
+// FIX V6.7 MEMORY LEAK - limpia Maps cada 15m
+setInterval(()=>{
+  const now = Date.now();
+  for(const [k,v] of commandCooldown.entries()) if(now-v> 3600000) commandCooldown.delete(k);
+  for(const [k,v] of aiCooldown.entries()) if(now-v> 60000) aiCooldown.delete(k);
+  for(const [k,v] of lastXP.entries()) if(now-v> 3600000) lastXP.delete(k);
+}, 15*60*1000);
 
 const NIVELES = [
   { name: 'Papoi', xp: 0 },
@@ -745,12 +754,12 @@ function checkCompatibilidad(fusionId, haveA, haveB){
 }
 async function crearPanelFusiones(channel){
   try{
-    const msgs = await channel.messages.fetch({ limit: 25 }).catch(()=>null);
+    const msgs = await channel.messages.fetch({ limit: 100 }).catch(()=>null);
     if(msgs){
       const old = msgs.filter(m => m.author.id === client.user.id && m.embeds[0]?.title?.includes('Centro de Fusiones'));
-      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
+      for(const m of old.values()){ await m.delete().catch(e=>console.log(`del panel fail: ${e.message}`)); await new Promise(r=>setTimeout(r,250)); }
     }
-  }catch{}
+  }catch(e){ console.log(`crearPanelFusiones fetch fail: ${e.message}`); }
   const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle('🔀 Centro de Fusiones Papoi').setDescription(
     `**¿Qué fusión buscas hacer?**\n\n`+
     `😇 **Angeles y Demonios**\n`+
@@ -846,7 +855,12 @@ async function postBusquedaFusion(guild, req){
     new ButtonBuilder().setCustomId(`fusion_cancel_${req.userId}`).setLabel('❌ Cancelar').setStyle(ButtonStyle.Danger)
   );
   const msg = await canal.send({ embeds: [embed], components: [row] }).catch(()=>null);
-  if(msg){ req.messageId=msg.id; req.channelId=canal.id; await saveFusiones(); }
+  if(msg){
+    req.messageId=msg.id;
+    req.channelId=canal.id;
+    await saveFusiones();
+    if(useMongo && FusionModel) await FusionModel.create(req).catch(()=>{});
+  }
   return msg;
 }
 async function crearCanalFusionPrivado(guild, req1, req2){
@@ -866,6 +880,10 @@ async function crearCanalFusionPrivado(guild, req1, req2){
   await canal.send({ content: `<@${req1.userId}> <@${req2.userId}>`, embeds: [embed], components: [row, rowMod] }).catch(()=>{});
     fusionesActivas.set(canal.id, { channelId: canal.id, users: [req1.userId, req2.userId], fusionId: req1.fusionId, reqs: [req1, req2], createdAt: Date.now(), lastPing: Date.now(), confirms: [] });
       await saveFusionesActivas();
+  if(useMongo && FusionModel){
+    await FusionModel.deleteOne({ userId: req1.userId, fusionId: req1.fusionId }).catch(()=>{});
+    await FusionModel.deleteOne({ userId: req2.userId, fusionId: req2.fusionId }).catch(()=>{});
+  }
   fusionesQueue = fusionesQueue.filter(r=>r.userId!==req1.userId || getGrupoFusion(r.fusionId)!==getGrupoFusion(req1.fusionId));
   fusionesQueue = fusionesQueue.filter(r=>r.userId!==req2.userId || getGrupoFusion(r.fusionId)!==getGrupoFusion(req2.fusionId));
   const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
@@ -993,15 +1011,18 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
         if(!req){ fusionesQueue=fusionesQueue.filter(r=>r.userId!==ownerId); await saveFusiones(); return inter.reply({ content: '✅ Cancelada.', flags: MessageFlags.Ephemeral }); }
         const grupo = getGrupoFusion(req.fusionId);
         const borradas = fusionesQueue.filter(r=>r.userId===ownerId && getGrupoFusion(r.fusionId)===grupo);
-        for(const r of borradas){ if(r.messageId){ const ch=findChannel(guild, CONFIG.channels.fusiones); if(ch) ch.messages.delete(r.messageId).catch(()=>{}); } }
+        for(const r of borradas){ 
+          if(r.messageId){ const ch=findChannel(guild, CONFIG.channels.fusiones); if(ch) ch.messages.delete(r.messageId).catch(()=>{}); }
+          if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{});
+        }
         fusionesQueue=fusionesQueue.filter(r=>!(r.userId===ownerId && getGrupoFusion(r.fusionId)===grupo));
         await saveFusiones(); return inter.reply({ content: `✅ Cancelada ${getNombreGrupo(grupo)}.`, flags: MessageFlags.Ephemeral });
       }
       if(inter.customId.startsWith('fusion_confirm_yes_') || inter.customId.startsWith('fusion_confirm_no_') || inter.customId.startsWith('fusion_mod_success_') || inter.customId.startsWith('fusion_mod_fail_')){
         let data=fusionesActivas.get(inter.channelId);
         if(!data){
-          // FIX: si el bot se reinició, deja que un MOD fuerce el cierre
-          if(isMod(inter.member)){
+          // FIX V6.7.1: si el bot se reinició, permite cerrar si es MOD o el canal es de fusión
+          if(isMod(inter.member) || inter.channel.name.includes('fusion-')){
             await inter.reply({ content: '⚠ Datos perdidos por reinicio. Borrando canal como MOD...', flags: MessageFlags.Ephemeral }).catch(()=>{});
             setTimeout(async ()=>{
               await inter.channel.delete().catch(()=>{});
@@ -1108,7 +1129,7 @@ async function handleChambeadoresInteraction(inter){
         if(cd>0) return inter.reply({ content: `⏳ Espera ${cd}s.`, flags: MessageFlags.Ephemeral });
         await postReporteChambeador(guild, inter.user.id);
         chambeadoresData[inter.user.id].lastReport = Date.now();
-        await saveChambeadores();
+        await saveChambeadores(inter.user.id);
         return inter.reply({ content: `✅ Reporte enviado al dueño! Quédate en tu server. \`${data.robloxUser}\``, flags: MessageFlags.Ephemeral });
       }
       if(inter.customId === 'chambeador_renunciar'){
@@ -1145,7 +1166,7 @@ async function handleChambeadoresInteraction(inter){
         const data = chambeadoresData[userId];
         if(!data) return inter.reply({ content: '❌ No encontrado.', flags: MessageFlags.Ephemeral });
         data.puntos = (data.puntos||0)+1;
-        await saveChambeadores();
+        await saveChambeadores(userId);
         const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
         if(member) await actualizarRolChambeador(guild, member, data.puntos);
         const pago = tipo==='divino'? CHAMBEADORES_PAGO.divino : CHAMBEADORES_PAGO.eterno;
@@ -1157,7 +1178,7 @@ async function handleChambeadoresInteraction(inter){
         const userId = inter.customId.replace('chambeador_ban_','');
         const data = chambeadoresData[userId] || { robloxUser: 'desconocido', puntos: 0 };
         chambeadoresData[userId] = {...data, baneado: true, puntos: 0 };
-        await saveChambeadores();
+        await saveChambeadores(userId);
         const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
         if(member){
           for(const rn of Object.values(CHAMBEADORES_ROLES)){
@@ -1197,7 +1218,7 @@ async function handleChambeadoresInteraction(inter){
           lastReport: chambeadoresData[inter.user.id]?.lastReport||0,
           createdAt: chambeadoresData[inter.user.id]?.createdAt||Date.now()
         };
-        await saveChambeadores();
+        await saveChambeadores(inter.user.id);
         const member = guild.members.cache.get(inter.user.id) || await guild.members.fetch(inter.user.id).catch(()=>null);
         if(member){
           const banRole = findRole(guild, CHAMBEADORES_ROLES.baneado);
@@ -1568,7 +1589,10 @@ client.on(Events.MessageCreate, async msg => {
     const gana = Math.floor(Math.random()*11)+15;
     xpData[msg.author.id] = (xpData[msg.author.id]||0) + gana;
     lastXP.set(msg.author.id, ahora);
-    await saveXP();
+    safeSaveJSON(XP_PATH, xpData);
+    if (useMongo && XpModel) {
+      XpModel.findOneAndUpdate({ userId: msg.author.id }, { xp: xpData[msg.author.id] }, { upsert: true }).catch(e=>console.log(`Error XP Mongo: ${e.message}`));
+    }
     for(const nivel of NIVELES){
       if(xpData[msg.author.id] >= nivel.xp){
         const rol = findRole(msg.guild, nivel.name);
@@ -1995,12 +2019,14 @@ client.on(Events.InteractionCreate, async inter => {
     }
         if(inter.commandName === 'ban'){
       const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon')||'Sin razón';
+      const member = inter.guild.members.cache.get(user.id);
+      if(member &&!member.bannable) return inter.reply({ content: '❌ No puedo banearlo, rol más alto que yo.', flags: MessageFlags.Ephemeral });
       try { await inter.guild.members.ban(user.id, { reason: razon }); await logSancion(inter.guild, { tipo: 'BAN', moderador: inter.user, usuario: user, razon }); return inter.reply({ content: `🔨 ${user.tag} baneado - ${razon}` }); }
-      catch (e) { return inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }); }
+      catch (e) { return inter.reply({ content: `❌ Error ban: ${e.message}`, flags: MessageFlags.Ephemeral }); }
     }
-    if(inter.commandName === 'kick'){ const member = inter.options.getMember('usuario'); const razon = inter.options.getString('razon')||'Sin razón'; if(!member) return inter.reply({ content: '❌ No está en el server', flags: MessageFlags.Ephemeral }); await member.kick(razon).catch(()=>{}); await logSancion(inter.guild, { tipo: 'KICK', moderador: inter.user, usuario: member.user, razon }); return inter.reply({ content: `👢 ${member.user.tag} kickeado` }); }
-    if(inter.commandName === 'mute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); const mins = inter.options.getInteger('minutos'); const razon = inter.options.getString('razon')||'Sin razón'; await member.timeout(mins*60*1000, razon).catch(()=>{}); await logSancion(inter.guild, { tipo: 'MUTE', moderador: inter.user, usuario: member.user, razon, duracion: `${mins} minutos` }); return inter.reply({ content: `🔇 ${member.user.tag} ${mins}m` }); }
-    if(inter.commandName === 'unmute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); await member.timeout(null).catch(()=>{}); await logSancion(inter.guild, { tipo: 'UNMUTE', moderador: inter.user, usuario: member.user, razon: 'Desmuteado' }); return inter.reply({ content: `🔊 ${member.user.tag} desmuteado` }); }
+    if(inter.commandName === 'kick'){ const member = inter.options.getMember('usuario'); const razon = inter.options.getString('razon')||'Sin razón'; if(!member) return inter.reply({ content: '❌ No está en el server', flags: MessageFlags.Ephemeral }); if(!member.kickable) return inter.reply({ content: '❌ No puedo kickearlo, tiene rol más alto que yo o es owner.', flags: MessageFlags.Ephemeral }); try{ await member.kick(razon); await logSancion(inter.guild, { tipo: 'KICK', moderador: inter.user, usuario: member.user, razon }); return inter.reply({ content: `👢 ${member.user.tag} kickeado` }); }catch(e){ return inter.reply({ content: `❌ Error kick: ${e.message}`, flags: MessageFlags.Ephemeral }); } }
+    if(inter.commandName === 'mute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); if(!member.moderatable) return inter.reply({ content: '❌ No puedo mutearlo, rol más alto que yo.', flags: MessageFlags.Ephemeral }); const mins = inter.options.getInteger('minutos'); const razon = inter.options.getString('razon')||'Sin razón'; try{ await member.timeout(mins*60*1000, razon); await logSancion(inter.guild, { tipo: 'MUTE', moderador: inter.user, usuario: member.user, razon, duracion: `${mins} minutos` }); return inter.reply({ content: `🔇 ${member.user.tag} ${mins}m` }); }catch(e){ return inter.reply({ content: `❌ Error mute: ${e.message}`, flags: MessageFlags.Ephemeral }); } }
+    if(inter.commandName === 'unmute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); if(!member.moderatable) return inter.reply({ content: '❌ No puedo desmutearlo.', flags: MessageFlags.Ephemeral }); try{ await member.timeout(null); await logSancion(inter.guild, { tipo: 'UNMUTE', moderador: inter.user, usuario: member.user, razon: 'Desmuteado' }); return inter.reply({ content: `🔊 ${member.user.tag} desmuteado` }); }catch(e){ return inter.reply({ content: `❌ Error: ${e.message}`, flags: MessageFlags.Ephemeral }); } }
     if(inter.commandName === 'warn'){ const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon'); const canal = findChannel(inter.guild, CONFIG.channels.general); if(canal) canal.send({ content: `⚠ ${user} advertencia: ${razon}` }).catch(()=>{}); await logSancion(inter.guild, { tipo: 'WARN', moderador: inter.user, usuario: user, razon }); return inter.reply({ content: `⚠ Warn ${user.tag}`, flags: MessageFlags.Ephemeral }); }
     if(inter.commandName === 'clear'){ 
       const cant = inter.options.getInteger('cantidad'); 
