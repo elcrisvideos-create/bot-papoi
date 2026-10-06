@@ -1677,10 +1677,10 @@ async function crearPanelPingRoles(channel){
       ` ${BUTTERFLY_EMOJI} **Eventos** - Floración Mariposas (cada 30 min)\n\n`+
       `**4⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
       `**5⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
-      `**6⃣** ¿Quieres TODO de una categoría? Marca **⭐ TODOS**\n`+
-      ` → Si marcas ⭐ TODOS los Secreto, te damos ${secretoEmoji} **Huevo Secreto**\n`+
-      ` → Si marcas ⭐ TODOS los Eterno, te damos ${eternoEmoji} **Huevo Eterno**\n`+
-      ` → Si marcas ⭐ TODOS los Divino, te damos ${divinoEmoji} **Huevo Divino**\n`+
+      `**6⃣** ¿Quieres TODO de una categoría? Marca **TODOS**\n`+
+      ` → Si marcas TODOS los Secreto, te damos ${secretoEmoji} **Huevo Secreto**\n`+
+      ` → Si marcas TODOS los Eterno, te damos ${eternoEmoji} **Huevo Eterno**\n`+
+      ` → Si marcas TODOS los Divino, te damos ${divinoEmoji} **Huevo Divino**\n`+
       ` → Si marcas ${BUTTERFLY_EMOJI}, te avisamos **1 min antes** del evento de mariposas\n\n`+
       `> **${BUTTERFLY_EMOJI} Evento mariposas: cada 30 min global**\n`+
       `> **Te pingea 1 min antes con "${BUTTERFLY_EMOJI} ¡Empieza en 1 min!"**\n\n`+
