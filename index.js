@@ -180,13 +180,24 @@ function safeSaveJSON(filePath, data) {
 let xpData = safeLoadJSON(XP_PATH, {});
 let tiktokCache = safeLoadJSON(TIKTOK_PATH, { lastVideoId: null, isLiveNow: false });
 const FUSIONES_PATH = path.join(DATA_DIR, 'fusiones.json');
+const FUSIONES_ACTIVAS_PATH = path.join(DATA_DIR, 'fusiones_activas.json');
 let fusionesQueue = safeLoadJSON(FUSIONES_PATH, []);
-let fusionesActivas = new Map();
+let fusionesActivasRaw = safeLoadJSON(FUSIONES_ACTIVAS_PATH, []);
+let fusionesActivas = new Map(fusionesActivasRaw.map(o => [o.channelId, o]));
 let FusionModel = null;
+let FusionActivaModel = null;
+
 const saveFusiones = async () => {
   safeSaveJSON(FUSIONES_PATH, fusionesQueue);
   if (useMongo && FusionModel) {
     try { await FusionModel.deleteMany({}); if(fusionesQueue.length) await FusionModel.insertMany(fusionesQueue); } catch(e){ console.log('Error fusiones Mongo', e.message); }
+  }
+};
+const saveFusionesActivas = async () => {
+  const arr = [...fusionesActivas.values()];
+  safeSaveJSON(FUSIONES_ACTIVAS_PATH, arr);
+  if (useMongo && FusionActivaModel) {
+    try { await FusionActivaModel.deleteMany({}); if(arr.length) await FusionActivaModel.insertMany(arr); } catch(e){ console.log('Error fusiones activas Mongo', e.message); }
   }
 };
 
@@ -257,6 +268,18 @@ async function initMongo() {
       safeSaveJSON(FUSIONES_PATH, fusionesQueue);
     } else if(fusionesQueue.length > 0){
       await FusionModel.insertMany(fusionesQueue);
+    }
+
+    const fusionActivaSchema = new mongoose.Schema({ channelId: String, users: [String], fusionId: String, reqs: Array, createdAt: Number, confirms: [String] }, { strict: false });
+    FusionActivaModel = mongoose.model('FusionActiva', fusionActivaSchema);
+    const activasMongo = await FusionActivaModel.find({});
+    if(activasMongo.length > 0){
+      fusionesActivas = new Map(activasMongo.map(d=> [d.channelId, { channelId: d.channelId, users: d.users, fusionId: d.fusionId, reqs: d.reqs, createdAt: d.createdAt, confirms: d.confirms||[], lastPing: Date.now() }]));
+      console.log(`✅ ${activasMongo.length} fusiones ACTIVAS cargadas desde MongoDB`);
+      safeSaveJSON(FUSIONES_ACTIVAS_PATH, [...fusionesActivas.values()]);
+    } else if(fusionesActivasRaw.length > 0){
+      console.log(`📤 Migrando ${fusionesActivasRaw.length} fusiones activas a MongoDB...`);
+      await FusionActivaModel.insertMany(fusionesActivasRaw).catch(()=>{});
     }
 
     const chambeadorSchema = new mongoose.Schema({ userId: String, robloxUser: String, puntos: Number, baneado: Boolean, lastReport: Number, createdAt: Number }, { strict: false });
@@ -841,7 +864,8 @@ async function crearCanalFusionPrivado(guild, req1, req2){
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_confirm_yes_${canal.id}`).setLabel('✅ Ya fusionamos').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`fusion_confirm_no_${canal.id}`).setLabel('❌ Ya no quiero').setStyle(ButtonStyle.Danger));
   const rowMod = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_mod_success_${canal.id}`).setLabel('✅ Mod: Exitosa').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`fusion_mod_fail_${canal.id}`).setLabel('❌ Mod: Fallida').setStyle(ButtonStyle.Secondary));
   await canal.send({ content: `<@${req1.userId}> <@${req2.userId}>`, embeds: [embed], components: [row, rowMod] }).catch(()=>{});
-    fusionesActivas.set(canal.id, { users: [req1.userId, req2.userId], fusionId: req1.fusionId, reqs: [req1, req2], createdAt: Date.now(), lastPing: Date.now(), confirms: [] });
+    fusionesActivas.set(canal.id, { channelId: canal.id, users: [req1.userId, req2.userId], fusionId: req1.fusionId, reqs: [req1, req2], createdAt: Date.now(), lastPing: Date.now(), confirms: [] });
+      await saveFusionesActivas();
   fusionesQueue = fusionesQueue.filter(r=>r.userId!==req1.userId || getGrupoFusion(r.fusionId)!==getGrupoFusion(req1.fusionId));
   fusionesQueue = fusionesQueue.filter(r=>r.userId!==req2.userId || getGrupoFusion(r.fusionId)!==getGrupoFusion(req2.fusionId));
   const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
@@ -849,7 +873,7 @@ async function crearCanalFusionPrivado(guild, req1, req2){
   await saveFusiones(); return canal;
 }
 function startFusionesScheduler(){
-  console.log('🔀 Scheduler Fusiones V6.5 iniciado - caza fantasmas cada 30s');
+  console.log('🔀 Scheduler Fusiones V6.6 FIX DEFINITIVO iniciado - caza fantasmas cada 30s');
   setTimeout(async ()=>{
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
     if(guild){ const elim = limpiarDuplicadosFusiones(); if(elim>0) console.log(`🧹 ${elim} duplicados al iniciar`); }
@@ -875,24 +899,38 @@ function startFusionesScheduler(){
       }
       if(toDeleteUser.size>0) await saveFusiones();
       limpiarDuplicadosFusiones();
+
       for(const [chanId, data] of [...fusionesActivas.entries()]){
-        const canal = guild.channels.cache.get(chanId); if(!canal){ fusionesActivas.delete(chanId); continue; }
+        const canal = guild.channels.cache.get(chanId);
+        if(!canal){
+          console.log(`🧹 Activa huérfana ${chanId} sin canal -> borrando`);
+          fusionesActivas.delete(chanId);
+          await saveFusionesActivas();
+          continue;
+        }
         for(const uid of data.users){
           const mem = guild.members.cache.get(uid) || await guild.members.fetch(uid).catch(()=>null);
           if(!mem){
             const otherId = data.users.find(id=>id!==uid);
             const otherReq = data.reqs.find(r=>r.userId===otherId);
             if(otherReq){ fusionesQueue.push({...otherReq, createdAt: Date.now(), messageId: null }); await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]); }
-            setTimeout(()=>{ if(canal) canal.delete().catch(()=>{}); fusionesActivas.delete(chanId); }, 3000);
+            setTimeout(async ()=>{
+              await canal.delete().catch(()=>{});
+              fusionesActivas.delete(chanId);
+              await saveFusionesActivas();
+              await saveFusiones();
+            }, 3000);
+            console.log(`🧹 Usuario ${uid} se salió, borrando canal ${chanId}`);
             break;
           }
         }
       }
+
       const now=Date.now();
-      const toRemove=fusionesQueue.filter(r=>now-r.createdAt> 2*60*60*1000); // 2h en vez de 24h para limpiar raids
+      const toRemove=fusionesQueue.filter(r=>now-r.createdAt> 2*60*60*1000);
       for(const r of toRemove){ if(canalFusiones&&r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{}); if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{}); }
       if(toRemove.length){ fusionesQueue=fusionesQueue.filter(r=>now-r.createdAt<=2*60*60*1000); await saveFusiones(); console.log(`🧹 Limpieza 2h: ${toRemove.length} búsquedas viejas`); }
-    }catch(e){ console.log('Fusiones scheduler V6.5', e.message); }
+    }catch(e){ console.log('Fusiones scheduler V6.6', e.message); }
   }, 30*1000);
 }
 
@@ -960,19 +998,47 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
         await saveFusiones(); return inter.reply({ content: `✅ Cancelada ${getNombreGrupo(grupo)}.`, flags: MessageFlags.Ephemeral });
       }
       if(inter.customId.startsWith('fusion_confirm_yes_') || inter.customId.startsWith('fusion_confirm_no_') || inter.customId.startsWith('fusion_mod_success_') || inter.customId.startsWith('fusion_mod_fail_')){
-        const data=fusionesActivas.get(inter.channelId); if(!data) return inter.reply({ content: '❌ No data.', flags: MessageFlags.Ephemeral });
+        let data=fusionesActivas.get(inter.channelId);
+        if(!data){
+          // FIX: si el bot se reinició, deja que un MOD fuerce el cierre
+          if(isMod(inter.member)){
+            await inter.reply({ content: '⚠ Datos perdidos por reinicio. Borrando canal como MOD...', flags: MessageFlags.Ephemeral }).catch(()=>{});
+            setTimeout(async ()=>{
+              await inter.channel.delete().catch(()=>{});
+              fusionesActivas.delete(inter.channelId);
+              await saveFusionesActivas();
+            }, 2000);
+            return;
+          }
+          return inter.reply({ content: '❌ No data. Bot reiniciado, pide a un mod que use Mod: Exitosa.', flags: MessageFlags.Ephemeral });
+        }
         if(inter.customId.startsWith('fusion_confirm_yes_') || inter.customId.startsWith('fusion_mod_success_')){
           if(!data.confirms.includes(inter.user.id)) data.confirms.push(inter.user.id);
+          await saveFusionesActivas();
           const isModClose=inter.customId.startsWith('fusion_mod_success_');
           if(data.confirms.length>=2 || isModClose || isMod(inter.member)){
             const log=findChannel(guild, CONFIG.channels.fusionesLogs) || findChannel(guild, CONFIG.channels.staffSanciones); if(log) log.send({ content: `✅ Fusión EXITOSA ${FUSIONES[data.fusionId].label} - <@${data.users[0]}> + <@${data.users[1]}>` }).catch(()=>{});
-            await inter.reply({ content: '✅ Exitosa! Cerrando en 10s...' }); setTimeout(()=>{ inter.channel.delete().catch(()=>{}); fusionesActivas.delete(inter.channelId); }, 10000); return;
-          } else { return inter.reply({ content: `✅ Confirmaste, falta el otro.` }); }
+            await inter.reply({ content: '✅ Exitosa! Cerrando en 10s...' });
+            setTimeout(async ()=>{
+              await inter.channel.delete().catch(()=>{});
+              fusionesActivas.delete(inter.channelId);
+              await saveFusionesActivas();
+            }, 10000);
+            return;
+          } else { return inter.reply({ content: `✅ Confirmaste, falta el otro.`, flags: MessageFlags.Ephemeral }); }
         } else {
-          const otherId=data.users.find(id=>id!==inter.user.id); const otherReq=data.reqs.find(r=>r.userId===otherId);
+          const otherId=data.users.find(id=>id!==inter.user.id);
+          const otherReq=data.reqs.find(r=>r.userId===otherId);
           if(otherReq){ fusionesQueue.push({...otherReq, createdAt: Date.now(), messageId: null }); await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]); }
-          await inter.reply({ content: `❌ Cancelada, <@${otherId}> vuelve a búsqueda.` }); setTimeout(()=>{ inter.channel.delete().catch(()=>{}); fusionesActivas.delete(inter.channelId); }, 5000); await saveFusiones(); return;
-        }
+          await inter.reply({ content: `❌ Cancelada, <@${otherId}> vuelve a búsqueda.` });
+          setTimeout(async ()=>{
+            await inter.channel.delete().catch(()=>{});
+            fusionesActivas.delete(inter.channelId);
+            await saveFusionesActivas();
+            await saveFusiones();
+          }, 5000);
+          return;
+        
       }
     }
         if(inter.isModalSubmit() && inter.customId.startsWith('modal_fusion_')){
@@ -1245,8 +1311,12 @@ client.on(Events.GuildMemberRemove, async member => {
           await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]);
           if(canal) canal.send({ content: `👋 <@${userId}> se salió del server. <@${otherId}> regresó a #fusiones.` }).catch(()=>{});
         }
-        setTimeout(()=>{ if(canal) canal.delete().catch(()=>{}); fusionesActivas.delete(chanId); }, 3000);
-        await saveFusiones();
+        setTimeout(async ()=>{
+          await canal?.delete().catch(()=>{});
+          fusionesActivas.delete(chanId);
+          await saveFusionesActivas();
+          await saveFusiones();
+        }, 3000);
       }
     }
   }catch(e){ console.log('Leave cleanup error', e.message); }
