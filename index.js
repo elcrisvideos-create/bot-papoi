@@ -329,6 +329,25 @@ const CATEGORY_ROLES = {
   'Divino': 'Huevo Divino'
 };
 const CATEGORY_EMOJI = { Secreto: '🍀', Eterno: '🚀', Divino: '💎' };
+const PET_EMOJI_MAP = {
+  'Royal Skywhale': 'royal_skywhale',
+  'World Burner': 'World_burner',
+  'ArchAngel': 'arcangel',
+  'Nightflame': 'nightflame',
+  'Kitsune': 'kitsune',
+  'Unicorn': 'unicornio',
+  'Floración Mariposas': 'Mariposa'
+};
+function getPetEmoji(guild, petName){
+  if(!guild) return null;
+  const mapped = PET_EMOJI_MAP[petName];
+  if(mapped){
+    const exact = guild.emojis.cache.find(e => e.name.toLowerCase() === mapped.toLowerCase());
+    if(exact) return exact;
+  }
+  const clean = petName.toLowerCase().replace(/\s+/g,'_');
+  return guild.emojis.cache.find(e => e.name.toLowerCase() === clean || e.name.toLowerCase().includes(clean)) || null;
+}
 const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 
 // --- V8: EVENTO MARIPOSAS GLOBAL + AUTO-ROL ---
@@ -1542,6 +1561,7 @@ async function crearPanelPingRoles(channel){
 
 async function mostrarMenuConfiguracion(interaction){
   const member = await interaction.guild.members.fetch(interaction.user.id);
+  const guild = interaction.guild;
   const hasRole = (name) => member.roles.cache.some(r => r.name.toLowerCase() === name.toLowerCase());
   const buildSelect = (categoria) => {
     const catRoleName = CATEGORY_ROLES[categoria];
@@ -1550,13 +1570,17 @@ async function mostrarMenuConfiguracion(interaction){
     options.push({ label: `⭐ TODOS los ${categoria} (${catRoleName})`, value: `ALL_${categoria}`, description: `Avisa de cualquier huevo ${categoria}`, emoji: '⭐', default: hasCatRole });
     for(const pet of PETS[categoria]){
       const hasPet = hasRole(pet);
-      options.push({ label: pet, value: pet, emoji: CATEGORY_EMOJI[categoria], default: hasCatRole? false : hasPet });
+      const custom = getPetEmoji(guild, pet);
+      const emojiVal = custom? { id: custom.id, name: custom.name } : CATEGORY_EMOJI[categoria];
+      options.push({ label: pet, value: pet, emoji: emojiVal, default: hasCatRole? false : hasPet });
     }
     return new StringSelectMenuBuilder().setCustomId(`select_${categoria}`).setPlaceholder(hasCatRole? `✅ Ya tienes TODOS los ${categoria}` : `Elige ${categoria} - ya tienes ${options.filter(o=>o.default).length}`).setMinValues(0).setMaxValues(options.length).addOptions(options);
   };
   const buildEventosSelect = () => {
     const hasEvent = hasRole(BUTTERFLY_ROLE_NAME);
-        return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(hasEvent? `✅ Tienes ping de mariposas ${BUTTERFLY_EMOJI}` : `${BUTTERFLY_EMOJI} Elige eventos`).setMinValues(0).setMaxValues(1).addOptions([{ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes (global)', emoji: '🦋', default: hasEvent }]);
+    const mariposaEmoji = getPetEmoji(guild, 'Floración Mariposas');
+    const eventoEmoji = mariposaEmoji? { id: mariposaEmoji.id, name: mariposaEmoji.name } : '🦋';
+    return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(hasEvent? `✅ Tienes ping de mariposas` : `🦋 Elige eventos`).setMinValues(0).setMaxValues(1).addOptions([{ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes (global)', emoji: eventoEmoji, default: hasEvent }]);
   };
   const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca ${BUTTERFLY_EMOJI} para el evento de mariposas\n\n**${BUTTERFLY_EMOJI} Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
