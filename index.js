@@ -328,8 +328,12 @@ const CATEGORY_ROLES = {
   'Eterno': 'Huevo Eterno',
   'Divino': 'Huevo Divino'
 };
-const CATEGORY_EMOJI = { Secreto: '🍀', Eterno: '🚀', Divino: '💎' };
+const CATEGORY_EMOJI = { Secreto: '🍀', Eterno: '🚀', Divino: '💎' }; // fallback si no encuentra custom
+const CATEGORY_CUSTOM_NAME = { Secreto: 'huevo_secreto', Eterno: 'huevo_eterno', Divino: 'huevo_divino' };
 const PET_EMOJI_MAP = {
+  'Huevo Divino': 'huevo_divino',
+  'Huevo Eterno': 'huevo_eterno',
+  'Huevo Secreto': 'huevo_secreto',
   'Royal Skywhale': 'royal_skywhale',
   'World Burner': 'World_burner',
   'ArchAngel': 'arcangel',
@@ -338,6 +342,12 @@ const PET_EMOJI_MAP = {
   'Unicorn': 'unicornio',
   'Floración Mariposas': 'Mariposa'
 };
+function getCategoriaEmoji(guild, categoria){
+  if(!guild) return CATEGORY_EMOJI[categoria];
+  const name = CATEGORY_CUSTOM_NAME[categoria];
+  const e = guild.emojis.cache.find(x => x.name.toLowerCase() === name);
+  return e? `${e}` : CATEGORY_EMOJI[categoria];
+}
 function getPetEmoji(guild, petName){
   if(!guild) return null;
   const mapped = PET_EMOJI_MAP[petName];
@@ -1538,9 +1548,9 @@ async function crearPanelPingRoles(channel){
       `**1️⃣** Presiona el botón verde **⚙️ Configurar notificaciones** de abajo\n`+
       `**2️⃣** Se te abrirá un menú **solo para ti** (nadie más lo ve)\n`+
       `**3️⃣** Ahí verás 4 listas:\n`+
-      ` 🍀 **Secreto** - ${PETS.Secreto.length} huevos\n`+
-      ` 🚀 **Eterno** - ${PETS.Eterno.length} huevos\n`+
-      ` 💎 **Divino** - ${PETS.Divino.length} huevos\n`+
+      ` ${getCategoriaEmoji(guild,'Secreto')} **Secreto** - ${PETS.Secreto.length} huevos\n`+
+      ` ${getCategoriaEmoji(guild,'Eterno')} **Eterno** - ${PETS.Eterno.length} huevos\n`+
+      ` ${getCategoriaEmoji(guild,'Divino')} **Divino** - ${PETS.Divino.length} huevos\n`+
       ` ${BUTTERFLY_EMOJI} **Eventos** - Floración Mariposas (cada 30 min)\n\n`+
       `**4️⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
       `**5️⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
@@ -1577,7 +1587,9 @@ async function mostrarMenuConfiguracion(interaction){
     for(const pet of PETS[categoria]){
       const hasPet = hasRole(pet);
       const custom = getPetEmoji(guild, pet);
-      const emojiVal = custom? { id: custom.id, name: custom.name } : CATEGORY_EMOJI[categoria];
+      const customCat = guild.emojis.cache.find(x => x.name.toLowerCase() === CATEGORY_CUSTOM_NAME[categoria].toLowerCase());
+      const fallback = customCat? { id: customCat.id, name: customCat.name } : CATEGORY_EMOJI[categoria];
+      const emojiVal = custom? { id: custom.id, name: custom.name } : fallback;
       options.push({ label: pet, value: pet, emoji: emojiVal, default: hasCatRole? false : hasPet });
     }
     return new StringSelectMenuBuilder().setCustomId(`select_${categoria}`).setPlaceholder(hasCatRole? `✅ Ya tienes TODOS los ${categoria}` : `Elige ${categoria} - ya tienes ${options.filter(o=>o.default).length}`).setMinValues(0).setMaxValues(options.length).addOptions(options);
@@ -1615,7 +1627,8 @@ client.on(Events.InteractionCreate, async inter => {
     }
         if(inter.isButton() && inter.customId === 'btn_my_pings'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
-      const member = await inter.guild.members.fetch(inter.user.id);
+      const guild = inter.guild;
+      const member = await guild.members.fetch(inter.user.id);
       const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
       const buildCatText = (cat) => {
         const catRole = CATEGORY_ROLES[cat];
@@ -1626,7 +1639,7 @@ client.on(Events.InteractionCreate, async inter => {
       };
       const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
       const butterflyText = hasButterfly? `✅ **${BUTTERFLY_ROLE_NAME}**\n→ Te avisamos 1 min antes ${BUTTERFLY_EMOJI}` : `*Ninguno activado*\n→ Toca ⚙ Configurar y marca ${BUTTERFLY_EMOJI}`;
-      const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields({ name: `🍀 Secreto`, value: buildCatText('Secreto'), inline: false },{ name: `🚀 Eterno`, value: buildCatText('Eterno'), inline: false },{ name: `💎 Divino`, value: buildCatText('Divino'), inline: false },{ name: `${BUTTERFLY_EMOJI} Eventos`, value: butterflyText, inline: false },).setFooter({ text: 'Si tienes Huevo Secreto / Eterno / Divino ya recibes todo de esa categoría' }).setTimestamp();
+      const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields({ name: `${getCategoriaEmoji(guild,'Secreto')} Secreto`, value: buildCatText('Secreto'), inline: false },{ name: `${getCategoriaEmoji(guild,'Eterno')} Eterno`, value: buildCatText('Eterno'), inline: false },{ name: `${getCategoriaEmoji(guild,'Divino')} Divino`, value: buildCatText('Divino'), inline: false },{ name: `${BUTTERFLY_EMOJI} Eventos`, value: butterflyText, inline: false },).setFooter({ text: 'Si tienes Huevo Secreto / Eterno / Divino ya recibes todo de esa categoría' }).setTimestamp();
       return inter.editReply({ embeds: [embed] });
     }
         if(inter.isStringSelectMenu() && inter.customId.startsWith('select_')){
@@ -1673,7 +1686,7 @@ client.on(Events.InteractionCreate, async inter => {
         for(const pet of toAdd){ const r = findRole(guild, pet); if(r){ await member.roles.add(r).catch(()=>{}); agregados.push(pet); } }
         for(const pet of toRemove){ const r = findRole(guild, pet); if(r){ await member.roles.remove(r).catch(()=>{}); quitados.push(pet); } }
       }
-      let msg = `**${CATEGORY_EMOJI[categoria]} ${categoria} actualizado:**\n`;
+      let msg = `**${getCategoriaEmoji(guild,categoria)} ${categoria} actualizado:**\n`;
       if(agregados.length) msg += `✅ Ahora te avisamos de: **${agregados.join(', ')}**\n`;
       if(quitados.length) msg += `❌ Ya no te avisamos de: **${quitados.join(', ')}**\n`;
       if(agregados.length===0 && quitados.length===0) msg += `Sin cambios.`;
