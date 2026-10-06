@@ -1630,16 +1630,30 @@ client.on(Events.InteractionCreate, async inter => {
       const guild = inter.guild;
       const member = await guild.members.fetch(inter.user.id);
       const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
+
       const buildCatText = (cat) => {
         const catRole = CATEGORY_ROLES[cat];
         if(hasRole(catRole)) return `⭐ **${catRole}**\n→ Recibes **TODOS** los de ${cat}. No necesitas los individuales.`;
         const pets = PETS[cat].filter(p => hasRole(p));
         if(pets.length === 0) return `*Ninguno activado*\n→ Toca ⚙ Configurar para elegir`;
-        return pets.map(p => `• ${p}`).join('\n');
+        return pets.map(p => {
+          const custom = getPetEmoji(guild, p);
+          const emojiStr = custom? `${custom}` : getCategoriaEmoji(guild, cat);
+          return `${emojiStr} ${p}`;
+        }).join('\n');
       };
+
       const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
-      const butterflyText = hasButterfly? `✅ **${BUTTERFLY_ROLE_NAME}**\n→ Te avisamos 1 min antes ${BUTTERFLY_EMOJI}` : `*Ninguno activado*\n→ Toca ⚙ Configurar y marca ${BUTTERFLY_EMOJI}`;
-      const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields({ name: `${getCategoriaEmoji(guild,'Secreto')} Secreto`, value: buildCatText('Secreto'), inline: false },{ name: `${getCategoriaEmoji(guild,'Eterno')} Eterno`, value: buildCatText('Eterno'), inline: false },{ name: `${getCategoriaEmoji(guild,'Divino')} Divino`, value: buildCatText('Divino'), inline: false },{ name: `${BUTTERFLY_EMOJI} Eventos`, value: butterflyText, inline: false },).setFooter({ text: 'Si tienes Huevo Secreto / Eterno / Divino ya recibes todo de esa categoría' }).setTimestamp();
+      const mariposaObj = getPetEmoji(guild, 'Floración Mariposas');
+      const mariposaStr = mariposaObj? `${mariposaObj}` : BUTTERFLY_EMOJI;
+      const butterflyText = hasButterfly? `✅ ${mariposaStr} **${BUTTERFLY_ROLE_NAME}**\n→ Te avisamos 1 min antes ${mariposaStr}` : `*Ninguno activado*\n→ Toca ⚙ Configurar y marca ${mariposaStr}`;
+
+      const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields(
+        { name: `${getCategoriaEmoji(guild,'Secreto')} Secreto`, value: buildCatText('Secreto'), inline: false },
+        { name: `${getCategoriaEmoji(guild,'Eterno')} Eterno`, value: buildCatText('Eterno'), inline: false },
+        { name: `${getCategoriaEmoji(guild,'Divino')} Divino`, value: buildCatText('Divino'), inline: false },
+        { name: `${mariposaStr} Eventos`, value: butterflyText, inline: false },
+      ).setFooter({ text: 'Si tienes Huevo Secreto / Eterno / Divino ya recibes todo de esa categoría' }).setTimestamp();
       return inter.editReply({ embeds: [embed] });
     }
         if(inter.isStringSelectMenu() && inter.customId.startsWith('select_')){
