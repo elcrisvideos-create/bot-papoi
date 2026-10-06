@@ -71,7 +71,8 @@ const CONFIG = {
     fusionesLogs: ['fusiones-logs', 'logs-fusiones', '📋│fusiones-logs', 'fusiones-log'],
     chambeadoresRecluta: ['reclutamiento-chambeadores', '💼│reclutamiento-chambeadores', 'reclutamiento'],
     chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos'],
-    chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores']
+    chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores'],
+    guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo']
   },
   categories: {
     robaHuevo: ['roba un huevo', 'roba'],
@@ -81,7 +82,7 @@ const CONFIG = {
 };
 
 function findChannel(guild, nameList) {
-  const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
+  const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText || c.type === ChannelType.GuildForum);
   const lowerNames = nameList.map(n => n.toLowerCase());
   for (const name of lowerNames) {
     const exact = channels.find(c => c.name.toLowerCase() === name);
@@ -423,6 +424,17 @@ const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
 const BUTTERFLY_EMOJI = '<:Mariposa:1556413173500739656>';
 const BUTTERFLY_CHANNEL_NAME = '🦋 | floracion-mariposas';
 
+// --- GUIAS FORO ---
+const GUIAS_TAGS = [
+  { name: '🟢 Principiantes', emoji: '🟢' },
+  { name: '🥚 Huevos', emoji: '🥚' },
+  { name: '🔔 Notificaciones', emoji: '🔔' },
+  { name: '🔀 Fusiones', emoji: '🔀' },
+  { name: '🦋 Mariposas', emoji: '🦋' },
+  { name: '💼 Chambeadores', emoji: '💼' },
+  { name: '💡 Trucos', emoji: '💡' },
+];
+
 // --- V9: FUSIONES - CONFIG FINAL ---
 const FUSIONES = {
   angeles_eterna: { id: 'angeles_eterna', bioma: 'Angeles y Demonios', label: 'Eterna', emoji: '💀', pets: ['Skeleton Horse','Pegasus'], requiresBoth: false },
@@ -624,6 +636,57 @@ async function ensureChambeadoresChannels(guild){
     }catch{}
   }
   return { recluta, activos, logs };
+}
+
+async function ensureGuiasChannel(guild){
+  let canal = findChannel(guild, CONFIG.channels.guias);
+  if(canal && canal.type === ChannelType.GuildForum) return canal;
+  let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+  const modRole = findRole(guild, 'moderador');
+  const mayorRole = findRole(guild, 'papoi mayor');
+  const availableTags = GUIAS_TAGS.map(t => ({ name: t.name, moderated: false, emoji: { name: t.emoji } }));
+  const overwrites = [
+    { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessagesInThreads], deny: [PermissionFlagsBits.SendMessages] },
+    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.SendMessagesInThreads] },
+  ];
+  if(modRole) overwrites.push({ id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessagesInThreads, PermissionFlagsBits.ManageMessages] });
+  if(mayorRole) overwrites.push({ id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessagesInThreads, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] });
+  try{
+    canal = await guild.channels.create({
+      name: '📚│guías-roba-un-huevo',
+      type: ChannelType.GuildForum,
+      parent: categoria?.id || null,
+      topic: '📚 Guías oficiales de Roba un Huevo - Solo el bot publica guías, tú preguntas en comentarios',
+      availableTags: availableTags,
+      defaultReactionEmoji: { name: '💡' },
+      permissionOverwrites: overwrites
+    });
+    console.log(`✅ Foro guías creado: ${canal.name}`);
+  }catch(e){ console.log('Error creando foro guias', e.message); return null; }
+  return canal;
+}
+
+async function crearPostGuia(guild, { titulo, categoriaTag, descripcion, files }){
+  const canal = await ensureGuiasChannel(guild);
+  if(!canal) return null;
+  const tagObj = canal.availableTags.find(t => t.name.toLowerCase().includes(categoriaTag.toLowerCase())) || canal.availableTags.find(t => categoriaTag.toLowerCase().includes(t.name.toLowerCase().split(' ')[1]));
+  const finalTagId = tagObj? tagObj.id : (canal.availableTags[0]?.id || null);
+  const embed = new EmbedBuilder()
+   .setColor(0xFFD700)
+   .setTitle(`📚 ${titulo}`)
+   .setDescription(descripcion.slice(0, 4000))
+   .setThumbnail(guild.iconURL())
+   .setFooter({ text: `Guía Papoi • ${categoriaTag} • ${new Date().toLocaleDateString('es-MX')}` })
+   .setTimestamp();
+  const filePayload = (files||[]).map(f => ({ attachment: f.url, name: f.name }));
+  try{
+    const thread = await canal.threads.create({
+      name: `${GUIAS_TAGS.find(t=>t.name.includes(categoriaTag))?.emoji || '📚'} ${titulo}`.slice(0, 95),
+      appliedTags: finalTagId? [finalTagId] : [],
+      message: { embeds: [embed], files: filePayload }
+    });
+    return thread;
+  }catch(e){ console.log('crearPostGuia error', e.message); return null; }
 }
 
 function isMensajeFusionesEnGeneral(msg){
@@ -1308,6 +1371,8 @@ client.on(Events.ClientReady, async () => {
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-guias', description: 'Crea el foro 📚│guías-roba-un-huevo con tags', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'publicar-guia', description: 'Publica una guía con imagen en el foro', options: [{ name: 'titulo', description: 'Título de la guía', type: 3, required: true }, { name: 'categoria', description: 'Categoría', type: 3, required: true, choices: [{ name: '🟢 Principiantes', value: 'Principiantes' }, { name: '🥚 Huevos', value: 'Huevos' }, { name: '🔔 Notificaciones', value: 'Notificaciones' }, { name: '🔀 Fusiones', value: 'Fusiones' }, { name: '🦋 Mariposas', value: 'Mariposas' }, { name: '💼 Chambeadores', value: 'Chambeadores' }, { name: '💡 Trucos', value: 'Trucos' }] }, { name: 'descripcion', description: 'Texto paso a paso', type: 3, required: true }, { name: 'imagen', description: 'Imagen principal', type: 11, required: true }, { name: 'imagen2', description: 'Imagen extra opcional', type: 11, required: false }, { name: 'imagen3', description: 'Imagen extra opcional', type: 11, required: false }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     ]});
     console.log('✅ Comandos V6 registrados');
   } catch (e) {
@@ -1865,7 +1930,31 @@ client.on(Events.InteractionCreate, async inter => {
       }
     }
 
-                if(inter.commandName === 'setup-fusiones'){
+                if(inter.commandName === 'setup-guias'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if (!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) {
+            return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales' });
+          }
+          const canal = await ensureGuiasChannel(inter.guild);
+          if(!canal) return inter.editReply({ content: '❌ No pude crear foro guías' });
+          const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('📚 Foro de Guías Creado').setDescription(`Canal: ${canal}\n\n**Tags:**\n${GUIAS_TAGS.map(t=>`• ${t.name}`).join('\n')}\n\nAhora usa \`/publicar-guia\` para subir tus tutoriales.\nCada guía es un post con imagen grande y comentarios para dudas.`).setTimestamp();
+          return inter.editReply({ embeds: [embed] });
+        }
+        if(inter.commandName === 'publicar-guia'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const titulo = inter.options.getString('titulo');
+          const categoria = inter.options.getString('categoria');
+          const descripcion = inter.options.getString('descripcion');
+          const img1 = inter.options.getAttachment('imagen');
+          const img2 = inter.options.getAttachment('imagen2');
+          const img3 = inter.options.getAttachment('imagen3');
+          if(!img1?.contentType?.startsWith('image/')) return inter.editReply({ content: '❌ Imagen principal debe ser imagen' });
+          const files = [img1, img2, img3].filter(Boolean).filter(f=>f.contentType?.startsWith('image/'));
+          const thread = await crearPostGuia(inter.guild, { titulo, categoriaTag: categoria, descripcion, files });
+          if(!thread) return inter.editReply({ content: '❌ Error creando guía' });
+          return inter.editReply({ content: `✅ Guía publicada: ${thread} | ${categoria} | ${titulo} (${files.length} imgs)` });
+        }
+        if(inter.commandName === 'setup-fusiones'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           if (!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) {
             return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
