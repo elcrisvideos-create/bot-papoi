@@ -1660,26 +1660,29 @@ async function crearPanelPingRoles(channel){
       `Después de hacer paso 1 y 2, dale a **⚙ Configurar notificaciones** y elige Secreto/Eterno/Divino/Eventos\n\n`+
       `> 💡 **Tip:** Si ya hiciste esto y aún no suena, salte de Discord y vuelve a entrar.`
   );
+    const secretoEmoji = getCategoriaEmoji(guild,'Secreto');
+  const eternoEmoji = getCategoriaEmoji(guild,'Eterno');
+  const divinoEmoji = getCategoriaEmoji(guild,'Divino');
   const embed = new EmbedBuilder()
  .setColor(0xFFD700)
  .setTitle('🔔 NOTIFICACIONES DE HUEVOS Y EVENTOS - SUPER FÁCIL')
   .setDescription(
       `**¿Quieres que te avisemos cuando salga un huevo bueno o evento? Haz esto:**\n\n`+
-      `**1️⃣** Presiona el botón verde **⚙️ Configurar notificaciones** de abajo\n`+
-      `**2️⃣** Se te abrirá un menú **solo para ti** (nadie más lo ve)\n`+
-      `**3️⃣** Ahí verás 4 listas:\n`+
-      ` ${getCategoriaEmoji(guild,'Secreto')} **Secreto** - ${PETS.Secreto.length} huevos\n`+
-      ` ${getCategoriaEmoji(guild,'Eterno')} **Eterno** - ${PETS.Eterno.length} huevos\n`+
-      ` ${getCategoriaEmoji(guild,'Divino')} **Divino** - ${PETS.Divino.length} huevos\n`+
+      `**1⃣** Presiona el botón verde **⚙ Configurar notificaciones** de abajo\n`+
+      `**2⃣** Se te abrirá un menú **solo para ti** (nadie más lo ve)\n`+
+      `**3⃣** Ahí verás 4 listas:\n`+
+      ` ${secretoEmoji} **Secreto** - ${PETS.Secreto.length} huevos\n`+
+      ` ${eternoEmoji} **Eterno** - ${PETS.Eterno.length} huevos\n`+
+      ` ${divinoEmoji} **Divino** - ${PETS.Divino.length} huevos\n`+
       ` ${BUTTERFLY_EMOJI} **Eventos** - Floración Mariposas (cada 30 min)\n\n`+
-      `**4️⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
-      `**5️⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
-      `**6️⃣** ¿Quieres TODO de una categoría? Marca **⭐ TODOS**\n`+
-      ` → Si marcas ⭐ TODOS los Secreto, te damos **Huevo Secreto**\n`+
-      ` → Si marcas ⭐ TODOS los Eterno, te damos **Huevo Eterno**\n`+
-      ` → Si marcas ⭐ TODOS los Divino, te damos **Huevo Divino**\n`+
+      `**4⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
+      `**5⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
+      `**6⃣** ¿Quieres TODO de una categoría? Marca **⭐ TODOS**\n`+
+      ` → Si marcas ⭐ TODOS los Secreto, te damos ${secretoEmoji} **Huevo Secreto**\n`+
+      ` → Si marcas ⭐ TODOS los Eterno, te damos ${eternoEmoji} **Huevo Eterno**\n`+
+      ` → Si marcas ⭐ TODOS los Divino, te damos ${divinoEmoji} **Huevo Divino**\n`+
       ` → Si marcas ${BUTTERFLY_EMOJI}, te avisamos **1 min antes** del evento de mariposas\n\n`+
-            `> **${BUTTERFLY_EMOJI} Evento mariposas: cada 30 min global**\n`+
+      `> **${BUTTERFLY_EMOJI} Evento mariposas: cada 30 min global**\n`+
       `> **Te pingea 1 min antes con "${BUTTERFLY_EMOJI} ¡Empieza en 1 min!"**\n\n`+
       `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 4 categorías.`
     )
