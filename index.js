@@ -1059,7 +1059,8 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
             await saveFusiones();
           }, 5000);
           return;
-        
+          }
+        }
       }
     }
         if(inter.isModalSubmit() && inter.customId.startsWith('modal_fusion_')){
