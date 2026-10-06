@@ -366,13 +366,43 @@ const PET_EMOJI_MAP = {
   'Huevo Divino': 'huevo_divino',
   'Huevo Eterno': 'huevo_eterno',
   'Huevo Secreto': 'huevo_secreto',
+  // Divinos
   'Royal Skywhale': 'royal_skywhale',
-  'World Burner': 'World_burner',
-  'ArchAngel': 'arcangel',
+  'World Burner': 'world_burner',
+  'ArchAngel': 'archangel',
   'Nightflame': 'nightflame',
   'Kitsune': 'kitsune',
-  'Unicorn': 'unicornio',
-  'Floración Mariposas': 'Mariposa'
+  'Unicorn': 'unicorn',
+  // Eternos
+  'Celestial Sunlion': 'celestial_sunlion',
+  'Skeleton Horse': 'skeleton_horse',
+  'Pegasus': 'pegasus',
+  'Gorilla King': 'gorilla_king',
+  'Oni Tiger': 'oni_tiger',
+  'Eternal Lunar Dragon': 'dragon_lunar',
+  'Mosasaurus': 'mosasaurus',
+  'El Maja': 'el_maja',
+  'Lava Dragon': 'lava_dragon',
+  'Phoenix': 'fenix',
+  'Ice Dragon': 'ice_dragon',
+  // Secretos
+  'Starry Fox': 'starry_fox',
+  'RazorFang': 'razorfang',
+  'Centaur': 'centaur',
+  'Gargoyle': 'gargoyle',
+  'Pure Jellyfish': 'pure_jellyfish',
+  'Mutant Shark': 'mutant_shark',
+  'Stag': 'stag',
+  'Cosmic Dragon': 'cosmic_dragon',
+  'Cosmic Skeleton Boss': 'skeleton',
+  'Tralaledon': 'tralaledon',
+  'TRex': 't_rex',
+  'Kraken': 'kraken',
+  'Cerberus': 'cerberus',
+  'Yeti': 'yeti',
+  'King Snake': 'king_snake',
+  // Eventos
+  'Floración Mariposas': 'mariposa'
 };
 function getCategoriaEmoji(guild, categoria){
   if(!guild) return CATEGORY_EMOJI[categoria];
@@ -1677,7 +1707,9 @@ async function mostrarMenuConfiguracion(interaction){
     const catRoleName = CATEGORY_ROLES[categoria];
     const hasCatRole = hasRole(catRoleName);
     const options = [];
-    options.push({ label: `⭐ TODOS los ${categoria} (${catRoleName})`, value: `ALL_${categoria}`, description: `Avisa de cualquier huevo ${categoria}`, emoji: '⭐', default: hasCatRole });
+    const catEmojiObj = getPetEmoji(guild, catRoleName) || guild.emojis.cache.find(x => x.name.toLowerCase() === CATEGORY_CUSTOM_NAME[categoria].toLowerCase());
+    const catEmoji = catEmojiObj? { id: catEmojiObj.id, name: catEmojiObj.name } : CATEGORY_EMOJI[categoria];
+    options.push({ label: `TODOS los ${categoria} (${catRoleName})`, value: `ALL_${categoria}`, description: `Avisa de cualquier huevo ${categoria}`, emoji: catEmoji, default: hasCatRole });
     for(const pet of PETS[categoria]){
       const hasPet = hasRole(pet);
       const custom = getPetEmoji(guild, pet);
