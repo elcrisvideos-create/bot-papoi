@@ -486,6 +486,23 @@ async function ensureButterflyRole(guild){
   return role;
 }
 
+async function fixPapoisAlIniciar(guild){
+  const rolPapoi = findRole(guild, 'papoi');
+  if(!rolPapoi){ console.log('❌ No encontré rol papoi para fix'); return 0; }
+  await guild.members.fetch().catch(()=>{});
+  let fixed = 0;
+  for(const [, m] of guild.members.cache){
+    if(m.user.bot) continue;
+    if(!m.roles.cache.has(rolPapoi.id)){
+      await m.roles.add(rolPapoi.id).catch(()=>{});
+      fixed++;
+      await new Promise(r=>setTimeout(r, 350));
+    }
+  }
+  if(fixed>0) console.log(`✅ FIX PAPOI: ${fixed} usuarios sin rol arreglados`);
+  return fixed;
+}
+
 async function ensureFusionesChannel(guild){
   let canal = findChannel(guild, CONFIG.channels.fusiones);
   const modRole = findRole(guild, 'moderador');
@@ -1296,10 +1313,9 @@ client.on(Events.ClientReady, async () => {
     console.error('❌ Error registrando comandos:', e.message);
   }
 
-   const guild = client.guilds.cache.get(process.env.GUILD_ID);
-  if(guild){
-    await ensureButterflyRole(guild);
-    const general = findChannel(guild, CONFIG.channels.general);
+    await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: [
+      { name: 'fix-papois', description: 'Fix: pone rol Papoi a todos los que entraron con bot offline', default_member_permissions: PermissionFlagsBits.ManageRoles.toString() },
+      { name: 'separar-papois-exacto', description: 'Separa solo los 8 roles de Papois' },
     if(general) {
       await general.setRateLimitPerUser(10).catch(()=>{});
       console.log(`✅ Slowmode 10s en #${general.name}`);
@@ -1314,7 +1330,12 @@ client.on(Events.GuildMemberAdd, async member => {
   try {
     const guild = member.guild;
     const rolPapoi = findRole(guild, 'papoi');
-    if(rolPapoi) await member.roles.add(rolPapoi).catch(()=>{});
+    if(rolPapoi){
+      // retry 3 veces por si Discord falla
+      for(let i=0;i<3;i++){
+        try{ await member.roles.add(rolPapoi); break; }catch{ await new Promise(r=>setTimeout(r,1000)); }
+      }
+    }
     const bienvenida = findChannel(guild, CONFIG.channels.bienvenida);
     const pingCanal = findChannel(guild, CONFIG.channels.pingRoles);
     if(bienvenida){
@@ -1998,6 +2019,11 @@ client.on(Events.InteractionCreate, async inter => {
       if(!inter.memberPermissions.has(PermissionFlagsBits.Administrator) && !isMod(inter.member)){ 
         return inter.reply({ content: '❌ Solo Moderador / Papoi Mayor', flags: MessageFlags.Ephemeral }); 
       }
+    }
+    if(inter.commandName === 'fix-papois'){
+      await inter.deferReply({ flags: MessageFlags.Ephemeral });
+      const fixed = await fixPapoisAlIniciar(inter.guild);
+      return inter.editReply({ content: `✅ Fix terminado: ${fixed} usuarios arreglados con rol Papoi.` });
     }
     if(inter.commandName === 'setup-pets'){ await inter.deferReply({ flags: MessageFlags.Ephemeral }); await crearPanelPingRoles(inter.channel); return inter.editReply({ content: '✅ Panel creado.' }); }
     if(inter.commandName === 'separar-papois-exacto'){
