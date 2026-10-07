@@ -55,6 +55,7 @@ try {
 
 const CONFIG = {
   channels: {
+    nivelesPapoi: ['niveles-papoi', '⭐ | niveles-papoi', 'niveles'],
     general: ['general'],
     bienvenida: ['bienvenida', 'welcome'],
     multimedia: ['multimedia'],
@@ -78,6 +79,8 @@ const CONFIG = {
     apoyoLogs: ['apoyo-logs', '📋│apoyo-logs', 'donaciones-logs'],
     loungeVip: ['lounge-vip', '💬│lounge-vip'],
     chatLeyendas: ['chat-leyendas', '👑│chat-leyendas'],
+    chatLeyendasDonador: ['chat-leyendas', '👑│chat-leyendas', 'chat-leyendas-donador'],
+    chatLeyendasXp: ['chat-leyendas-xp', '👑│chat-papoi-leyenda', 'chat-papoi-leyenda', 'leyendas-xp'],
     boostersBeneficios: ['boosters-beneficios', '💎│boosters-beneficios', 'boosters-be'],
     boostersChat: ['chat-boosters', '💬│chat-boosters', 'boosters-chat'],
     guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo']
@@ -884,14 +887,16 @@ async function ensureVipDonadoresCategory(guild){
     if(baneadoRole) overwrites.push({ id: baneadoRole.id, deny: [PermissionFlagsBits.ViewChannel] });
     lounge = await guild.channels.create({ name: '💬│lounge-vip', type: ChannelType.GuildText, parent: categoria?.id || null, topic: '💬 Lounge VIP - Sin cooldown - Solo donadores', rateLimitPerUser: 0, permissionOverwrites: overwrites }).catch(()=>null);
   }
-  let leyendas = findChannel(guild, CONFIG.channels.chatLeyendas);
+  let leyendas = findChannel(guild, CONFIG.channels.chatLeyendasDonador);
   if(!leyendas){
     const overwrites = [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
       { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
     ];
+    const rolPapoiLeyendaVip = findRole(guild, 'papoi leyenda');
     if(leyendaRole) overwrites.push({ id: leyendaRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] });
+    if(rolPapoiLeyendaVip) overwrites.push({ id: rolPapoiLeyendaVip.id, deny: [PermissionFlagsBits.ViewChannel] });
     leyendas = await guild.channels.create({ name: '👑│chat-leyendas', type: ChannelType.GuildText, parent: categoria?.id || null, topic: '👑 Solo Leyenda Papoi - Sin restricciones', rateLimitPerUser: 0, permissionOverwrites: overwrites }).catch(()=>null);
   }
   return { categoria, lounge, leyendas };
@@ -904,7 +909,7 @@ async function ensureLeyendaAndBoosters(guild){
   const rolDonadorLeyenda = findRole(guild, DONADOR_ROLES.leyenda);
   const rolMayor = findRole(guild, 'papoi mayor');
   const rolMod = findRole(guild, 'moderador');
-  let chatLeyendasXp = findChannel(guild, CONFIG.channels.chatLeyendas);
+  let chatLeyendasXp = findChannel(guild, CONFIG.channels.chatLeyendasXp);
   if(!chatLeyendasXp){
     const overwrites = [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -912,14 +917,14 @@ async function ensureLeyendaAndBoosters(guild){
       { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
     ];
     if(rolPapoiLeyenda) overwrites.push({ id: rolPapoiLeyenda.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages], deny: [PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] });
-    if(rolDonadorLeyenda) overwrites.push({ id: rolDonadorLeyenda.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] });
     if(rolMayor) overwrites.push({ id: rolMayor.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
     if(rolMod) overwrites.push({ id: rolMod.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+    if(rolDonadorLeyenda) overwrites.push({ id: rolDonadorLeyenda.id, deny: [PermissionFlagsBits.ViewChannel] });
     chatLeyendasXp = await guild.channels.create({
-      name: '👑│chat-leyendas',
+      name: '👑│chat-papoi-leyenda',
       type: ChannelType.GuildText,
       parent: catVip?.id || null,
-      topic: '👑 Solo Papoi Leyenda 15000 XP - Sin cooldown, solo texto - Fusiones ⭐',
+      topic: '👑 Solo Papoi Leyenda 25000 XP - Chat exclusivo max nivel - Sin cooldown solo texto',
       rateLimitPerUser: 0,
       permissionOverwrites: overwrites
     }).catch(()=>null);
@@ -927,6 +932,7 @@ async function ensureLeyendaAndBoosters(guild){
     try{
       await chatLeyendasXp.setRateLimitPerUser(0).catch(()=>{});
       if(rolPapoiLeyenda) await chatLeyendasXp.permissionOverwrites.edit(rolPapoiLeyenda.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: false, EmbedLinks: false }).catch(()=>{});
+      if(rolDonadorLeyenda) await chatLeyendasXp.permissionOverwrites.edit(rolDonadorLeyenda.id, { ViewChannel: false }).catch(()=>{});
     }catch{}
   }
   let catBoost = findCategory(guild, CONFIG.categories.boostersPapoi);
@@ -947,8 +953,9 @@ async function ensureLeyendaAndBoosters(guild){
       ]
     }).catch(()=>null);
   }
-  let boostChat = findChannel(guild, CONFIG.channels.boostersChat);
+  let boostChat = guild.channels.cache.find(c => c.type === ChannelType.GuildText && (c.name.toLowerCase().includes('chat-boosters') || c.name.toLowerCase() === '💬│chat-boosters'));
   const boosterRole = findRole(guild, 'booster papoi') || guild.roles.cache.find(r=> r.name.toLowerCase().includes('booster')) || null;
+  console.log(`[BOOSTER] buscando chat-boosters: ${boostChat ? 'EXISTE' : 'NO EXISTE, lo creo'}`);
   if(!boostChat){
     const overwrites = [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -1863,7 +1870,7 @@ async function handleChambeadoresInteraction(inter){
 }
 
 async function actualizarPanelNiveles(guild){
-  const canal = findChannel(guild, CONFIG.channels.general) || findChannel(guild, CONFIG.channels.bienvenida);
+  const canal = findChannel(guild, CONFIG.channels.nivelesPapoi);
   if(!canal) return;
   try{
     const msgs = await canal.messages.fetch({ limit: 50 }).catch(()=>null);
