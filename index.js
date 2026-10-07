@@ -73,12 +73,20 @@ const CONFIG = {
     chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos'],
     chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores'],
     chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
+    apoyoInfo: ['como-apoyar', '📢│como-apoyar'],
+    apoyoTienda: ['tienda-roblox', '🥚│tienda-roblox'],
+    apoyoDonaciones: ['donaciones', '💸│donaciones'],
+    apoyoLogs: ['apoyo-logs', '📋│apoyo-logs', 'donaciones-logs'],
+    loungeVip: ['lounge-vip', '💬│lounge-vip'],
+    chatLeyendas: ['chat-leyendas', '👑│chat-leyendas'],
     guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo']
   },
   categories: {
     robaHuevo: ['roba un huevo', 'roba'],
     staff: ['staff', '🔒 staff'],
-    fusionesActivas: ['fusiones activas', '🔀 fusiones activas', 'fusiones']
+    fusionesActivas: ['fusiones activas', '🔀 fusiones activas', 'fusiones'],
+    apoyar: ['apoyar a esta comunidad', '💖 apoyar', 'apoyar'],
+    vipDonadores: ['vip donadores', '💖 vip donadores', 'vip']
   }
 };
 
@@ -204,6 +212,10 @@ const saveFusionesActivas = async () => {
 const CHAMBEADORES_PATH = path.join(DATA_DIR, 'chambeadores.json');
 let chambeadoresData = safeLoadJSON(CHAMBEADORES_PATH, {});
 let ChambeadorModel = null;
+
+const DONADORES_PATH = path.join(DATA_DIR, 'donadores.json');
+let donadoresData = safeLoadJSON(DONADORES_PATH, { users: {} });
+let DonadorModel = null;
 const saveChambeadores = async (soloUserId = null) => {
   safeSaveJSON(CHAMBEADORES_PATH, chambeadoresData);
   if (useMongo && ChambeadorModel) {
@@ -217,6 +229,22 @@ const saveChambeadores = async (soloUserId = null) => {
         }
       }
     } catch(e){ console.log('Error chambeadores Mongo', e.message); }
+  }
+};
+
+const saveDonadores = async (soloUserId = null) => {
+  safeSaveJSON(DONADORES_PATH, donadoresData);
+  if (useMongo && DonadorModel) {
+    try {
+      if(soloUserId){
+        const d = donadoresData.users[soloUserId];
+        if(d) await DonadorModel.findOneAndUpdate({ userId: soloUserId }, {...d, userId: soloUserId }, { upsert: true });
+      } else {
+        for(const [userId, d] of Object.entries(donadoresData.users)){
+          await DonadorModel.findOneAndUpdate({ userId }, {...d, userId }, { upsert: true });
+        }
+      }
+    } catch(e){ console.log('Error donadores Mongo', e.message); }
   }
 };
 
@@ -297,6 +325,20 @@ async function initMongo() {
     } else if(Object.keys(chambeadoresData).length > 0){
       for(const [userId, data] of Object.entries(chambeadoresData)){
         await ChambeadorModel.findOneAndUpdate({ userId }, {...data, userId }, { upsert: true });
+      }
+    }
+
+    const donadorSchema = new mongoose.Schema({ userId: String, puntos: Number, totalRobux: Number, totalEfectivo: Number, fakes: Number, baneado: Boolean, createdAt: Number }, { strict: false });
+    DonadorModel = mongoose.model('Donador', donadorSchema);
+    const donadoresMongo = await DonadorModel.find({});
+    if(donadoresMongo.length > 0){
+      donadoresData.users = {};
+      donadoresMongo.forEach(d=>{ donadoresData.users[d.userId] = { puntos: d.puntos||0, totalRobux: d.totalRobux||0, totalEfectivo: d.totalEfectivo||0, fakes: d.fakes||0, baneado: d.baneado||false, createdAt: d.createdAt||Date.now() }; });
+      console.log(`✅ ${donadoresMongo.length} donadores cargados desde MongoDB`);
+      safeSaveJSON(DONADORES_PATH, donadoresData);
+    } else if(Object.keys(donadoresData.users).length > 0){
+      for(const [userId, d] of Object.entries(donadoresData.users)){
+        await DonadorModel.findOneAndUpdate({ userId }, {...d, userId }, { upsert: true });
       }
     }
 
@@ -462,6 +504,33 @@ const CHAMBEADORES_LINKS = {
   tiktok2: 'https://www.tiktok.com/@elcrisvideos/video/7688420085509213461'
 };
 const CHAMBEADORES_PAGO = { eterno: 100, divino: 200 };
+
+// --- DONACIONES - CONFIG ---
+const DONADOR_ROLES = {
+  semilla: '🌱 Semilla Papoi',
+  bronce: '🥉 Bronce Papoi',
+  plata: '🥈 Plata Papoi',
+  oro: '🥇 Oro Papoi',
+  diamante: '💎 Diamante Papoi',
+  leyenda: '👑 Leyenda Papoi',
+  baneado: '🚫 Baneado Donador'
+};
+const DONADOR_PUNTOS = {
+  semilla: 5,
+  bronce: 50,
+  plata: 200,
+  oro: 500,
+  diamante: 1000,
+  leyenda: 5000
+};
+const DONADOR_TIENDA = [
+  { id: '108532817912057', name: 'Papoi Black', price: 5, puntos: 5, url: 'https://www.roblox.com/es/catalog/108532817912057/Papoi-Black' }
+  // Para agregar nueva solo agrega aquí: { id: '123456789', name: 'Papoi White', price: 25, puntos: 25, url: 'https://...' },
+];
+const DONADOR_LINKS = {
+  perfil: 'https://www.roblox.com/es/users/10164957828/profile',
+  grupoTienda: 'https://www.roblox.com/groups/782782955/store'
+};
 
 function isOwner(id){ return id === process.env.OWNER_ID; }
 function isMod(member){
@@ -682,6 +751,266 @@ async function ensureChambeadoresChannels(guild){
     }).catch(()=>null);
   }
   return { recluta, activos, chat, logs };
+}
+
+function getRangoDonador(puntos){
+  if(puntos >= DONADOR_PUNTOS.leyenda) return DONADOR_ROLES.leyenda;
+  if(puntos >= DONADOR_PUNTOS.diamante) return DONADOR_ROLES.diamante;
+  if(puntos >= DONADOR_PUNTOS.oro) return DONADOR_ROLES.oro;
+  if(puntos >= DONADOR_PUNTOS.plata) return DONADOR_ROLES.plata;
+  if(puntos >= DONADOR_PUNTOS.bronce) return DONADOR_ROLES.bronce;
+  if(puntos >= DONADOR_PUNTOS.semilla) return DONADOR_ROLES.semilla;
+  return null;
+}
+async function ensureDonadorRoles(guild){
+  const rolesToCreate = [
+    { name: DONADOR_ROLES.semilla, color: 0x2ECC71, reason: 'Rol Donador Semilla' },
+    { name: DONADOR_ROLES.bronce, color: 0xCD7F32, reason: 'Rol Donador Bronce' },
+    { name: DONADOR_ROLES.plata, color: 0x95A5A6, reason: 'Rol Donador Plata' },
+    { name: DONADOR_ROLES.oro, color: 0xF1C40F, reason: 'Rol Donador Oro' },
+    { name: DONADOR_ROLES.diamante, color: 0x00FFFF, reason: 'Rol Donador Diamante' },
+    { name: DONADOR_ROLES.leyenda, color: 0xFF00FF, reason: 'Rol Donador Leyenda' },
+    { name: DONADOR_ROLES.baneado, color: 0x2C2F33, reason: 'Rol Baneado Donador' },
+  ];
+  for(const r of rolesToCreate){
+    if(!findRole(guild, r.name)){
+      await guild.roles.create({ name: r.name, color: r.color, reason: r.reason, mentionable: false }).catch(()=>{});
+      await new Promise(res=>setTimeout(res, 300));
+    }
+  }
+}
+async function actualizarRolDonador(guild, member, puntos){
+  try{
+    const roles = Object.values(DONADOR_ROLES).filter(r=>r!==DONADOR_ROLES.baneado);
+    for(const rn of roles){
+      const ro = findRole(guild, rn);
+      if(ro && member.roles.cache.has(ro.id)) await member.roles.remove(ro.id).catch(()=>{});
+    }
+    const nuevo = getRangoDonador(puntos);
+    if(!nuevo) return;
+    const rolNuevo = findRole(guild, nuevo);
+    if(rolNuevo) await member.roles.add(rolNuevo).catch(()=>{});
+  }catch{}
+}
+async function ensureApoyoCategory(guild){
+  await ensureDonadorRoles(guild);
+  const ownerId = process.env.OWNER_ID;
+  let categoria = findCategory(guild, CONFIG.categories.apoyar);
+  if(!categoria){
+    categoria = await guild.channels.create({ name: '💖 Apoyar a esta Comunidad', type: ChannelType.GuildCategory }).catch(()=>null);
+  }
+  const makeOverwritesBase = [
+    { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+    { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
+  ];
+  const createIfNotExists = async (nameList, name, topic) => {
+    let ch = findChannel(guild, nameList);
+    if(!ch){
+      ch = await guild.channels.create({ name, type: ChannelType.GuildText, parent: categoria?.id, topic, permissionOverwrites: makeOverwritesBase }).catch(()=>null);
+    } else {
+      if(categoria && ch.parentId!== categoria.id) await ch.setParent(categoria.id).catch(()=>{});
+    }
+    return ch;
+  };
+  const info = await createIfNotExists(CONFIG.channels.apoyoInfo, '📢│como-apoyar', 'Cómo apoyar a Papois Empire');
+  const tienda = await createIfNotExists(CONFIG.channels.apoyoTienda, '🥚│tienda-【entity-roblox¦canonical_name=Roblox】', 'Tienda oficial');
+  const donas = await createIfNotExists(CONFIG.channels.apoyoDonaciones, '💸│donaciones', 'Donaciones anónimas');
+  let logs = findChannel(guild, CONFIG.channels.apoyoLogs);
+  if(!logs){
+    logs = await guild.channels.create({
+      name: '📋│apoyo-logs', type: ChannelType.GuildText, parent: null, topic: 'Logs privados donaciones - SOLO OWNER',
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] },
+        { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
+      ]
+    }).catch(()=>null);
+  }
+  return { categoria, info, tienda, donas, logs };
+}
+async function ensureVipDonadoresCategory(guild){
+  await ensureDonadorRoles(guild);
+  const ownerId = process.env.OWNER_ID;
+  let categoria = findCategory(guild, CONFIG.categories.vipDonadores);
+  if(!categoria){
+    categoria = await guild.channels.create({ name: '💖 VIP DONADORES', type: ChannelType.GuildCategory }).catch(()=>null);
+  }
+  const semillaRole = findRole(guild, DONADOR_ROLES.semilla);
+  const bronceRole = findRole(guild, DONADOR_ROLES.bronce);
+  const plataRole = findRole(guild, DONADOR_ROLES.plata);
+  const oroRole = findRole(guild, DONADOR_ROLES.oro);
+  const diamanteRole = findRole(guild, DONADOR_ROLES.diamante);
+  const leyendaRole = findRole(guild, DONADOR_ROLES.leyenda);
+  const baneadoRole = findRole(guild, DONADOR_ROLES.baneado);
+  const donorRoles = [semillaRole, bronceRole, plataRole, oroRole, diamanteRole, leyendaRole].filter(Boolean);
+  let lounge = findChannel(guild, CONFIG.channels.loungeVip);
+  if(lounge){ await lounge.setRateLimitPerUser(0).catch(()=>{}); }
+  if(!lounge){
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] },
+      { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
+    ];
+    donorRoles.forEach(r=> overwrites.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] }));
+    if(baneadoRole) overwrites.push({ id: baneadoRole.id, deny: [PermissionFlagsBits.ViewChannel] });
+    lounge = await guild.channels.create({ name: '💬│lounge-vip', type: ChannelType.GuildText, parent: categoria?.id || null, topic: '💬 Lounge VIP - Sin cooldown - Solo donadores', rateLimitPerUser: 0, permissionOverwrites: overwrites }).catch(()=>null);
+  }
+  let leyendas = findChannel(guild, CONFIG.channels.chatLeyendas);
+  if(!leyendas){
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] },
+    ];
+    if(leyendaRole) overwrites.push({ id: leyendaRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] });
+    leyendas = await guild.channels.create({ name: '👑│chat-leyendas', type: ChannelType.GuildText, parent: categoria?.id || null, topic: '👑 Solo Leyenda Papoi - Sin restricciones', rateLimitPerUser: 0, permissionOverwrites: overwrites }).catch(()=>null);
+  }
+  return { categoria, lounge, leyendas };
+}
+async function crearPanelApoyo(guild){
+  const { info, tienda } = await ensureApoyoCategory(guild);
+  if(!info) return;
+  try{
+    const msgs = await info.messages.fetch({ limit: 20 }).catch(()=>null);
+    if(msgs){
+      const old = msgs.filter(m => m.author.id === client.user.id && m.embeds[0]?.title?.includes('APOYAR'));
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
+    }
+  }catch{}
+  const embed1 = new EmbedBuilder().setColor(0xFF69B4).setTitle('💖 APOYAR A PAPOIS EMPIRE').setDescription(`Esta comunidad sigue viva y creciendo gracias a ustedes.\nCada Robux y cada donación se destina a **contratar más moderadores, crear sorteos de Robux para todos y mantener la comunidad segura y siempre actualizada.**\n\n💛 **SI LA COMUNIDAD TE HA APORTADO ALGO**\nSi aquí conseguiste tu huevo soñado, hiciste amigos, te reíste o simplemente te la pasas bien...\n\nPuedes agradecerlo con lo que quieras, desde 5 Robux o lo mínimo en donación. De corazón, todo se agradece muchísimo.\n\n**Recuerda que ElCris trata de mejorarla todos los días para que siempre esté actualizada para ustedes.** 👑\n\nNo es obligatorio, pero si lo haces te vuelves parte del corazón de este imperio.`).setThumbnail(guild.iconURL()).setTimestamp();
+  const embed2 = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Opción 1 - Ropa de la Comunidad').setDescription(`Compra cualquier playera en nuestro grupo. **Todo el Robux va directo a fondos del grupo para sorteos.**\n\n**Tienda actual:**\n${DONADOR_TIENDA.map(t=>`• [${t.name} - ${t.price} R$](${t.url})`).join('\n')}\n\nPuedes ver quién la compró en el historial del grupo.`);
+  const embed3 = new EmbedBuilder().setColor(0x2ECC71).setTitle('💸 Opción 2 - Donar Robux Directo a @elcrispapoi').setDescription(`¿Quieres mandarme Robux directo a mí y no al grupo? Roblox ya puso botón directo:\n\n**1️⃣** Entra a mi perfil:\n${DONADOR_LINKS.perfil}\n**2️⃣** Dale al botón 💸 **Donar / Enviar Robux**\n**3️⃣** Elige: 5, 10, 50, 100, 1000 R$\n**4️⃣** Confirma\n\n✅ **Requisito:** Solo necesitas **Roblox Plus** activo. Si no tienes Plus no te sale el botón.\n\n💡 El Robux me llega en 3-7 días y lo verifico en Mis Transacciones.`);
+  const embed4 = new EmbedBuilder().setColor(0x5865F2).setTitle('💵 Opción 3 - Donación en Efectivo (Anónima)').setDescription(`Para sorteos grandes y mantener el bot/server. **100% anónimo**.\n\n**Ko-fi:** \`ko-fi.com/papoisempire\` (tarjeta, PayPal y OXXO vía Stripe)\n\nSube tu comprobante en el ticket y te damos tu rol.`);
+  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('apoyo_yo_apoye').setLabel('💖 Yo Apoyé al Canal - Verificar mi apoyo').setStyle(ButtonStyle.Success));
+  await info.send({ embeds: [embed1, embed2, embed3, embed4], components: [row] }).catch(()=>{});
+  const embedTienda = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Tienda Oficial 【entity-Roblox¦canonical_name=Roblox】').setDescription(`**Compra aquí y el Robux va al grupo:**\n${DONADOR_TIENDA.map(t=>`• **${t.name}** - ${t.price} R$ - [Ver](${t.url}) - +${t.puntos} pts`).join('\n')}\n\n**Grupo:** ${DONADOR_LINKS.grupoTienda}\n**Perfil:** ${DONADOR_LINKS.perfil}`);
+  const rowTienda = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('🛒 Ver Tienda Comunidad').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.grupoTienda), new ButtonBuilder().setLabel('👤 Ver Mi Perfil').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.perfil));
+  try{
+    const msgs2 = await tienda.messages.fetch({ limit: 20 }).catch(()=>null);
+    if(msgs2){ const old2 = msgs2.filter(m => m.author.id === client.user.id); for(const m of old2.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); } }
+  }catch{}
+  await tienda.send({ embeds: [embedTienda], components: [rowTienda] }).catch(()=>{});
+}
+async function handleApoyoInteraction(inter){
+  const guild = inter.guild;
+  try{
+    if(inter.isButton()){
+      if(inter.customId === 'apoyo_yo_apoye'){
+        if(donadoresData.users[inter.user.id]?.baneado) return inter.reply({ content: '🚫 Estás baneado del sistema de donaciones.', flags: MessageFlags.Ephemeral });
+        const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('apoyo_select_tipo').setPlaceholder('¿Cómo apoyaste?').addOptions({ label: 'Compré ropa de la comunidad', value: 'ropa', emoji: '🥚', description: 'Playera del grupo' }, { label: 'Doné Robux directo a @elcrispapoi', value: 'robux_directo', emoji: '💸', description: 'Botón Donar del perfil (Plus)' }, { label: 'Donación en efectivo', value: 'efectivo', emoji: '💵', description: 'Ko-fi / PayPal / OXXO' }));
+        return inter.reply({ content: '💖 **¿Cómo apoyaste?** Elige abajo y te creo un ticket privado solo para ti y el dueño.', components: [row], flags: MessageFlags.Ephemeral });
+      }
+      if(inter.customId.startsWith('apoyo_confirm_')){
+        if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo owner.', flags: MessageFlags.Ephemeral });
+        const userId = inter.customId.split('_')[2]; const puntos = parseInt(inter.customId.split('_')[3]||'0'); const tipo = inter.customId.split('_')[4]||'donacion';
+        if(!donadoresData.users[userId]) donadoresData.users[userId] = { puntos: 0, totalRobux: 0, totalEfectivo: 0, fakes: 0, baneado: false, createdAt: Date.now() };
+        donadoresData.users[userId].puntos += puntos;
+        if(tipo==='ropa' || tipo==='robux_directo') donadoresData.users[userId].totalRobux += puntos; else donadoresData.users[userId].totalEfectivo += puntos;
+        await saveDonadores(userId);
+        const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
+        if(member) await actualizarRolDonador(guild, member, donadoresData.users[userId].puntos);
+        await inter.reply({ content: `✅ Confirmado <@${userId}> +${puntos} pts (${tipo}). Total: ${donadoresData.users[userId].puntos} pts -> ${getRangoDonador(donadoresData.users[userId].puntos)||'Sin rol aún'}` });
+        setTimeout(()=> inter.channel.delete().catch(()=>{}), 5000); return;
+      }
+      if(inter.customId.startsWith('apoyo_mentira_')){
+        if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo owner.', flags: MessageFlags.Ephemeral });
+        const userId = inter.customId.split('_')[2];
+        if(!donadoresData.users[userId]) donadoresData.users[userId] = { puntos: 0, totalRobux: 0, totalEfectivo: 0, fakes: 0, baneado: false, createdAt: Date.now() };
+        donadoresData.users[userId].fakes = (donadoresData.users[userId].fakes||0)+1; await saveDonadores(userId);
+        if(donadoresData.users[userId].fakes >= 3){
+          donadoresData.users[userId].baneado = true; await saveDonadores(userId);
+          const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
+          if(member){ const banRole = findRole(guild, DONADOR_ROLES.baneado); if(banRole) await member.roles.add(banRole).catch(()=>{}); }
+          await inter.reply({ content: `🚫 <@${userId}> 3 fakes -> baneado del sistema donador.` });
+        } else { await inter.reply({ content: `❌ Marcado como mentira <@${userId}> - Fake ${donadoresData.users[userId].fakes}/3` }); }
+        setTimeout(()=> inter.channel.delete().catch(()=>{}), 5000); return;
+      }
+      if(inter.customId.startsWith('apoyo_modificar_')){
+        if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo owner.', flags: MessageFlags.Ephemeral });
+        const userId = inter.customId.split('_')[2];
+        const modal = new ModalBuilder().setCustomId(`modal_apoyo_modificar_${userId}`).setTitle('Modificar cantidad real');
+        const input = new TextInputBuilder().setCustomId('cantidadReal').setLabel('Cantidad real (puntos)').setPlaceholder('Ej: 5, 25, 100').setStyle(TextInputStyle.Short).setRequired(true);
+        const inputTipo = new TextInputBuilder().setCustomId('tipoReal').setLabel('Tipo: ropa / robux_directo / efectivo').setPlaceholder('ropa').setStyle(TextInputStyle.Short).setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(input), new ActionRowBuilder().addComponents(inputTipo));
+        return inter.showModal(modal);
+      }
+    }
+    if(inter.isStringSelectMenu()){
+      if(inter.customId === 'apoyo_select_tipo'){
+        const tipo = inter.values[0];
+        if(tipo === 'ropa'){
+          const options = DONADOR_TIENDA.map(t=> ({ label: `${t.name} - ${t.price} R$`, value: `ropa_${t.id}_${t.puntos}`, description: `+${t.puntos} pts`, emoji: '🥚' }));
+          options.push({ label: 'Otra cantidad / Otra playera', value: 'ropa_otra', description: 'Especificar manualmente', emoji: '✏' });
+          const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('apoyo_select_ropa').setPlaceholder('¿Qué ropa compraste?').addOptions(options.slice(0,25)));
+          return inter.update({ content: '🥚 **¿Qué ropa compraste?**', components: [row] });
+        } else if(tipo === 'robux_directo'){
+          const modal = new ModalBuilder().setCustomId('modal_apoyo_robux').setTitle('Donación Robux Directa');
+          const cant = new TextInputBuilder().setCustomId('cantidad').setLabel('¿Cuánto Robux donaste?').setPlaceholder('Ej: 100').setStyle(TextInputStyle.Short).setRequired(true);
+          const userRoblox = new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de 【entity-Roblox¦canonical_name=Roblox】').setPlaceholder('Ej: Joss123').setStyle(TextInputStyle.Short).setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(cant), new ActionRowBuilder().addComponents(userRoblox));
+          return inter.showModal(modal);
+        } else if(tipo === 'efectivo'){
+          const modal = new ModalBuilder().setCustomId('modal_apoyo_efectivo').setTitle('Donación Efectivo');
+          const cant = new TextInputBuilder().setCustomId('cantidad').setLabel('¿Cuánto donaste? Ej: 50 MXN / 5 USD').setPlaceholder('50 MXN').setStyle(TextInputStyle.Short).setRequired(true);
+          const metodo = new TextInputBuilder().setCustomId('metodo').setLabel('¿Por dónde? Ko-fi / PayPal / OXXO').setPlaceholder('Ko-fi').setStyle(TextInputStyle.Short).setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(cant), new ActionRowBuilder().addComponents(metodo));
+          return inter.showModal(modal);
+        }
+      }
+      if(inter.customId === 'apoyo_select_ropa'){
+        const val = inter.values[0];
+        if(val === 'ropa_otra'){
+          const modal = new ModalBuilder().setCustomId('modal_apoyo_ropa_otra').setTitle('Ropa - Otra cantidad');
+          const cant = new TextInputBuilder().setCustomId('cantidad').setLabel('¿Cuánto costó la ropa?').setPlaceholder('Ej: 10').setStyle(TextInputStyle.Short).setRequired(true);
+          const cual = new TextInputBuilder().setCustomId('cual').setLabel('¿Cuál ropa? Nombre o ID').setPlaceholder('Papoi Black').setStyle(TextInputStyle.Short).setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(cant), new ActionRowBuilder().addComponents(cual));
+          return inter.showModal(modal);
+        } else {
+          const parts = val.split('_'); const puntos = parseInt(parts[2]||'0'); const id = parts[1];
+          const tiendaItem = DONADOR_TIENDA.find(t=>t.id===id);
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const categoria = findCategory(guild, CONFIG.categories.apoyar) || guild.channels.cache.filter(c=>c.type===ChannelType.GuildCategory).first();
+          const ownerId = process.env.OWNER_ID;
+          const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: categoria?.id || null, topic: `Ticket donación ${inter.user.id} - ropa ${id} - ${puntos} pts`, permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }, { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }] }).catch(()=>null);
+          if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket.' });
+          const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Ticket Ropa - Verificación').setDescription(`**Usuario:** <@${inter.user.id}> (${inter.user.id})\n**Tipo:** Ropa comunidad\n**Item:** ${tiendaItem? tiendaItem.name : id} - ${puntos} pts\n**Link:** ${tiendaItem? tiendaItem.url : 'No registrado'}\n\n**Instrucciones para el usuario:** Sube aquí tu captura de compra donde se vea tu nombre de Roblox.\n\n**Para Owner:** Verifica en https://www.roblox.com/groups/782782955/store > Sales`).setTimestamp();
+          const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_ropa`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏ Modificar cantidad').setStyle(ButtonStyle.Secondary));
+          await ticket.send({ content: `<@${ownerId}> nuevo ticket ropa`, embeds: [embed], components: [rowOwner] }).catch(()=>{});
+          return inter.editReply({ content: `✅ Ticket creado: ${ticket} - Sube tu evidencia ahí.` });
+        }
+      }
+    }
+    if(inter.isModalSubmit()){
+      if(inter.customId === 'modal_apoyo_robux' || inter.customId === 'modal_apoyo_efectivo' || inter.customId.startsWith('modal_apoyo_ropa')){
+        await inter.deferReply({ flags: MessageFlags.Ephemeral });
+        const cantidadRaw = inter.fields.getTextInputValue('cantidad')?.trim() || '0';
+        const puntosMatch = cantidadRaw.match(/(\d+)/); let puntos = puntosMatch? parseInt(puntosMatch[1]) : 0;
+        if(inter.customId === 'modal_apoyo_efectivo'){ const lower = cantidadRaw.toLowerCase(); if(lower.includes('usd') || (lower.includes('$') &&!lower.includes('mxn'))) puntos = puntos * 60; else if(lower.includes('mxn')) puntos = puntos * 3; }
+        const categoria = findCategory(guild, CONFIG.categories.apoyar) || guild.channels.cache.filter(c=>c.type===ChannelType.GuildCategory).first();
+        const ownerId = process.env.OWNER_ID;
+        const tipo = inter.customId.includes('robux')? 'robux_directo' : inter.customId.includes('efectivo')? 'efectivo' : 'ropa';
+        const robloxUser = inter.fields.getTextInputValue('robloxUser')?.trim() || inter.fields.getTextInputValue('cual')?.trim() || inter.fields.getTextInputValue('metodo')?.trim() || 'N/A';
+        const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: categoria?.id || null, topic: `Ticket donación ${inter.user.id} - ${tipo} - ${puntos} pts`, permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }, { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }] }).catch(()=>null);
+        if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket.' });
+        const embed = new EmbedBuilder().setColor(tipo==='efectivo'? 0x5865F2 : 0x2ECC71).setTitle(tipo==='robux_directo'? '💸 Ticket Robux Directo' : tipo==='efectivo'? '💵 Ticket Efectivo' : '🥚 Ticket Ropa').setDescription(`**Usuario:** <@${inter.user.id}> (${inter.user.id})\n**Tipo:** ${tipo}\n**Cantidad declarada:** ${cantidadRaw} -> **${puntos} pts**\n**Dato extra:** ${robloxUser}\n\n**Instrucciones usuario:** Sube captura/comprobante aquí.\n\n${tipo==='robux_directo'? `**Verificar en:** ${DONADOR_LINKS.perfil} > Transacciones` : tipo==='ropa'? `**Verificar en:** Grupo > Sales` : `**Verificar en:** Ko-fi Dashboard`}`).setTimestamp();
+        const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_${tipo}`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏ Modificar cantidad').setStyle(ButtonStyle.Secondary));
+        await ticket.send({ content: `<@${ownerId}> nuevo ticket ${tipo}`, embeds: [embed], components: [rowOwner] }).catch(()=>{});
+        return inter.editReply({ content: `✅ Ticket creado: ${ticket} - Sube tu evidencia ahí.` });
+      }
+      if(inter.customId.startsWith('modal_apoyo_modificar_')){
+        const userId = inter.customId.replace('modal_apoyo_modificar_',''); const cantidadReal = parseInt(inter.fields.getTextInputValue('cantidadReal')?.trim()||'0'); const tipoReal = inter.fields.getTextInputValue('tipoReal')?.trim()||'ropa';
+        if(!donadoresData.users[userId]) donadoresData.users[userId] = { puntos: 0, totalRobux: 0, totalEfectivo: 0, fakes: 0, baneado: false, createdAt: Date.now() };
+        donadoresData.users[userId].puntos += cantidadReal;
+        if(tipoReal.includes('ropa') || tipoReal.includes('robux')) donadoresData.users[userId].totalRobux += cantidadReal; else donadoresData.users[userId].totalEfectivo += cantidadReal;
+        await saveDonadores(userId);
+        const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
+        if(member) await actualizarRolDonador(guild, member, donadoresData.users[userId].puntos);
+        await inter.reply({ content: `✅ Modificado y confirmado <@${userId}> +${cantidadReal} pts (${tipoReal}). Total: ${donadoresData.users[userId].puntos}` });
+        setTimeout(()=> inter.channel.delete().catch(()=>{}), 5000); return;
+      }
+    }
+  }catch(e){ console.log('Apoyo error', e); if(!inter.replied) inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
 }
 
 async function ensureGuiasChannel(guild){
@@ -1434,6 +1763,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'setup-fusiones', description: 'Crea el panel de fusiones en #fusiones', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
       { name: 'setup-chambeadores', description: 'Crea canales y paneles de Chambeadores (reclutamiento + activos + logs solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-apoyo', description: 'Crea categoría de donaciones, VIP y paneles (solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -1462,6 +1792,12 @@ client.on(Events.ClientReady, async () => {
 });
 
 client.on(Events.GuildMemberAdd, async member => {
+  try{
+    const d = donadoresData.users[member.id];
+    if(d && !d.baneado && d.puntos>0){
+      await actualizarRolDonador(member.guild, member, d.puntos);
+    }
+  }catch{}
   try {
     const guild = member.guild;
     const rolPapoi = findRole(guild, 'papoi');
@@ -1909,6 +2245,10 @@ client.on(Events.InteractionCreate, async inter => {
       await handleChambeadoresInteraction(inter);
       return;
     }
+    if((inter.customId && inter.customId.startsWith('apoyo_')) || (inter.isModalSubmit() && inter.customId.startsWith('modal_apoyo_'))){
+      await handleApoyoInteraction(inter);
+      return;
+    }
     if((inter.customId && inter.customId.startsWith('fusion_')) || (inter.isModalSubmit() && inter.customId.startsWith('modal_fusion_')) || (inter.customId && inter.customId.startsWith('select_fusion_'))){
       await handleFusionesInteraction(inter);
       return;
@@ -2056,6 +2396,19 @@ client.on(Events.InteractionCreate, async inter => {
           await crearPanelActivos(activos);
           await logs.send({ content: `✅ Logs privados Chambeadores inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
           return inter.editReply({ content: `✅ Chambeadores V6.5:\n- ${recluta}\n- ${activos}\n- ${chat} <- **NUEVO CHAT 30s solo chambeadores + tú**\n- ${logs} (SOLO TU)\n\nComunidad para pagar: ${CHAMBEADORES_LINKS.comunidad}` });
+        }
+                if(inter.commandName === 'setup-apoyo'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if (!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels) ||!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
+          }
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo el dueño (OWNER_ID) puede crear apoyo.' });
+          const { categoria, info, tienda, donas, logs } = await ensureApoyoCategory(inter.guild);
+          const { categoria: catVip, lounge, leyendas } = await ensureVipDonadoresCategory(inter.guild);
+          if(!info ||!tienda ||!donas) return inter.editReply({ content: '❌ No pude crear canales apoyo. Revisa permisos.' });
+          await crearPanelApoyo(inter.guild);
+          await logs.send({ content: `✅ Logs privados Apoyo inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
+          return inter.editReply({ content: `✅ Apoyo creado:\n- Categoría: ${categoria?.name}\n- ${info}\n- ${tienda}\n- ${donas}\n- ${logs} (SOLO TU)\n- VIP: ${catVip?.name} -> ${lounge} (Semilla-Diamante) + ${leyendas} (Leyenda sin restricciones)\n\nRopa prueba: ${DONADOR_TIENDA[0].url}` });
         }
         if(inter.commandName === 'mis-fusiones'){
           const mine = fusionesQueue.filter(r=>r.userId===inter.user.id);
