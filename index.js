@@ -1657,16 +1657,9 @@ client.on(Events.MessageCreate, async msg => {
   const esOwner = isOwner(msg.author.id);
   const textoLower = msg.content.toLowerCase();
 
-  // Detecta si le está respondiendo al bot para seguir platicando sin mencionar
-  let isReplyToBot = false;
-  if(msg.reference?.messageId){
-    try{
-      const ref = await msg.channel.messages.fetch(msg.reference.messageId);
-      if(ref.author.id === client.user.id) isReplyToBot = true;
-    }catch{}
-  }
-
-  const quiereHablar = msg.mentions.has(client.user) || textoLower.includes('papoi ia') || isReplyToBot || (esOwner && textoLower.includes('papoi'));
+  // FIX: solo contesta si lo mencionan con @ directamente - ignora @everyone/@here
+  const mencionaAlBot = msg.mentions.has(client.user);
+  const quiereHablar = mencionaAlBot;
 
   if(groq && quiereHablar){
     if(!esOwner && GROSIERIAS.some(w => textoLower.includes(w))){
