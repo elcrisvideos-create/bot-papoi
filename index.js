@@ -522,7 +522,7 @@ const DONADOR_PUNTOS = {
   diamante: 1000,
   leyenda: 5000
 };
-const DONADOR_TIENDA = [
+let DONADOR_TIENDA = [
   { id: '108532817912057', name: 'Papoi Black', price: 5, puntos: 5, url: 'https://www.roblox.com/es/catalog/108532817912057/Papoi-Black' }
   // Para agregar nueva solo agrega aquí: { id: '123456789', name: 'Papoi White', price: 25, puntos: 25, url: 'https://...' },
 ];
@@ -867,6 +867,53 @@ async function ensureVipDonadoresCategory(guild){
   }
   return { categoria, lounge, leyendas };
 }
+async function actualizarSoloTienda(guild){
+  const tienda = findChannel(guild, CONFIG.channels.apoyoTienda);
+  if(!tienda) return null;
+
+  try{
+    const msgs = await tienda.messages.fetch({ limit: 40 }).catch(()=>null);
+    if(msgs){
+      for(const m of msgs.values()){
+        if(m.author.id === client.user.id) await m.delete().catch(()=>{});
+        await new Promise(r=>setTimeout(r,200));
+      }
+    }
+  }catch{}
+
+  const ordenada = [...DONADOR_TIENDA].sort((a,b) => a.price - b.price);
+
+  const header = new EmbedBuilder()
+   .setColor(0xF1C40F)
+   .setTitle(`🥚 Tienda Oficial - ${ordenada.length} items por precio`)
+   .setDescription(`Del más barato al más caro.\nTodo el Robux va a: ${DONADOR_LINKS.grupoTienda}`)
+   .setTimestamp();
+  await tienda.send({ embeds: [header] }).catch(()=>{});
+
+  for(const item of ordenada){
+    let thumb = null;
+    try{
+      const r = await axios.get(`https://thumbnails.roblox.com/v1/assets?assetIds=${item.id}&size=420x420&format=Png&isCircular=false`, { timeout: 6000 });
+      thumb = r.data?.data?.[0]?.imageUrl || null;
+    }catch{}
+
+    const embed = new EmbedBuilder()
+     .setColor(0xFFFFFF)
+     .setTitle(`${item.name} - ${item.price} R$`)
+     .setDescription(`**+${item.puntos} pts** • [Ver en Roblox](${item.url})\nID: \`${item.id}\``)
+     .setFooter({ text: `Ordenado por precio • ${item.price} Robux` });
+
+    if(thumb) embed.setImage(thumb); // ESTO es la vista previa grande
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel(`Comprar ${item.price}R$`).setStyle(ButtonStyle.Link).setURL(item.url)
+    );
+
+    await tienda.send({ embeds: [embed], components: [row] }).catch(()=>{});
+    await new Promise(r=>setTimeout(r,400));
+  }
+  return tienda;
+}
 async function crearPanelApoyo(guild){
   const { info, tienda } = await ensureApoyoCategory(guild);
   if(!info) return;
@@ -883,13 +930,7 @@ async function crearPanelApoyo(guild){
     const embed4 = new EmbedBuilder().setColor(0x5865F2).setTitle('💵 Opción 3 - Donación en Efectivo (Anónima)').setDescription(`Para sorteos grandes y mantener el bot/server. **100% anónimo**.\n\n**Ko-fi:** ${DONADOR_LINKS.kofi} (tarjeta, PayPal y OXXO vía Stripe)\n\nSube tu comprobante en el ticket y te damos tu rol.`);
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('apoyo_yo_apoye').setLabel('💖 Yo Apoyé al Canal - Verificar mi apoyo').setStyle(ButtonStyle.Success));
   await info.send({ embeds: [embed1, embed2, embed3, embed4], components: [row] }).catch(()=>{});
-  const embedTienda = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Tienda Oficial Roblox').setDescription(`**Compra aquí y el Robux va al grupo:**\n${DONADOR_TIENDA.map(t=>`• **${t.name}** - ${t.price} R$ - [Ver](${t.url}) - +${t.puntos} pts`).join('\n')}\n\n**Grupo:** ${DONADOR_LINKS.grupoTienda}\n**Perfil:** ${DONADOR_LINKS.perfil}`);
-  const rowTienda = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('🛒 Ver Tienda Comunidad').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.grupoTienda), new ButtonBuilder().setLabel('👤 Ver Mi Perfil').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.perfil));
-  try{
-    const msgs2 = await tienda.messages.fetch({ limit: 20 }).catch(()=>null);
-    if(msgs2){ const old2 = msgs2.filter(m => m.author.id === client.user.id); for(const m of old2.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); } }
-  }catch{}
-  await tienda.send({ embeds: [embedTienda], components: [rowTienda] }).catch(()=>{});
+  await actualizarSoloTienda(guild);
 }
 async function handleApoyoInteraction(inter){
   const guild = inter.guild;
@@ -1763,6 +1804,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
       { name: 'setup-chambeadores', description: 'Crea canales y paneles de Chambeadores (reclutamiento + activos + logs solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-apoyo', description: 'Crea categoría de donaciones, VIP y paneles (solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'actualizar-tienda', description: 'Actualiza SOLO la tienda con preview y orden por precio', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -2408,6 +2450,12 @@ client.on(Events.InteractionCreate, async inter => {
           await crearPanelApoyo(inter.guild);
           await logs.send({ content: `✅ Logs privados Apoyo inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
           return inter.editReply({ content: `✅ Apoyo creado:\n- Categoría: ${categoria?.name}\n- ${info}\n- ${tienda}\n- ${logs} (SOLO TU)\n- VIP: ${catVip?.name} -> ${lounge} (Semilla-Diamante) + ${leyendas} (Leyenda sin restricciones)\n\nRopa prueba: ${DONADOR_TIENDA[0].url}` });
+        }
+        if(inter.commandName === 'actualizar-tienda'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const ch = await actualizarSoloTienda(inter.guild);
+          return inter.editReply({ content: ch? `✅ Solo tienda actualizada en ${ch} - ${DONADOR_TIENDA.length} items ordenados por precio con preview` : '❌ No encontré #tienda-roblox' });
         }
         if(inter.commandName === 'mis-fusiones'){
           const mine = fusionesQueue.filter(r=>r.userId===inter.user.id);
