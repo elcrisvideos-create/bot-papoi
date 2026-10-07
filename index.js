@@ -529,7 +529,8 @@ const DONADOR_TIENDA = [
 ];
 const DONADOR_LINKS = {
   perfil: 'https://www.roblox.com/es/users/10164957828/profile',
-  grupoTienda: 'https://www.roblox.com/groups/782782955/store'
+  grupoTienda: 'https://www.roblox.com/groups/782782955/store',
+  kofi: 'https://ko-fi.com/papoiempire'
 };
 
 function isOwner(id){ return id === process.env.OWNER_ID; }
@@ -881,7 +882,7 @@ async function crearPanelApoyo(guild){
   const embed1 = new EmbedBuilder().setColor(0xFF69B4).setTitle('💖 APOYAR A PAPOIS EMPIRE').setDescription(`Esta comunidad sigue viva y creciendo gracias a ustedes.\nCada Robux y cada donación se destina a **contratar más moderadores, crear sorteos de Robux para todos y mantener la comunidad segura y siempre actualizada.**\n\n💛 **SI LA COMUNIDAD TE HA APORTADO ALGO**\nSi aquí conseguiste tu huevo soñado, hiciste amigos, te reíste o simplemente te la pasas bien...\n\nPuedes agradecerlo con lo que quieras, desde 5 Robux o lo mínimo en donación. De corazón, todo se agradece muchísimo.\n\n**Recuerda que ElCris trata de mejorarla todos los días para que siempre esté actualizada para ustedes.** 👑\n\nNo es obligatorio, pero si lo haces te vuelves parte del corazón de este imperio.`).setThumbnail(guild.iconURL()).setTimestamp();
   const embed2 = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Opción 1 - Ropa de la Comunidad').setDescription(`Compra cualquier playera en nuestro grupo. **Todo el Robux va directo a fondos del grupo para sorteos.**\n\n**Tienda actual:**\n${DONADOR_TIENDA.map(t=>`• [${t.name} - ${t.price} R$](${t.url})`).join('\n')}\n\nPuedes ver quién la compró en el historial del grupo.`);
   const embed3 = new EmbedBuilder().setColor(0x2ECC71).setTitle('💸 Opción 2 - Donar Robux Directo a @elcrispapoi').setDescription(`¿Quieres mandarme Robux directo a mí y no al grupo? Roblox ya puso botón directo:\n\n**1️⃣** Entra a mi perfil:\n${DONADOR_LINKS.perfil}\n**2️⃣** Dale al botón 💸 **Donar / Enviar Robux**\n**3️⃣** Elige: 5, 10, 50, 100, 1000 R$\n**4️⃣** Confirma\n\n✅ **Requisito:** Solo necesitas **Roblox Plus** activo. Si no tienes Plus no te sale el botón.\n\n💡 El Robux me llega en 3-7 días y lo verifico en Mis Transacciones.`);
-  const embed4 = new EmbedBuilder().setColor(0x5865F2).setTitle('💵 Opción 3 - Donación en Efectivo (Anónima)').setDescription(`Para sorteos grandes y mantener el bot/server. **100% anónimo**.\n\n**Ko-fi:** \`ko-fi.com/papoisempire\` (tarjeta, PayPal y OXXO vía Stripe)\n\nSube tu comprobante en el ticket y te damos tu rol.`);
+    const embed4 = new EmbedBuilder().setColor(0x5865F2).setTitle('💵 Opción 3 - Donación en Efectivo (Anónima)').setDescription(`Para sorteos grandes y mantener el bot/server. **100% anónimo**.\n\n**Ko-fi:** [${DONADOR_LINKS.kofi}](${DONADOR_LINKS.kofi}) (tarjeta, 【entity-PayPal¦canonical_name=PayPal】 y 【entity-OXXO¦canonical_name=OXXO】 vía Stripe)\n\nSube tu comprobante en el ticket y te damos tu rol.`);
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('apoyo_yo_apoye').setLabel('💖 Yo Apoyé al Canal - Verificar mi apoyo').setStyle(ButtonStyle.Success));
   await info.send({ embeds: [embed1, embed2, embed3, embed4], components: [row] }).catch(()=>{});
   const embedTienda = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Tienda Oficial 【entity-Roblox¦canonical_name=Roblox】').setDescription(`**Compra aquí y el Robux va al grupo:**\n${DONADOR_TIENDA.map(t=>`• **${t.name}** - ${t.price} R$ - [Ver](${t.url}) - +${t.puntos} pts`).join('\n')}\n\n**Grupo:** ${DONADOR_LINKS.grupoTienda}\n**Perfil:** ${DONADOR_LINKS.perfil}`);
