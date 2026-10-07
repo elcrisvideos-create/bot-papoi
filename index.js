@@ -522,10 +522,15 @@ const DONADOR_PUNTOS = {
   diamante: 1000,
   leyenda: 5000
 };
-let DONADOR_TIENDA = [
+const TIENDA_PATH = path.join(DATA_DIR, 'tienda.json');
+let DONADOR_TIENDA = safeLoadJSON(TIENDA_PATH, [
   { id: '108532817912057', name: 'Papoi Black', price: 5, puntos: 5, url: 'https://www.roblox.com/es/catalog/108532817912057/Papoi-Black' }
-  // Para agregar nueva solo agrega aquí: { id: '123456789', name: 'Papoi White', price: 25, puntos: 25, url: 'https://...' },
-];
+]);
+const saveTienda = () => safeSaveJSON(TIENDA_PATH, DONADOR_TIENDA);
+function extraerIdRoblox(input){
+  const m = input.match(/\/catalog\/(\d+)\//) || input.match(/(\d{8,})/);
+  return m? m[1] : null;
+}
 const DONADOR_LINKS = {
   perfil: 'https://www.roblox.com/es/users/10164957828/profile',
   grupoTienda: 'https://www.roblox.com/es/communities/782782955/Nohoch-Balam-Estudios#!/store',
@@ -1804,7 +1809,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
       { name: 'setup-chambeadores', description: 'Crea canales y paneles de Chambeadores (reclutamiento + activos + logs solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-apoyo', description: 'Crea categoría de donaciones, VIP y paneles (solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-      { name: 'actualizar-tienda', description: 'Actualiza SOLO la tienda con preview y orden por precio', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'actualizar-tienda', description: 'Agregar producto a tienda y reordenar por precio', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'link', description: 'Link completo de Roblox del item', type: 3, required: true }, { name: 'precio', description: 'Precio en Robux (ej: 5)', type: 4, required: true, min_value: 1 }, { name: 'nombre', description: 'Nombre opcional', type: 3, required: false }] },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -2454,8 +2459,18 @@ client.on(Events.InteractionCreate, async inter => {
         if(inter.commandName === 'actualizar-tienda'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const link = inter.options.getString('link');
+          const precio = inter.options.getInteger('precio');
+          let nombre = inter.options.getString('nombre');
+          const id = extraerIdRoblox(link);
+          if(!id) return inter.editReply({ content: '❌ Link inválido, no encontré ID.' });
+          if(DONADOR_TIENDA.some(t=>t.id===id)) return inter.editReply({ content: `❌ Ese ID ${id} ya existe.` });
+          if(!nombre) nombre = `Papoi ${id.slice(-4)}`;
+          DONADOR_TIENDA.push({ id, name: nombre, price: precio, puntos: precio, url: link });
+          DONADOR_TIENDA.sort((a,b)=>a.price-b.price);
+          saveTienda();
           const ch = await actualizarSoloTienda(inter.guild);
-          return inter.editReply({ content: ch? `✅ Solo tienda actualizada en ${ch} - ${DONADOR_TIENDA.length} items ordenados por precio con preview` : '❌ No encontré #tienda-roblox' });
+          return inter.editReply({ content: ch? `✅ Agregado **${nombre} - ${precio}R$** y reordenado (${DONADOR_TIENDA.length} items) en ${ch}` : '✅ Guardado pero no encontré #tienda-roblox' });
         }
         if(inter.commandName === 'mis-fusiones'){
           const mine = fusionesQueue.filter(r=>r.userId===inter.user.id);
