@@ -85,13 +85,14 @@ const CONFIG = {
     boostersChat: ['chat-boosters', '💬│chat-boosters', 'boosters-chat'],
     guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo']
   },
-  categories: {
+    categories: {
     robaHuevo: ['roba un huevo', 'roba'],
     staff: ['staff', '🔒 staff'],
     fusionesActivas: ['fusiones activas', '🔀 fusiones activas', 'fusiones'],
     apoyar: ['apoyar a esta comunidad', '💖 apoyar', 'apoyar'],
     vipDonadores: ['vip donadores', '💖 vip donadores', 'vip'],
-    boostersPapoi: ['boosters papoi', 'boosters', '🚀 boosters papoi']
+    boostersPapoi: ['boosters papoi', '🚀 boosters papoi', '🚀・boosters papoi', '🚀・BOOSTERS PAPOI'],
+    comunidadPapoi: ['comunidad papoi', '💬・comunidad papoi', '💬 comunidad papoi', '💬・COMUNIDAD PAPOI', 'comunidad']
   }
 };
 
@@ -901,6 +902,94 @@ async function ensureVipDonadoresCategory(guild){
   }
   return { categoria, lounge, leyendas };
 }
+async function fixCanalesFaltantes(guild){
+  const ownerId = process.env.OWNER_ID;
+  const rolPapoiLeyenda = findRole(guild, 'papoi leyenda');
+  const rolDonadorLeyenda = findRole(guild, DONADOR_ROLES.leyenda);
+  const rolMayor = findRole(guild, 'papoi mayor');
+  const rolMod = findRole(guild, 'moderador');
+  const boosterRole = findRole(guild, 'booster papoi') || guild.roles.cache.find(r=> r.name.toLowerCase().includes('booster'));
+  let logs = [];
+
+  // 1. LIMPIAR 👑│chat-leyendas = quitar Papoi Leyenda XP
+  let chDonador = findChannel(guild, CONFIG.channels.chatLeyendasDonador);
+  if(chDonador){
+    if(rolPapoiLeyenda){
+      await chDonador.permissionOverwrites.delete(rolPapoiLeyenda.id).catch(()=>{});
+      logs.push(`✅ Limpieza: Quité **Papoi Leyenda** de ${chDonador.name} - ahora solo donadores lo ven`);
+    }
+    if(rolDonadorLeyenda) await chDonador.permissionOverwrites.edit(rolDonadorLeyenda.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, EmbedLinks: true, AttachFiles: true }).catch(()=>{});
+  } else {
+    logs.push(`❌ No encontré 👑│chat-leyendas`);
+  }
+
+  // 2. BOOSTER en 🚀・BOOSTERS PAPOI
+  let catBoost = findCategory(guild, CONFIG.categories.boostersPapoi);
+  if(!catBoost) catBoost = await guild.channels.create({ name: '🚀・BOOSTERS PAPOI', type: ChannelType.GuildCategory }).catch(()=>null);
+  
+  let boostChat = findChannel(guild, CONFIG.channels.boostersChat);
+  if(!boostChat){
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
+    ];
+    if(boosterRole) overwrites.push({ id: boosterRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] });
+    if(rolMayor) overwrites.push({ id: rolMayor.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+    if(rolMod) overwrites.push({ id: rolMod.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+
+    boostChat = await guild.channels.create({
+      name: '💬│chat-boosters',
+      type: ChannelType.GuildText,
+      parent: catBoost?.id || null,
+      topic: '💬 Chat exclusivo boosters - Sin cooldown - x2.2 XP',
+      rateLimitPerUser: 0,
+      permissionOverwrites: overwrites
+    }).catch(()=>null);
+    if(boostChat) logs.push(`✅ Creado ${boostChat.name} en categoría ${catBoost?.name}`);
+  } else {
+    if(catBoost && boostChat.parentId !== catBoost.id) await boostChat.setParent(catBoost.id).catch(()=>{});
+    await boostChat.setRateLimitPerUser(0).catch(()=>{});
+    if(boosterRole) await boostChat.permissionOverwrites.edit(boosterRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true, EmbedLinks: true }).catch(()=>{});
+    logs.push(`ℹ ${boostChat.name} ya existía, lo moví a ${catBoost?.name} y le quité cooldown`);
+  }
+
+  // 3. PAPOI LEYENDA XP en 💬・COMUNIDAD PAPOI
+  let catComu = findCategory(guild, CONFIG.categories.comunidadPapoi);
+  if(!catComu) catComu = await guild.channels.create({ name: '💬・COMUNIDAD PAPOI', type: ChannelType.GuildCategory }).catch(()=>null);
+
+  let chatXp = findChannel(guild, CONFIG.channels.chatLeyendasXp);
+  if(!chatXp){
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+    ];
+    if(rolPapoiLeyenda) overwrites.push({ id: rolPapoiLeyenda.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles] });
+    if(rolMayor) overwrites.push({ id: rolMayor.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+    if(rolMod) overwrites.push({ id: rolMod.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+    if(rolDonadorLeyenda) overwrites.push({ id: rolDonadorLeyenda.id, deny: [PermissionFlagsBits.ViewChannel] });
+
+    chatXp = await guild.channels.create({
+      name: '👑│chat-papoi-leyenda',
+      type: ChannelType.GuildText,
+      parent: catComu?.id || null,
+      topic: '👑 Solo Papoi Leyenda 25000 XP - Chat exclusivo max nivel - Sin cooldown',
+      rateLimitPerUser: 0,
+      permissionOverwrites: overwrites
+    }).catch(()=>null);
+    if(chatXp) logs.push(`✅ Creado ${chatXp.name} en categoría ${catComu?.name}`);
+  } else {
+    if(catComu && chatXp.parentId !== catComu.id) await chatXp.setParent(catComu.id).catch(()=>{});
+    await chatXp.setRateLimitPerUser(0).catch(()=>{});
+    if(rolPapoiLeyenda) await chatXp.permissionOverwrites.edit(rolPapoiLeyenda.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true, EmbedLinks: true }).catch(()=>{});
+    if(rolDonadorLeyenda) await chatXp.permissionOverwrites.edit(rolDonadorLeyenda.id, { ViewChannel: false }).catch(()=>{});
+    logs.push(`ℹ ${chatXp.name} ya existía, lo moví a ${catComu?.name} y arreglé perms`);
+  }
+
+  return logs;
+}
+
 async function ensureLeyendaAndBoosters(guild){
   const ownerId = process.env.OWNER_ID;
   let catVip = findCategory(guild, CONFIG.categories.vipDonadores);
@@ -1929,6 +2018,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-guias', description: 'Crea el foro 📚│guías-roba-un-huevo con tags', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'publicar-guia', description: 'Publica una guía con imagen en el foro', options: [{ name: 'titulo', description: 'Título de la guía', type: 3, required: true }, { name: 'categoria', description: 'Categoría', type: 3, required: true, choices: [{ name: '🟢 Principiantes', value: 'Principiantes' }, { name: '🥚 Huevos', value: 'Huevos' }, { name: '🔔 Notificaciones', value: 'Notificaciones' }, { name: '🔀 Fusiones', value: 'Fusiones' }, { name: '🦋 Mariposas', value: 'Mariposas' }, { name: '💼 Chambeadores', value: 'Chambeadores' }, { name: '💡 Trucos', value: 'Trucos' }] }, { name: 'descripcion', description: 'Texto paso a paso', type: 3, required: true }, { name: 'imagen', description: 'Imagen principal', type: 11, required: true }, { name: 'imagen2', description: 'Imagen extra opcional', type: 11, required: false }, { name: 'imagen3', description: 'Imagen extra opcional', type: 11, required: false }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'fix-canales-leyenda-booster', description: 'FIX: crea canales faltantes y limpia chat-leyendas', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     ]});
     console.log('✅ Comandos V6 registrados');
   } catch (e) {
@@ -2563,6 +2653,12 @@ client.on(Events.InteractionCreate, async inter => {
           await crearPanelActivos(activos);
           await logs.send({ content: `✅ Logs privados Chambeadores inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
           return inter.editReply({ content: `✅ Chambeadores V6.5:\n- ${recluta}\n- ${activos}\n- ${chat} <- **NUEVO CHAT 30s solo chambeadores + tú**\n- ${logs} (SOLO TU)\n\nComunidad para pagar: ${CHAMBEADORES_LINKS.comunidad}` });
+        }
+                if(inter.commandName === 'fix-canales-leyenda-booster'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const logs = await fixCanalesFaltantes(inter.guild);
+          return inter.editReply({ content: logs.join('\n') || 'Sin cambios' });
         }
                 if(inter.commandName === 'setup-apoyo'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
