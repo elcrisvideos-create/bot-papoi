@@ -1490,13 +1490,25 @@ client.on(Events.MessageCreate, async msg => {
   const member = msg.member;
   if(!member) return;
   
-  if(!isOwner(msg.author.id)){
+  // --- FILTRO MULTIMEDIA: OWNER = en cualquier lado, ACTIVO+ = solo #multimedia, resto = nada ---
+  if (msg.attachments.size > 0 && !isOwner(msg.author.id)) {
     const esMultimedia = msg.channel.name.toLowerCase().includes('multimedia');
-    if(!esMultimedia && msg.attachments.size > 0){
+    const esActivoOMas = member.roles.cache.some(r => 
+      ['papoi activo','papoi fiel','papoi veterano','papoi leyenda','papoi mayor','moderador'].includes(r.name.toLowerCase())
+    );
+
+    if (!esMultimedia) {
       await msg.delete().catch(()=>{});
       const canalMulti = findChannel(msg.guild, CONFIG.channels.multimedia);
       const warn = await msg.channel.send({ content: `${msg.author} ❌ Multimedia **solo** en ${canalMulti ? `<#${canalMulti.id}>` : '#multimedia'}` }).catch(()=>{});
       if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 5000);
+      return;
+    }
+
+    if (!esActivoOMas) {
+      await msg.delete().catch(()=>{});
+      const warn = await msg.channel.send({ content: `${msg.author} ❌ Necesitas ser **Papoi Activo (500 XP)** para mandar multimedia aquí` }).catch(()=>{});
+      if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 8000);
       return;
     }
   }
