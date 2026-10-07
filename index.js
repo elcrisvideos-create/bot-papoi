@@ -875,47 +875,28 @@ async function ensureVipDonadoresCategory(guild){
 async function actualizarSoloTienda(guild){
   const tienda = findChannel(guild, CONFIG.channels.apoyoTienda);
   if(!tienda) return null;
-
   try{
-    const msgs = await tienda.messages.fetch({ limit: 40 }).catch(()=>null);
+    const msgs = await tienda.messages.fetch({ limit: 100 }).catch(()=>null);
     if(msgs){
-      for(const m of msgs.values()){
-        if(m.author.id === client.user.id) await m.delete().catch(()=>{});
-        await new Promise(r=>setTimeout(r,200));
-      }
+      const old = msgs.filter(m=>m.author.id===client.user.id);
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,200)); }
     }
   }catch{}
+  const ordenada = [...DONADOR_TIENDA].sort((a,b)=>a.price-b.price);
 
-  const ordenada = [...DONADOR_TIENDA].sort((a,b) => a.price - b.price);
+  // Header igual a tu backup bonito
+  const embedHeader = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Tienda Oficial Roblox').setDescription(`**Compra aquí y el Robux va directo al grupo para sorteos:**\n${ordenada.map(t=>`• **${t.name}** - ${t.price} R$ - [Ver](${t.url}) - +${t.puntos} pts`).join('\n')}\n\n**Grupo:** ${DONADOR_LINKS.grupoTienda}\n**Perfil:** ${DONADOR_LINKS.perfil}\n\n> 📦 **${ordenada.length} productos** - del más barato al más caro`).setThumbnail(guild.iconURL()).setFooter({ text: `Papois Empire • Tienda Oficial` }).setTimestamp();
+  const rowTienda = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('🛒 Ver Tienda Comunidad').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.grupoTienda), new ButtonBuilder().setLabel('👤 Ver Mi Perfil').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.perfil));
+  await tienda.send({ embeds: [embedHeader], components: [rowTienda] }).catch(()=>{});
 
-  const header = new EmbedBuilder()
-   .setColor(0xF1C40F)
-   .setTitle(`🥚 Tienda Oficial - ${ordenada.length} items por precio`)
-   .setDescription(`Del más barato al más caro.\nTodo el Robux va a: ${DONADOR_LINKS.grupoTienda}`)
-   .setTimestamp();
-  await tienda.send({ embeds: [header] }).catch(()=>{});
-
+  // Cada item con miniatura a la derecha como ping-roles
   for(const item of ordenada){
-    let thumb = null;
-    try{
-      const r = await axios.get(`https://thumbnails.roblox.com/v1/assets?assetIds=${item.id}&size=420x420&format=Png&isCircular=false`, { timeout: 6000 });
-      thumb = r.data?.data?.[0]?.imageUrl || null;
-    }catch{}
-
-    const embed = new EmbedBuilder()
-     .setColor(0xFFFFFF)
-     .setTitle(`${item.name} - ${item.price} R$`)
-     .setDescription(`**+${item.puntos} pts** • [Ver en Roblox](${item.url})\nID: \`${item.id}\``)
-     .setFooter({ text: `Ordenado por precio • ${item.price} Robux` });
-
-    if(thumb) embed.setImage(thumb); // ESTO es la vista previa grande
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel(`Comprar ${item.price}R$`).setStyle(ButtonStyle.Link).setURL(item.url)
-    );
-
+    let thumb=null; try{ const r=await axios.get(`https://thumbnails.roblox.com/v1/assets?assetIds=${item.id}&size=420x420&format=Png&isCircular=false`,{timeout:6000}); thumb=r.data?.data?.[0]?.imageUrl||null; }catch{}
+    const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🥚 ${item.name} - ${item.price} R$`).setDescription(`**+${item.puntos} pts** • [Ver en 【entity-Roblox¦canonical_name=Roblox】](${item.url})\nID: \`${item.id}\``).setFooter({ text: `Tienda Oficial • ${item.price} Robux` }).setTimestamp();
+    if(thumb) embed.setThumbnail(thumb); // <- aquí está la técnica de ping-roles
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel(`Comprar ${item.price} R$`).setStyle(ButtonStyle.Link).setURL(item.url));
     await tienda.send({ embeds: [embed], components: [row] }).catch(()=>{});
-    await new Promise(r=>setTimeout(r,400));
+    await new Promise(r=>setTimeout(r,350));
   }
   return tienda;
 }
