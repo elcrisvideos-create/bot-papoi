@@ -549,6 +549,24 @@ async function ensureFusionesChannel(guild){
   return canal;
 }
 
+async function ensureMultimediaChannel(guild){
+  const canal = findChannel(guild, CONFIG.channels.multimedia);
+  if(!canal) return;
+  try{
+    // agarra automático todos los que tienen 500 XP o más + mayor y moderador
+    const rolesPermitidos = [...NIVELES.filter(n=>n.xp>=500).map(n=>n.name), 'papoi mayor', 'moderador'];
+    await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel:true, ReadMessageHistory:true, SendMessages:false }).catch(()=>{});
+    const rolPapoiBase = findRole(guild, 'papoi');
+    if(rolPapoiBase) await canal.permissionOverwrites.edit(rolPapoiBase.id, { ViewChannel:true, ReadMessageHistory:true, SendMessages:false }).catch(()=>{});
+    for(const name of rolesPermitidos){
+      const r = findRole(guild, name);
+      if(r) await canal.permissionOverwrites.edit(r.id, { ViewChannel:true, ReadMessageHistory:true, SendMessages:true, AttachFiles:true, EmbedLinks:true }).catch(()=>{});
+    }
+    await canal.permissionOverwrites.edit(client.user.id, { ViewChannel:true, SendMessages:true, ManageMessages:true, ReadMessageHistory:true, EmbedLinks:true, AttachFiles:true }).catch(()=>{});
+    await canal.setRateLimitPerUser(600).catch(()=>{});
+  }catch{}
+}
+
 async function ensureChambeadorRoles(guild){
   const rolesToCreate = [
     { name: CHAMBEADORES_ROLES.novato, color: 0x2ECC71, reason: 'Rol Chambeador Novato' },
@@ -1402,6 +1420,7 @@ client.on(Events.ClientReady, async () => {
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if(guild){
     await ensureButterflyRole(guild);
+    await ensureMultimediaChannel(guild).catch(()=>{});
     await fixPapoisAlIniciar(guild).catch(e=>console.log('fixPapois', e.message));
     const general = findChannel(guild, CONFIG.channels.general);
     if(general) {
