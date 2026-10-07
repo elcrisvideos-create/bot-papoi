@@ -72,6 +72,7 @@ const CONFIG = {
     chambeadoresRecluta: ['reclutamiento-chambeadores', '💼│reclutamiento-chambeadores', 'reclutamiento'],
     chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos'],
     chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores'],
+    chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
     guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo']
   },
   categories: {
@@ -630,6 +631,42 @@ async function ensureChambeadoresChannels(guild){
     }).catch(()=>null);
   }
 
+  // --- NUEVO CANAL CHAT CHAMBEADORES ---
+  let chat = findChannel(guild, CONFIG.channels.chambeadoresChat);
+  const overwritesChat = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+    { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+  ];
+  if(novatoRole) overwritesChat.push({ id: novatoRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages] });
+  if(expRole) overwritesChat.push({ id: expRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages] });
+  if(vetRole) overwritesChat.push({ id: vetRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages] });
+  if(confRole) overwritesChat.push({ id: confRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages] });
+  if(baneadoRole) overwritesChat.push({ id: baneadoRole.id, deny: [PermissionFlagsBits.ViewChannel] });
+
+  if(!chat){
+    chat = await guild.channels.create({
+      name: '💬│chat-chambeadores',
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: '💬 Chat exclusivo chambeadores - Dudas con el Papoi Mayor - Slowmode 30s',
+      rateLimitPerUser: 30,
+      permissionOverwrites: overwritesChat
+    }).catch(()=>null);
+  } else {
+    await chat.setRateLimitPerUser(30).catch(()=>{});
+    try{
+      await chat.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false }).catch(()=>{});
+      await chat.permissionOverwrites.edit(client.user.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true, ManageChannels: true }).catch(()=>{});
+      await chat.permissionOverwrites.edit(ownerId, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true, ManageChannels: true }).catch(()=>{});
+      if(baneadoRole) await chat.permissionOverwrites.edit(baneadoRole.id, { ViewChannel: false }).catch(()=>{});
+      if(novatoRole) await chat.permissionOverwrites.edit(novatoRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true }).catch(()=>{});
+      if(expRole) await chat.permissionOverwrites.edit(expRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true }).catch(()=>{});
+      if(vetRole) await chat.permissionOverwrites.edit(vetRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true }).catch(()=>{});
+      if(confRole) await chat.permissionOverwrites.edit(confRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true }).catch(()=>{});
+    }catch{}
+  }
+
   let logs = findChannel(guild, CONFIG.channels.chambeadoresLogs);
   if(!logs){
     logs = await guild.channels.create({
@@ -643,17 +680,8 @@ async function ensureChambeadoresChannels(guild){
         { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] },
       ]
     }).catch(()=>null);
-  } else {
-    try{
-      await logs.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false }).catch(()=>{});
-      await logs.permissionOverwrites.edit(ownerId, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true }).catch(()=>{});
-      const modRole = findRole(guild, 'moderador');
-      const mayorRole = findRole(guild, 'papoi mayor');
-      if(modRole) await logs.permissionOverwrites.edit(modRole.id, { ViewChannel: false }).catch(()=>{});
-      if(mayorRole && mayorRole.id!== ownerId) await logs.permissionOverwrites.edit(mayorRole.id, { ViewChannel: false }).catch(()=>{});
-    }catch{}
   }
-  return { recluta, activos, logs };
+  return { recluta, activos, chat, logs };
 }
 
 async function ensureGuiasChannel(guild){
@@ -2022,12 +2050,12 @@ client.on(Events.InteractionCreate, async inter => {
             return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
           }
           if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo el dueño (OWNER_ID) puede crear chambeadores.' });
-          const { recluta, activos, logs } = await ensureChambeadoresChannels(inter.guild);
-          if(!recluta ||!activos ||!logs) return inter.editReply({ content: '❌ No pude crear los 3 canales. Revisa permisos.' });
+          const { recluta, activos, chat, logs } = await ensureChambeadoresChannels(inter.guild);
+          if(!recluta ||!activos ||!chat ||!logs) return inter.editReply({ content: '❌ No pude crear los 3 canales. Revisa permisos.' });
           await crearPanelReclutamiento(recluta);
           await crearPanelActivos(activos);
           await logs.send({ content: `✅ Logs privados Chambeadores inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
-          return inter.editReply({ content: `✅ Chambeadores V6.5:\n- ${recluta} (público registro + corregir)\n- ${activos} (solo chambeadores, reporte + renunciar, pago 100/200)\n- ${logs} (SOLO TU - OWNER)\nRoles: ${Object.values(CHAMBEADORES_ROLES).join(', ')}\n\nComunidad para pagar: ${CHAMBEADORES_LINKS.comunidad}` });
+          return inter.editReply({ content: `✅ Chambeadores V6.5:\n- ${recluta}\n- ${activos}\n- ${chat} <- **NUEVO CHAT 30s solo chambeadores + tú**\n- ${logs} (SOLO TU)\n\nComunidad para pagar: ${CHAMBEADORES_LINKS.comunidad}` });
         }
         if(inter.commandName === 'mis-fusiones'){
           const mine = fusionesQueue.filter(r=>r.userId===inter.user.id);
