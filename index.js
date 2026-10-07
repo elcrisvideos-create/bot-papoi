@@ -885,14 +885,14 @@ async function actualizarSoloTienda(guild){
   const ordenada = [...DONADOR_TIENDA].sort((a,b)=>a.price-b.price);
 
   // Header igual a tu backup bonito
-  const embedHeader = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Tienda Oficial Roblox').setDescription(`**Compra aquí y el Robux va directo al grupo para sorteos:**\n${ordenada.map(t=>`• **${t.name}** - ${t.price} R$ - [Ver](${t.url}) - +${t.puntos} pts`).join('\n')}\n\n**Grupo:** ${DONADOR_LINKS.grupoTienda}\n**Perfil:** ${DONADOR_LINKS.perfil}\n\n> 📦 **${ordenada.length} productos** - del más barato al más caro`).setThumbnail(guild.iconURL()).setFooter({ text: `Papois Empire • Tienda Oficial` }).setTimestamp();
+  const embedHeader = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Tienda Oficial Roblox').setDescription(`**Compra aquí y el Robux va directo al grupo para sorteos:**\n${ordenada.map(t=>`• **${t.name}** - ${t.price} R$ - [Ver](${t.url}) - +${t.puntos} pts`).join('\n')}\n\n> 📦 **${ordenada.length} productos** - del más barato al más caro`).setThumbnail(guild.iconURL({ extension: 'png', size: 128 }) || client.user.displayAvatarURL()).setFooter({ text: `Papois Empire • Tienda Oficial` }).setTimestamp();
   const rowTienda = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('🛒 Ver Tienda Comunidad').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.grupoTienda), new ButtonBuilder().setLabel('👤 Ver Mi Perfil').setStyle(ButtonStyle.Link).setURL(DONADOR_LINKS.perfil));
   await tienda.send({ embeds: [embedHeader], components: [rowTienda] }).catch(()=>{});
 
   // Cada item con miniatura a la derecha como ping-roles
   for(const item of ordenada){
     let thumb=null; try{ const r=await axios.get(`https://thumbnails.roblox.com/v1/assets?assetIds=${item.id}&size=420x420&format=Png&isCircular=false`,{timeout:6000}); thumb=r.data?.data?.[0]?.imageUrl||null; }catch{}
-    const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🥚 ${item.name} - ${item.price} R$`).setDescription(`**+${item.puntos} pts** • [Ver en 【entity-Roblox¦canonical_name=Roblox】](${item.url})\nID: \`${item.id}\``).setFooter({ text: `Tienda Oficial • ${item.price} Robux` }).setTimestamp();
+    const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🥚 ${item.name} - ${item.price} R$`).setDescription(`**+${item.puntos} pts** • [Ver en Roblox](${item.url})\nID: \`${item.id}\``).setFooter({ text: `Tienda Oficial • ${item.price} Robux` }).setTimestamp();
     if(thumb) embed.setThumbnail(thumb); // <- aquí está la técnica de ping-roles
     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel(`Comprar ${item.price} R$`).setStyle(ButtonStyle.Link).setURL(item.url));
     await tienda.send({ embeds: [embed], components: [row] }).catch(()=>{});
