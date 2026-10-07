@@ -853,10 +853,30 @@ function limpiarDuplicadosFusiones(){
   return eliminados;
 }
 function checkCompatibilidad(fusionId, haveA, haveB){
-  const f = FUSIONES[fusionId]; if(!f) return false;
-  if(f.id==='enchanted') return haveA==='AMBOS' && haveB==='AMBOS';
-  if(haveA==='AMBOS' || haveB==='AMBOS') return true;
-  return haveA!== haveB;
+  const f = FUSIONES[fusionId];
+  if(!f) return false;
+  const norm = s => (s||'').trim().toLowerCase();
+  const a = norm(haveA);
+  const b = norm(haveB);
+
+  // Enchanted: ambos OBLIGATORIO tener los 2
+  if(f.id === 'enchanted'){
+    return a === 'ambos' && b === 'ambos';
+  }
+
+  // Angeles: valida que el pet pertenezca a ESA fusión
+  const valid = f.pets.map(p => norm(p));
+  const isValid = h => h === 'ambos' || valid.includes(h);
+  if(!isValid(a) ||!isValid(b)) return false;
+
+  // Si uno tiene AMBOS, es compatible con cualquiera de esa misma fusión
+  if(a === 'ambos' || b === 'ambos') return true;
+
+  // Si no, tienen que ser diferentes de la misma fusión
+  // ArchAngel!= World Burner = OK
+  // Skeleton Horse!= Pegasus = OK
+  // ArchAngel!= Skeleton Horse = NO (ya filtrado por isValid)
+  return a!== b;
 }
 async function crearPanelFusiones(channel){
   try{
@@ -1193,7 +1213,7 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
         if(!check.valid){
           return inter.reply({ content: check.reason, flags: MessageFlags.Ephemeral });
         }
-                const compatibleReq=fusionesQueue.find(r=>getGrupoFusion(r.fusionId)===getGrupoFusion(fusionId) && r.userId!==inter.user.id && checkCompatibilidad(fusionId, r.have, havePet));
+                const compatibleReq=fusionesQueue.find(r=>r.fusionId===fusionId && r.userId!==inter.user.id && checkCompatibilidad(fusionId, r.have, havePet));
         if(compatibleReq){ 
           const myReq={ userId: inter.user.id, fusionId, have: havePet, robloxUser: check.value, createdAt: Date.now() }; 
           await inter.reply({ content: '✅ Pareja instantánea! Creando canal...', flags: MessageFlags.Ephemeral }); 
