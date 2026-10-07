@@ -1506,17 +1506,25 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if(!guild) return;
     const member = await guild.members.fetch(user.id).catch(()=>null);
     if(!member) return;
-    if(isPapoiMayor(member)) return; // Papoi Mayor sí puede poner reacciones nuevas
+    if(isPapoiMayor(member)) return; // tú si puedes poner nuevos
 
-    // Si el contador es >1, significa que ese emoji YA EXISTÍA y el usuario solo le dio click -> PERMITIR
-    if(reaction.count > 1){
+    // Veamos quien puso ese emoji primero
+    const users = await reaction.users.fetch().catch(()=>null);
+    if(!users) return;
+    
+    const loPusoAlguienConPermiso = [...users.values()].some(u => {
+      if(u.id === client.user.id) return true;
+      if(isOwner(u.id)) return true;
+      const m = guild.members.cache.get(u.id);
+      return m && m.roles.cache.some(r => r.name.toLowerCase() === 'papoi mayor');
+    });
+
+    if(loPusoAlguienConPermiso){
       console.log(`✅ Reacción permitida ${reaction.emoji.name} de ${user.tag} count=${reaction.count}`);
-      return;
+      return; // si lo pusiste tú, los demás si pueden darle click
     }
 
-    // Si contador ==1, es un emoji NUEVO que puso un usuario normal -> BORRAR
-    const botMember = guild.members.me;
-    if (!botMember.permissions.has(PermissionFlagsBits.ManageMessages)) return;
+    // si nadie con permiso lo puso, es emoji nuevo de un usuario normal -> borrar
     await reaction.users.remove(user.id).catch(()=>{});
     console.log(`🚫 Reacción nueva de ${user.tag} borrada: ${reaction.emoji.name}`);
   }catch(e){
