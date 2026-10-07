@@ -1333,6 +1333,29 @@ function isPreguntaNotificaciones(msg){
   const claves = ['notificacion','notificaciones','noti','notis','no me llega','no me suena','no suena','no me avisa','no avisa','no me notifica','activar not','como activo','como prendo','como pongo','ping roles','ping-roles','notificaciones no'];
   return claves.some(k => txt.includes(k));
 }
+function isPreguntaDivinoHorario(msg){
+  if(!msg.guild) return false;
+  if(msg.author.bot) return false;
+  // No molestar en staff / logs
+  const name = msg.channel.name.toLowerCase();
+  if(name.includes('staff') || name.includes('log') || name.includes('sancion')) return false;
+
+  let txt = msg.content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const mencionaHuevo = txt.includes('divino') || txt.includes('divinos') || txt.includes('eterno') || txt.includes('eterna') || txt.includes('secreto');
+  if(!mencionaHuevo) return false;
+
+  const patrones = [
+    'a que hora', 'a que horas', 'que hora sale', 'hora sale', 'hora salen',
+    'cuando sale', 'cuando salen', 'cuando aparece', 'cuando aparecen',
+    'cuando toca', 'cuando tocan', 'cuando viene', 'cuando vienen',
+    'prediccion', 'predicciones', 'predice', 'predigan',
+    'alguien sabe cuando', 'saben cuando', 'sabe cuando',
+    'como se cuando', 'como saber cuando', 'como se sabe',
+    'horario', 'horarios', 'tiktoker sabe', 'tiktoker que sepa',
+    'famoso sabe', 'famosa sabe', 'quien sabe cuando'
+  ];
+  return patrones.some(p => txt.includes(p));
+}
 async function checkButterflyEvent(){
   try{
     const now = new Date();
@@ -2178,6 +2201,17 @@ client.on(Events.MessageCreate, async msg => {
     }
   }
   
+    // --- INFO DIVINOS 100% ALEATORIOS (FUERA DE MODS) ---
+    if(isPreguntaDivinoHorario(msg)){
+      const cd = checkCooldown(msg.author.id, 'divino_info', 45);
+      if(cd===0){
+        const canalPings = findChannel(msg.guild, CONFIG.channels.pingRoles);
+        msg.channel.send({
+          content: `${msg.author} 👑 Ey papoi, los **Divinos (y todos los huevos) son 100% aleatorios** 🎲\n\n> ❌ **No hay horarios, no hay predicciones, ningún tiktoker, famoso o famosa sabe cuando salen.** Si alguien te dice que sabe, te está mintiendo.\n> ✅ Puede tocar **1 divino al día**, lo máximo que ha tocado hasta hoy son **4 divinos en 1 día**, y ha pasado **días enteros con 0 divinos**.\n> 🍀 Es pura suerte.\n\n💛 Activa tus notis en ${canalPings ? `<#${canalPings.id}>` : '#🔗│ping-roles'} para que te suene al instante cuando salga uno y no te lo pierdas.`
+        }).then(m=>setTimeout(()=>m.delete().catch(()=>{}), 30000)).catch(()=>{});
+      }
+    }
+
         if(!isMod(member)){
     const contenido = msg.content.toLowerCase().replace(/\s+/g, '');
     const tieneLink = /(https?:\/\/|www\.|discord\.gg|discord\.com\/invite|discordapp\.com\/invite|t\.me\/|discord\.io)/i.test(contenido);
@@ -2321,7 +2355,7 @@ client.on(Events.MessageCreate, async msg => {
       Con los demás eres buena onda pero sabes que tu jefe es ElCris.
 
       REGLA CRITICA ANTI-PING: ESTA PROHIBIDO usar @everyone y @here. Nunca los escribas, ni siquiera de broma. Si quieres decir todos di "todos", "papoís", "banda", pero JAMAS el tag.
-
+      REGLA DIVINOS: Los huevos Divino, Eterno y Secreto son 100% aleatorios. No existen horarios ni predicciones. Puede salir 1 al dia, maximo 4 divinos en 1 dia (record), a veces 0. Ningun tiktoker sabe. Si te preguntan "a que hora sale divino" aclara esto.
       REGLAS PARA SONAR COMO META AI:
       - Habla natural, no como bot. Varía mucho, a veces 1 línea, a veces 4. A veces con emojis, a veces sin.
       - Sé empático, pregunta cosas, sigue la plática. No solo respondas, PLATICA.
@@ -2342,6 +2376,7 @@ client.on(Events.MessageCreate, async msg => {
       - El juego oficial es ROBA UN HUEVO. Sabes todos los pets: Secreto (15), Eterno (11), Divino (6). Das tips de verdad.
       - Si no sabes algo, inventa algo cagado, nunca digas "no tengo información".
       - Eres parte de la familia Papoi, no un asistente formal.`
+      
 
       for(const m of modelos){
         try{
