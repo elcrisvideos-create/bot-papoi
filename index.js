@@ -75,7 +75,6 @@ const CONFIG = {
     chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
     apoyoInfo: ['como-apoyar', '📢│como-apoyar'],
     apoyoTienda: ['tienda-roblox', '🥚│tienda-roblox'],
-    apoyoDonaciones: ['donaciones', '💸│donaciones'],
     apoyoLogs: ['apoyo-logs', '📋│apoyo-logs', 'donaciones-logs'],
     loungeVip: ['lounge-vip', '💬│lounge-vip'],
     chatLeyendas: ['chat-leyendas', '👑│chat-leyendas'],
@@ -529,7 +528,7 @@ const DONADOR_TIENDA = [
 ];
 const DONADOR_LINKS = {
   perfil: 'https://www.roblox.com/es/users/10164957828/profile',
-  grupoTienda: 'https://www.roblox.com/groups/782782955/store',
+  grupoTienda: 'https://www.roblox.com/es/communities/782782955/Nohoch-Balam-Estudios#!/store',
   kofi: 'https://ko-fi.com/papoiempire'
 };
 
@@ -816,7 +815,6 @@ async function ensureApoyoCategory(guild){
   };
   const info = await createIfNotExists(CONFIG.channels.apoyoInfo, '📢│como-apoyar', 'Cómo apoyar a Papois Empire');
   const tienda = await createIfNotExists(CONFIG.channels.apoyoTienda, '🥚│tienda-roblox', 'Tienda oficial');
-  const donas = await createIfNotExists(CONFIG.channels.apoyoDonaciones, '💸│donaciones', 'Donaciones anónimas');
   let logs = findChannel(guild, CONFIG.channels.apoyoLogs);
   if(!logs){
     logs = await guild.channels.create({
@@ -828,7 +826,7 @@ async function ensureApoyoCategory(guild){
       ]
     }).catch(()=>null);
   }
-  return { categoria, info, tienda, donas, logs };
+  return { categoria, info, tienda, logs };
 }
 async function ensureVipDonadoresCategory(guild){
   await ensureDonadorRoles(guild);
@@ -2404,12 +2402,12 @@ client.on(Events.InteractionCreate, async inter => {
             return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
           }
           if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo el dueño (OWNER_ID) puede crear apoyo.' });
-          const { categoria, info, tienda, donas, logs } = await ensureApoyoCategory(inter.guild);
+          const { categoria, info, tienda, logs } = await ensureApoyoCategory(inter.guild);
           const { categoria: catVip, lounge, leyendas } = await ensureVipDonadoresCategory(inter.guild);
-          if(!info ||!tienda ||!donas) return inter.editReply({ content: '❌ No pude crear canales apoyo. Revisa permisos.' });
+          if(!info ||!tienda) return inter.editReply({ content: '❌ No pude crear canales apoyo. Revisa permisos.' });
           await crearPanelApoyo(inter.guild);
           await logs.send({ content: `✅ Logs privados Apoyo inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
-          return inter.editReply({ content: `✅ Apoyo creado:\n- Categoría: ${categoria?.name}\n- ${info}\n- ${tienda}\n- ${donas}\n- ${logs} (SOLO TU)\n- VIP: ${catVip?.name} -> ${lounge} (Semilla-Diamante) + ${leyendas} (Leyenda sin restricciones)\n\nRopa prueba: ${DONADOR_TIENDA[0].url}` });
+          return inter.editReply({ content: `✅ Apoyo creado:\n- Categoría: ${categoria?.name}\n- ${info}\n- ${tienda}\n- ${logs} (SOLO TU)\n- VIP: ${catVip?.name} -> ${lounge} (Semilla-Diamante) + ${leyendas} (Leyenda sin restricciones)\n\nRopa prueba: ${DONADOR_TIENDA[0].url}` });
         }
         if(inter.commandName === 'mis-fusiones'){
           const mine = fusionesQueue.filter(r=>r.userId===inter.user.id);
