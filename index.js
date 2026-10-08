@@ -2204,27 +2204,36 @@ client.on(Events.MessageCreate, async msg => {
   const member = msg.member;
   if(!member) return;
   
-  // --- FILTRO MULTIMEDIA: OWNER = en cualquier lado, ACTIVO+ = solo #multimedia, resto = nada ---
-  if (msg.attachments.size > 0 && !isOwner(msg.author.id)) {
-    const esMultimedia = msg.channel.name.toLowerCase().includes('multimedia');
+  // --- FILTRO MULTIMEDIA FIX V6.8 - bloquea texto y replies sin imagen ---
+  const esMultimedia = msg.channel.name.toLowerCase().includes('multimedia');
+  if (esMultimedia && !isOwner(msg.author.id) && !isMod(member)) {
     const esActivoOMas = member.roles.cache.some(r => 
       ['papoi activo','papoi fiel','papoi veterano','papoi leyenda','papoi mayor','moderador'].includes(r.name.toLowerCase())
     );
+    const soloTexto = msg.attachments.size === 0;
+    const noEsImagen = [...msg.attachments.values()].some(a => !a.contentType?.startsWith('image/'));
 
-    if (!esMultimedia) {
+    if (soloTexto || noEsImagen) {
       await msg.delete().catch(()=>{});
-      const canalMulti = findChannel(msg.guild, CONFIG.channels.multimedia);
-      const warn = await msg.channel.send({ content: `${msg.author} ❌ Multimedia **solo** en ${canalMulti ? `<#${canalMulti.id}>` : '#multimedia'}` }).catch(()=>{});
-      if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 5000);
+      const w = await msg.channel.send({ content: `${msg.author} ❌ En ${msg.channel} **solo imágenes**, sin texto.` }).catch(()=>{});
+      if(w) setTimeout(()=>w.delete().catch(()=>{}), 6000);
       return;
     }
-
     if (!esActivoOMas) {
       await msg.delete().catch(()=>{});
-      const warn = await msg.channel.send({ content: `${msg.author} ❌ Necesitas ser **Papoi Activo (500 XP)** para mandar multimedia aquí` }).catch(()=>{});
-      if(warn) setTimeout(()=>warn.delete().catch(()=>{}), 8000);
+      const w = await msg.channel.send({ content: `${msg.author} ❌ Necesitas **Papoi Activo (500 XP)**` }).catch(()=>{});
+      if(w) setTimeout(()=>w.delete().catch(()=>{}), 8000);
       return;
     }
+    return; // deja que el slowmode de 10min haga su chamba
+  }
+  // Fuera de multimedia
+  if (msg.attachments.size > 0 && !isOwner(msg.author.id) && !isMod(member) && !esMultimedia) {
+    await msg.delete().catch(()=>{});
+    const canalMulti = findChannel(msg.guild, CONFIG.channels.multimedia);
+    const w = await msg.channel.send({ content: `${msg.author} ❌ Multimedia **solo** en ${canalMulti ? `<#${canalMulti.id}>` : '#multimedia'}` }).catch(()=>{});
+    if(w) setTimeout(()=>w.delete().catch(()=>{}), 5000);
+    return;
   }
   
     // --- INFO DIVINOS 100% ALEATORIOS (FUERA DE MODS) ---
