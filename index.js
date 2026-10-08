@@ -63,7 +63,8 @@ const CONFIG = {
     live: ['elcris-en-vivo', 'en-vivo', 'live'],
     pingRoles: ['ping-roles', '🔗 | ping-roles', '🔗│ping-roles'],
     butterfly: ['floracion-mariposas', 'floración-mariposas', 'mariposas', 'butterfly', 'butterfly-bloom', 'evento-mariposas'],
-    apariciones: ['apariciones-en-vivo', 'ultimas-apariciones'],
+    apariciones: ['📜┃ultimas-apariciones', 'ultimas-apariciones', '📜│ultimas-apariciones'],
+    aparicionesEnVivo: ['apariciones-en-vivo'],
     staffChat: ['chat staff', 'staff-chat', '💬 | chat-staff'],
     staffAnuncios: ['anuncios staff', 'anuncios-staff', '📢 | anuncios-staff'],
     staffLogs: ['logs tickets', 'tickets-logs', '🎫 | logs-tickets'],
@@ -2089,7 +2090,7 @@ client.on(Events.GuildMemberAdd, async member => {
     const nivelesCanal = findChannel(guild, CONFIG.channels.nivelesPapoi);
     const fusionesCanal = findChannel(guild, CONFIG.channels.fusiones);
     const chambaCanal = findChannel(guild, CONFIG.channels.chambeadoresRecluta);
-    const aparicionesCanal = findChannel(guild, CONFIG.channels.apariciones);
+    const aparicionesCanal = guild.channels.cache.get('1554960611497086998') || findChannel(guild, CONFIG.channels.apariciones);
     const guiasCanal = findChannel(guild, CONFIG.channels.guias);
     const apoyoCanal = findChannel(guild, CONFIG.channels.apoyoInfo);
     if(bienvenida){
@@ -2916,7 +2917,7 @@ client.on(Events.InteractionCreate, async inter => {
       const nivelesCanal = findChannel(inter.guild, CONFIG.channels.nivelesPapoi);
       const fusionesCanal = findChannel(inter.guild, CONFIG.channels.fusiones);
       const chambaCanal = findChannel(inter.guild, CONFIG.channels.chambeadoresRecluta);
-      const aparicionesCanal = findChannel(inter.guild, CONFIG.channels.apariciones);
+      const aparicionesCanal = inter.guild.channels.cache.get('1554960611497086998') || findChannel(inter.guild, CONFIG.channels.apariciones);
       const guiasCanal = findChannel(inter.guild, CONFIG.channels.guias);
       const apoyoCanal = findChannel(inter.guild, CONFIG.channels.apoyoInfo);
       if(!bienvenida) return inter.reply({ content: '❌ No canal bienvenida', flags: MessageFlags.Ephemeral });
