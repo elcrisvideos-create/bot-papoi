@@ -35,10 +35,10 @@ try {
     groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
     console.log('✅ IA Papoi con Groq ACTIVA');
   } else {
-    console.log('⚠ GROQ_API_KEY no encontrada - IA desactivada');
+    console.log('⚠️ GROQ_API_KEY no encontrada - IA desactivada');
   }
 } catch(e){
-  console.log('⚠ groq-sdk no instalado - IA desactivada');
+  console.log('⚠️ groq-sdk no instalado - IA desactivada');
 }
 
 // --- MONGODB (NUEVO V6) ---
@@ -952,7 +952,7 @@ async function fixCanalesFaltantes(guild){
     if(catBoost && boostChat.parentId !== catBoost.id) await boostChat.setParent(catBoost.id).catch(()=>{});
     await boostChat.setRateLimitPerUser(0).catch(()=>{});
     if(boosterRole) await boostChat.permissionOverwrites.edit(boosterRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true, EmbedLinks: true }).catch(()=>{});
-    logs.push(`ℹ ${boostChat.name} ya existía, lo moví a ${catBoost?.name} y le quité cooldown`);
+    logs.push(`ℹ️ ${boostChat.name} ya existía, lo moví a ${catBoost?.name} y le quité cooldown`);
   }
 
   // 3. PAPOI LEYENDA XP en 💬・COMUNIDAD PAPOI
@@ -985,7 +985,7 @@ async function fixCanalesFaltantes(guild){
     await chatXp.setRateLimitPerUser(0).catch(()=>{});
     if(rolPapoiLeyenda) await chatXp.permissionOverwrites.edit(rolPapoiLeyenda.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, AttachFiles: true, EmbedLinks: true }).catch(()=>{});
     if(rolDonadorLeyenda) await chatXp.permissionOverwrites.edit(rolDonadorLeyenda.id, { ViewChannel: false }).catch(()=>{});
-    logs.push(`ℹ ${chatXp.name} ya existía, lo moví a ${catComu?.name} y arreglé perms`);
+    logs.push(`ℹ️ ${chatXp.name} ya existía, lo moví a ${catComu?.name} y arreglé perms`);
   }
 
   return logs;
@@ -1165,7 +1165,7 @@ async function handleApoyoInteraction(inter){
         const tipo = inter.values[0];
         if(tipo === 'ropa'){
           const options = DONADOR_TIENDA.map(t=> ({ label: `${t.name} - ${t.price} R$`, value: `ropa_${t.id}_${t.puntos}`, description: `+${t.puntos} pts`, emoji: '🥚' }));
-          options.push({ label: 'Otra cantidad / Otra playera', value: 'ropa_otra', description: 'Especificar manualmente', emoji: '✏' });
+          options.push({ label: 'Otra cantidad / Otra playera', value: 'ropa_otra', description: 'Especificar manualmente', emoji: '✏️' });
           const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('apoyo_select_ropa').setPlaceholder('¿Qué ropa compraste?').addOptions(options.slice(0,25)));
           return inter.update({ content: '🥚 **¿Qué ropa compraste?**', components: [row] });
         } else if(tipo === 'robux_directo'){
@@ -1199,7 +1199,7 @@ async function handleApoyoInteraction(inter){
           const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: categoria?.id || null, topic: `Ticket donación ${inter.user.id} - ropa ${id} - ${puntos} pts`, permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }, { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }] }).catch(()=>null);
           if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket.' });
           const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Ticket Ropa - Verificación').setDescription(`**Usuario:** <@${inter.user.id}> (${inter.user.id})\n**Tipo:** Ropa comunidad\n**Item:** ${tiendaItem? tiendaItem.name : id} - ${puntos} pts\n**Link:** ${tiendaItem? tiendaItem.url : 'No registrado'}\n\n**Instrucciones para el usuario:** Sube aquí tu captura de compra donde se vea tu nombre de Roblox.\n\n**Para Owner:** Verifica en https://www.roblox.com/groups/782782955/store > Sales`).setTimestamp();
-          const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_ropa`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏ Modificar cantidad').setStyle(ButtonStyle.Secondary));
+          const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_ropa`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏️ Modificar cantidad').setStyle(ButtonStyle.Secondary));
           await ticket.send({ content: `<@${ownerId}> nuevo ticket ropa`, embeds: [embed], components: [rowOwner] }).catch(()=>{});
           return inter.editReply({ content: `✅ Ticket creado: ${ticket} - Sube tu evidencia ahí.` });
         }
@@ -1218,7 +1218,7 @@ async function handleApoyoInteraction(inter){
         const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: categoria?.id || null, topic: `Ticket donación ${inter.user.id} - ${tipo} - ${puntos} pts`, permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }, { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }] }).catch(()=>null);
         if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket.' });
         const embed = new EmbedBuilder().setColor(tipo==='efectivo'? 0x5865F2 : 0x2ECC71).setTitle(tipo==='robux_directo'? '💸 Ticket Robux Directo' : tipo==='efectivo'? '💵 Ticket Efectivo' : '🥚 Ticket Ropa').setDescription(`**Usuario:** <@${inter.user.id}> (${inter.user.id})\n**Tipo:** ${tipo}\n**Cantidad declarada:** ${cantidadRaw} -> **${puntos} pts**\n**Dato extra:** ${robloxUser}\n\n**Instrucciones usuario:** Sube captura/comprobante aquí.\n\n${tipo==='robux_directo'? `**Verificar en:** ${DONADOR_LINKS.perfil} > Transacciones` : tipo==='ropa'? `**Verificar en:** Grupo > Sales` : `**Verificar en:** Ko-fi Dashboard`}`).setTimestamp();
-        const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_${tipo}`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏ Modificar cantidad').setStyle(ButtonStyle.Secondary));
+        const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_${tipo}`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏️ Modificar cantidad').setStyle(ButtonStyle.Secondary));
         await ticket.send({ content: `<@${ownerId}> nuevo ticket ${tipo}`, embeds: [embed], components: [rowOwner] }).catch(()=>{});
         return inter.editReply({ content: `✅ Ticket creado: ${ticket} - Sube tu evidencia ahí.` });
       }
@@ -1515,7 +1515,7 @@ async function crearPanelFusiones(channel){
     `😇 Divina: ArchAngel + World Burner\n\n`+
     `🌲 **Enchanted Forest**\n`+
     `Royal Skywhale + Celestial Sunlion\n`+
-    `⚠ **OBLIGATORIO tener los 2 (Royal + Celestial) - NO se puede con 1 solo**\n\n`+
+    `⚠️ **OBLIGATORIO tener los 2 (Royal + Celestial) - NO se puede con 1 solo**\n\n`+
     `⚠️ **NOTA ANGELES Y DEMONIOS:**\n`+
     `> No importa el peso/tamaño del pet de tu pareja. Si TÚ metes un pet gigante, a TI te toca fusión gigante. Si tu pareja mete uno chico, a ÉL le toca chica. No busques pareja por peso, los creadores fueron listos.\n\n`+
     `**¿Tienes los 2?** Dale a **Tengo AMBOS** y te emparejamos con cualquiera.\n\n`+
@@ -1641,6 +1641,40 @@ async function crearCanalFusionPrivado(guild, req1, req2){
   if(canalFusiones){ if(req1.messageId) canalFusiones.messages.delete(req1.messageId).catch(()=>{}); if(req2.messageId) canalFusiones.messages.delete(req2.messageId).catch(()=>{}); }
   await saveFusiones(); return canal;
 }
+async function limpiarFusionesUsuario(guild, userId, reason='AUTO'){
+  try{
+    const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
+    // 1. Cola
+    const borradas = fusionesQueue.filter(r=>r.userId===userId);
+    for(const r of borradas){
+      if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{});
+      if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{});
+    }
+    if(borradas.length){
+      fusionesQueue = fusionesQueue.filter(r=>r.userId!==userId);
+      await saveFusiones();
+      console.log(`🧹 ${reason} ${userId} -> ${borradas.length} fusiones borradas`);
+    }
+    // 2. Activas
+    for(const [chanId, data] of [...fusionesActivas.entries()]){
+      if(!data.users.includes(userId)) continue;
+      const canal = guild.channels.cache.get(chanId) || await guild.channels.fetch(chanId).catch(()=>null);
+      const otherId = data.users.find(id=>id!==userId);
+      const otherReq = data.reqs.find(r=>r.userId===otherId);
+      if(otherReq){
+        fusionesQueue.push({...otherReq, createdAt: Date.now(), messageId: null });
+        await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]);
+        if(canal) canal.send({ content: `👋 <@${userId}> se salió del server. <@${otherId}> regresó a #fusiones.`}).catch(()=>{});
+      }
+      setTimeout(async()=>{
+        await canal?.delete().catch(()=>{});
+        fusionesActivas.delete(chanId);
+        await saveFusionesActivas();
+        await saveFusiones();
+      }, 2000);
+    }
+  }catch(e){ console.log('limpiarFusionesUsuario', e.message); }
+}
 function startFusionesScheduler(){
   console.log('🔀 Scheduler Fusiones V6.6 FIX DEFINITIVO iniciado - caza fantasmas cada 30s');
   setTimeout(async ()=>{
@@ -1658,19 +1692,13 @@ function startFusionesScheduler(){
           if(!member) toDeleteUser.add(req.userId);
         }catch{ toDeleteUser.add(req.userId); }
       }
-      for(const userId of toDeleteUser){
-        const borradas = fusionesQueue.filter(r => r.userId === userId);
-        for(const r of borradas){
-          if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{});
-          if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{});
-        }
-        if(borradas.length){ fusionesQueue = fusionesQueue.filter(r => r.userId!== userId); console.log(`🧹 Auto-borrado 30s ${userId} (${borradas.length})`); }
+            for(const userId of toDeleteUser){
+        await limpiarFusionesUsuario(guild, userId, '30s SCHEDULER');
       }
-      if(toDeleteUser.size>0) await saveFusiones();
       limpiarDuplicadosFusiones();
 
       for(const [chanId, data] of [...fusionesActivas.entries()]){
-        const canal = guild.channels.cache.get(chanId);
+        const canal = guild.channels.cache.get(chanId) || await guild.channels.fetch(chanId).catch(()=>null);
         if(!canal){
           console.log(`🧹 Activa huérfana ${chanId} sin canal -> borrando`);
           fusionesActivas.delete(chanId);
@@ -1678,6 +1706,7 @@ function startFusionesScheduler(){
           continue;
         }
         for(const uid of data.users){
+          if(toDeleteUser.has(uid)) continue; // <- FIX CLAVE, ya lo limpió arriba
           const mem = guild.members.cache.get(uid) || await guild.members.fetch(uid).catch(()=>null);
           if(!mem){
             const otherId = data.users.find(id=>id!==uid);
@@ -1718,7 +1747,7 @@ async function handleFusionesInteraction(inter){
       }
       if(inter.customId==='fusion_bioma_enchanted'){
         const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`fusion_have_enchanted_AMBOS`).setLabel(`Tengo Royal + Celestial (AMBOS - OBLIGATORIO)`).setStyle(ButtonStyle.Success));
-        return inter.reply({ content: `🌲 **Enchanted Forest**\n⚠ **OBLIGATORIO tener AMBOS**\nNecesitas: Royal Skywhale + Celestial Sunlion\n\n> No puedes entrar si solo tienes 1, necesitas los 2.`, components: [row], flags: MessageFlags.Ephemeral });
+        return inter.reply({ content: `🌲 **Enchanted Forest**\n⚠️ **OBLIGATORIO tener AMBOS**\nNecesitas: Royal Skywhale + Celestial Sunlion\n\n> No puedes entrar si solo tienes 1, necesitas los 2.`, components: [row], flags: MessageFlags.Ephemeral });
       }
       if(inter.customId==='fusion_mis'){
         const mine=fusionesQueue.filter(r=>r.userId===inter.user.id); if(!mine.length) return inter.reply({ content: '📭 Sin búsquedas.', flags: MessageFlags.Ephemeral });
@@ -1774,7 +1803,7 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
         if(!data){
           // FIX V6.7.1: si el bot se reinició, permite cerrar si es MOD o el canal es de fusión
           if(isMod(inter.member) || inter.channel.name.includes('fusion-')){
-            await inter.reply({ content: '⚠ Datos perdidos por reinicio. Borrando canal como MOD...', flags: MessageFlags.Ephemeral }).catch(()=>{});
+            await inter.reply({ content: '⚠️ Datos perdidos por reinicio. Borrando canal como MOD...', flags: MessageFlags.Ephemeral }).catch(()=>{});
             setTimeout(async ()=>{
               await inter.channel.delete().catch(()=>{});
               fusionesActivas.delete(inter.channelId);
@@ -1889,7 +1918,7 @@ async function handleChambeadoresInteraction(inter){
           new ButtonBuilder().setCustomId('chambeador_renunciar_confirm').setLabel('Sí, renunciar').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId('chambeador_renunciar_cancel').setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
         );
-        return inter.reply({ content: '⚠ ¿Seguro? Perderás rol y XP se reinicia a 0.', components: [row], flags: MessageFlags.Ephemeral });
+        return inter.reply({ content: '⚠️ ¿Seguro? Perderás rol y XP se reinicia a 0.', components: [row], flags: MessageFlags.Ephemeral });
       }
       if(inter.customId === 'chambeador_renunciar_confirm'){
         const data = chambeadoresData[inter.user.id];
@@ -2100,13 +2129,13 @@ client.on(Events.GuildMemberAdd, async member => {
        .setDescription(
           `Ya eres **Papoi**! 🥚\n\n`+
           `**🔔 PASO 1 - OBLIGATORIO:**\n`+
-          `Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙ Configurar notificaciones**\n`+
+          `Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙️ Configurar notificaciones**\n`+
           `> Si no lo haces NO te suena el cel y te pierdes huevos y mariposas 🦋\n\n`+
           `**📚 MINI TUTORIAL:**\n`+
           `⭐ Tu nivel y beneficios → ${nivelesCanal? `<#${nivelesCanal.id}>` : '#⭐│niveles-papoi'}\n`+
           `🔀 Buscas pareja para fusionar → ${fusionesCanal? `<#${fusionesCanal.id}>` : '#🔀│fusiones'}\n`+
           `💼 Buscas chamba pagada → ${chambaCanal? `<#${chambaCanal.id}>` : '#💼│reclutamiento-chambeadores'}\n`+
-          `👁️ Último divino que salió → ${aparicionesCanal? `<#${aparicionesCanal.id}>` : '#👁️│ultimas-apariciones'}\n`+
+          `👁 Último divino que salió → ${aparicionesCanal? `<#${aparicionesCanal.id}>` : '#👁│ultimas-apariciones'}\n`+
           `📖 Tutoriales del juego → ${guiasCanal? `<#${guiasCanal.id}>` : '#📚│guías-roba-un-huevo'}\n`+
           `💖 Apoyar a la comunidad → ${apoyoCanal? `<#${apoyoCanal.id}>` : '#📢│como-apoyar'}\n\n`+
           `> 💬 Preséntate en general y sube de nivel hablando`
@@ -2125,42 +2154,13 @@ client.on(Events.GuildMemberRemove, async member => {
   try{
     const guild = member.guild;
     const userId = member.id;
-    // Chambeadores
     if(chambeadoresData[userId]){
       delete chambeadoresData[userId];
       if(ChambeadorModel) await ChambeadorModel.deleteOne({ userId }).catch(()=>{});
       await saveChambeadores();
     }
-    // FUSIONES: borrado INSTANTANEO + Mongo + mensaje
-    const canalFusiones = findChannel(guild, CONFIG.channels.fusiones);
-    const borradas = fusionesQueue.filter(r => r.userId === userId);
-    if(borradas.length){
-      for(const r of borradas){
-        if(canalFusiones && r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{});
-        if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{});
-      }
-      fusionesQueue = fusionesQueue.filter(r => r.userId!== userId);
-      await saveFusiones();
-      console.log(`🧹 LEAVE FIX: ${member.user.tag} (${userId}) borrado ${borradas.length} fusiones al salir`);
-    }
-    for(const [chanId, data] of [...fusionesActivas.entries()]){
-      if(data.users.includes(userId)){
-        const canal = guild.channels.cache.get(chanId);
-        const otherId = data.users.find(id => id!== userId);
-        const otherReq = data.reqs.find(r=>r.userId===otherId);
-        if(otherReq){
-          fusionesQueue.push({...otherReq, createdAt: Date.now(), messageId: null });
-          await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]);
-          if(canal) canal.send({ content: `👋 <@${userId}> se salió del server. <@${otherId}> regresó a #fusiones.` }).catch(()=>{});
-        }
-        setTimeout(async ()=>{
-          await canal?.delete().catch(()=>{});
-          fusionesActivas.delete(chanId);
-          await saveFusionesActivas();
-          await saveFusiones();
-        }, 3000);
-      }
-    }
+    // FIX FANTASMAS
+    await limpiarFusionesUsuario(guild, userId, 'LEAVE FIX');
   }catch(e){ console.log('Leave cleanup error', e.message); }
 });
 
@@ -2480,7 +2480,7 @@ async function crearPanelPingRoles(channel){
       `Ajustes de tu teléfono > Apps > Discord > **Permitir notificaciones** > Activa **Sonido y Ventanas emergentes**\n`+
       `Si lo tienes en **Silenciado** o **Sin sonido**, nunca te va a sonar.\n\n`+
       `**PASO 3 - Elige tus huevos ABAJO 👇:**\n`+
-      `Después de hacer paso 1 y 2, dale a **⚙ Configurar notificaciones** y elige Secreto/Eterno/Divino/Eventos\n\n`+
+      `Después de hacer paso 1 y 2, dale a **⚙️ Configurar notificaciones** y elige Secreto/Eterno/Divino/Eventos\n\n`+
       `> 💡 **Tip:** Si ya hiciste esto y aún no suena, salte de Discord y vuelve a entrar.`
   );
     const secretoEmoji = getCategoriaEmoji(guild,'Secreto');
@@ -2491,7 +2491,7 @@ async function crearPanelPingRoles(channel){
  .setTitle('🔔 NOTIFICACIONES DE HUEVOS Y EVENTOS - SUPER FÁCIL')
   .setDescription(
       `**¿Quieres que te avisemos cuando salga un huevo bueno o evento? Haz esto:**\n\n`+
-      `**1⃣** Presiona el botón verde **⚙ Configurar notificaciones** de abajo\n`+
+      `**1⃣** Presiona el botón verde **⚙️ Configurar notificaciones** de abajo\n`+
       `**2⃣** Se te abrirá un menú **solo para ti** (nadie más lo ve)\n`+
       `**3⃣** Ahí verás 4 listas:\n`+
       ` ${secretoEmoji} **Secreto** - ${PETS.Secreto.length} huevos\n`+
@@ -2514,7 +2514,7 @@ async function crearPanelPingRoles(channel){
    .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_configurar_notis').setLabel('⚙ Configurar notificaciones').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('btn_configurar_notis').setLabel('⚙️ Configurar notificaciones').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Mis Pings').setStyle(ButtonStyle.Secondary)
   );
   await channel.send({ embeds: [tutorial] });
@@ -2548,7 +2548,7 @@ async function mostrarMenuConfiguracion(interaction){
     const eventoEmoji = mariposaEmoji? { id: mariposaEmoji.id, name: mariposaEmoji.name } : '🦋';
     return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(hasEvent? `✅ Tienes ping de mariposas` : `🦋 Elige eventos`).setMinValues(0).setMaxValues(1).addOptions([{ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes (global)', emoji: eventoEmoji, default: hasEvent }]);
   };
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca ${BUTTERFLY_EMOJI} para el evento de mariposas\n\n**${BUTTERFLY_EMOJI} Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca ${BUTTERFLY_EMOJI} para el evento de mariposas\n\n**${BUTTERFLY_EMOJI} Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
   const row2 = new ActionRowBuilder().addComponents(buildSelect('Eterno'));
   const row3 = new ActionRowBuilder().addComponents(buildSelect('Divino'));
@@ -2587,7 +2587,7 @@ client.on(Events.InteractionCreate, async inter => {
         const catRole = CATEGORY_ROLES[cat];
         if(hasRole(catRole)) return `⭐ **${catRole}**\n→ Recibes **TODOS** los de ${cat}. No necesitas los individuales.`;
         const pets = PETS[cat].filter(p => hasRole(p));
-        if(pets.length === 0) return `*Ninguno activado*\n→ Toca ⚙ Configurar para elegir`;
+        if(pets.length === 0) return `*Ninguno activado*\n→ Toca ⚙️ Configurar para elegir`;
         return pets.map(p => {
           const custom = getPetEmoji(guild, p);
           const emojiStr = custom? `${custom}` : getCategoriaEmoji(guild, cat);
@@ -2598,7 +2598,7 @@ client.on(Events.InteractionCreate, async inter => {
       const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
       const mariposaObj = getPetEmoji(guild, 'Floración Mariposas');
       const mariposaStr = mariposaObj? `${mariposaObj}` : BUTTERFLY_EMOJI;
-      const butterflyText = hasButterfly? `✅ ${mariposaStr} **${BUTTERFLY_ROLE_NAME}**\n→ Te avisamos 1 min antes ${mariposaStr}` : `*Ninguno activado*\n→ Toca ⚙ Configurar y marca ${mariposaStr}`;
+      const butterflyText = hasButterfly? `✅ ${mariposaStr} **${BUTTERFLY_ROLE_NAME}**\n→ Te avisamos 1 min antes ${mariposaStr}` : `*Ninguno activado*\n→ Toca ⚙️ Configurar y marca ${mariposaStr}`;
 
       const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields(
         { name: `${getCategoriaEmoji(guild,'Secreto')} Secreto`, value: buildCatText('Secreto'), inline: false },
@@ -2926,12 +2926,12 @@ client.on(Events.InteractionCreate, async inter => {
        .setTitle(`👋 Bienvenido ${inter.user.username} a Los Papois`)
        .setDescription(
           `Ya eres **Papoi**! 🥚\n\n`+
-          `**🔔 PASO 1:** Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙ Configurar**\n\n`+
+          `**🔔 PASO 1:** Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙️ Configurar**\n\n`+
           `**📚 MINI TUTORIAL:**\n`+
           `⭐ Nivel/Beneficios → ${nivelesCanal? `<#${nivelesCanal.id}>` : '#niveles-papoi'}\n`+
           `🔀 Fusiones → ${fusionesCanal? `<#${fusionesCanal.id}>` : '#fusiones'}\n`+
           `💼 Chamba → ${chambaCanal? `<#${chambaCanal.id}>` : '#reclutamiento'}\n`+
-          `👁️ Último divino → ${aparicionesCanal? `<#${aparicionesCanal.id}>` : '#ultimas-apariciones'}\n`+
+          `👁 Último divino → ${aparicionesCanal? `<#${aparicionesCanal.id}>` : '#ultimas-apariciones'}\n`+
           `📖 Guías → ${guiasCanal? `<#${guiasCanal.id}>` : '#guías'}\n`+
           `💖 Apoyar → ${apoyoCanal? `<#${apoyoCanal.id}>` : '#como-apoyar'}`
         )
@@ -2971,7 +2971,7 @@ client.on(Events.InteractionCreate, async inter => {
     if(inter.commandName === 'kick'){ const member = inter.options.getMember('usuario'); const razon = inter.options.getString('razon')||'Sin razón'; if(!member) return inter.reply({ content: '❌ No está en el server', flags: MessageFlags.Ephemeral }); if(!member.kickable) return inter.reply({ content: '❌ No puedo kickearlo, tiene rol más alto que yo o es owner.', flags: MessageFlags.Ephemeral }); try{ await member.kick(razon); await logSancion(inter.guild, { tipo: 'KICK', moderador: inter.user, usuario: member.user, razon }); return inter.reply({ content: `👢 ${member.user.tag} kickeado` }); }catch(e){ return inter.reply({ content: `❌ Error kick: ${e.message}`, flags: MessageFlags.Ephemeral }); } }
     if(inter.commandName === 'mute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); if(!member.moderatable) return inter.reply({ content: '❌ No puedo mutearlo, rol más alto que yo.', flags: MessageFlags.Ephemeral }); const mins = inter.options.getInteger('minutos'); const razon = inter.options.getString('razon')||'Sin razón'; try{ await member.timeout(mins*60*1000, razon); await logSancion(inter.guild, { tipo: 'MUTE', moderador: inter.user, usuario: member.user, razon, duracion: `${mins} minutos` }); return inter.reply({ content: `🔇 ${member.user.tag} ${mins}m` }); }catch(e){ return inter.reply({ content: `❌ Error mute: ${e.message}`, flags: MessageFlags.Ephemeral }); } }
     if(inter.commandName === 'unmute'){ const member = inter.options.getMember('usuario'); if(!member) return inter.reply({ content: '❌ No está', flags: MessageFlags.Ephemeral }); if(!member.moderatable) return inter.reply({ content: '❌ No puedo desmutearlo.', flags: MessageFlags.Ephemeral }); try{ await member.timeout(null); await logSancion(inter.guild, { tipo: 'UNMUTE', moderador: inter.user, usuario: member.user, razon: 'Desmuteado' }); return inter.reply({ content: `🔊 ${member.user.tag} desmuteado` }); }catch(e){ return inter.reply({ content: `❌ Error: ${e.message}`, flags: MessageFlags.Ephemeral }); } }
-    if(inter.commandName === 'warn'){ const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon'); const canal = findChannel(inter.guild, CONFIG.channels.general); if(canal) canal.send({ content: `⚠ ${user} advertencia: ${razon}` }).catch(()=>{}); await logSancion(inter.guild, { tipo: 'WARN', moderador: inter.user, usuario: user, razon }); return inter.reply({ content: `⚠ Warn ${user.tag}`, flags: MessageFlags.Ephemeral }); }
+    if(inter.commandName === 'warn'){ const user = inter.options.getUser('usuario'); const razon = inter.options.getString('razon'); const canal = findChannel(inter.guild, CONFIG.channels.general); if(canal) canal.send({ content: `⚠️ ${user} advertencia: ${razon}` }).catch(()=>{}); await logSancion(inter.guild, { tipo: 'WARN', moderador: inter.user, usuario: user, razon }); return inter.reply({ content: `⚠️ Warn ${user.tag}`, flags: MessageFlags.Ephemeral }); }
     if(inter.commandName === 'clear'){ 
       const cant = inter.options.getInteger('cantidad'); 
       try {
@@ -3016,7 +3016,7 @@ async function getVideoDetails(videoId, tiktokUser, originalUrl){
 async function sendViralVideoAnnouncement(guild, videoDetails){
   const canalClips = findChannel(guild, CONFIG.channels.clips);
   if(!canalClips) return;
-  const frasesCTA = ['SOY PAPOI VERIFICADO ✅','W PAPOI MAYOR 🔥','YO VENGO DEL DISCORD 🥚','PAPOI POWER 💛','SOY DEL IMPERIO PAPOI 👑','PAPOI DE CORA ❤️','PAPOI LEGEND 🌟','AQUÍ UN PAPOI 🙋‍♂️'];
+  const frasesCTA = ['SOY PAPOI VERIFICADO ✅','W PAPOI MAYOR 🔥','YO VENGO DEL DISCORD 🥚','PAPOI POWER 💛','SOY DEL IMPERIO PAPOI 👑','PAPOI DE CORA ❤️','PAPOI LEGEND 🌟','AQUÍ UN PAPOI 🙋♂️'];
   const fraseElegida = frasesCTA[Math.floor(Math.random() * frasesCTA.length)];
   let tituloLimpio = videoDetails.title.replace(/TikTok video #\d+/i, '').trim();
   if(tituloLimpio.length > 90) tituloLimpio = tituloLimpio.slice(0, 90) + '...';
