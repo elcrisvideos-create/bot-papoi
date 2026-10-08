@@ -2086,9 +2086,34 @@ client.on(Events.GuildMemberAdd, async member => {
     }
     const bienvenida = findChannel(guild, CONFIG.channels.bienvenida);
     const pingCanal = findChannel(guild, CONFIG.channels.pingRoles);
+    const nivelesCanal = findChannel(guild, CONFIG.channels.nivelesPapoi);
+    const fusionesCanal = findChannel(guild, CONFIG.channels.fusiones);
+    const chambaCanal = findChannel(guild, CONFIG.channels.chambeadoresRecluta);
+    const aparicionesCanal = findChannel(guild, CONFIG.channels.apariciones);
+    const guiasCanal = findChannel(guild, CONFIG.channels.guias);
+    const apoyoCanal = findChannel(guild, CONFIG.channels.apoyoInfo);
     if(bienvenida){
-      const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando\n\n🔔 **IMPORTANTE - ACTIVA TUS NOTIFICACIONES:**\nVe a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙ Configurar notificaciones**\n\n> Si no lo activas, NO te suena el teléfono y te pierdes los huevos buenos y eventos de mariposas 🦋`).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
-      await bienvenida.send({ content: `${member} 🔔 ve a ${pingCanal? `<#${pingCanal.id}>` : '#ping-roles'}`, embeds: [embed] }).catch(()=>{});
+      const embed = new EmbedBuilder()
+       .setColor(0xFFD700)
+       .setTitle(`👋 Bienvenido ${member.user.username} a Los Papois`)
+       .setDescription(
+          `Ya eres **Papoi**! 🥚\n\n`+
+          `**🔔 PASO 1 - OBLIGATORIO:**\n`+
+          `Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙ Configurar notificaciones**\n`+
+          `> Si no lo haces NO te suena el cel y te pierdes huevos y mariposas 🦋\n\n`+
+          `**📚 MINI TUTORIAL:**\n`+
+          `⭐ Tu nivel y beneficios → ${nivelesCanal? `<#${nivelesCanal.id}>` : '#⭐│niveles-papoi'}\n`+
+          `🔀 Buscas pareja para fusionar → ${fusionesCanal? `<#${fusionesCanal.id}>` : '#🔀│fusiones'}\n`+
+          `💼 Buscas chamba pagada → ${chambaCanal? `<#${chambaCanal.id}>` : '#💼│reclutamiento-chambeadores'}\n`+
+          `👁️ Último divino que salió → ${aparicionesCanal? `<#${aparicionesCanal.id}>` : '#👁️│ultimas-apariciones'}\n`+
+          `📖 Tutoriales del juego → ${guiasCanal? `<#${guiasCanal.id}>` : '#📚│guías-roba-un-huevo'}\n`+
+          `💖 Apoyar a la comunidad → ${apoyoCanal? `<#${apoyoCanal.id}>` : '#📢│como-apoyar'}\n\n`+
+          `> 💬 Preséntate en general y sube de nivel hablando`
+        )
+       .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+       .setFooter({ text: `Papois Empire • Ya somos ${guild.memberCount} Papois` })
+       .setTimestamp();
+      await bienvenida.send({ content: `${member} 🔔 ve a ${pingCanal? `<#${pingCanal.id}>` : '#ping-roles'} para que te suene todo 👑`, embeds: [embed] }).catch(()=>{});
     }
   } catch (e) {
     console.log(`Error bienvenida: ${e.message}`);
@@ -2888,9 +2913,31 @@ client.on(Events.InteractionCreate, async inter => {
     if(inter.commandName === 'test-bienvenida'){
       const bienvenida = findChannel(inter.guild, CONFIG.channels.bienvenida);
       const pingCanal = findChannel(inter.guild, CONFIG.channels.pingRoles);
+      const nivelesCanal = findChannel(inter.guild, CONFIG.channels.nivelesPapoi);
+      const fusionesCanal = findChannel(inter.guild, CONFIG.channels.fusiones);
+      const chambaCanal = findChannel(inter.guild, CONFIG.channels.chambeadoresRecluta);
+      const aparicionesCanal = findChannel(inter.guild, CONFIG.channels.apariciones);
+      const guiasCanal = findChannel(inter.guild, CONFIG.channels.guias);
+      const apoyoCanal = findChannel(inter.guild, CONFIG.channels.apoyoInfo);
       if(!bienvenida) return inter.reply({ content: '❌ No canal bienvenida', flags: MessageFlags.Ephemeral });
-      const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`👋 Bienvenido ${inter.user.username} a Los Papois`).setDescription(`Ya eres **Papoi**!\n\n📜 Lee las reglas\n💬 Preséntate en general\n⭐ Sube de nivel hablando\n\n🔔 **ACTIVA TUS NOTIFICACIONES:** Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a ⚙ Configurar`).setThumbnail(inter.user.displayAvatarURL()).setTimestamp();
-      await bienvenida.send({ content: `${inter.user}`, embeds: [embed] }).catch(()=>{});
+      const embed = new EmbedBuilder()
+       .setColor(0xFFD700)
+       .setTitle(`👋 Bienvenido ${inter.user.username} a Los Papois`)
+       .setDescription(
+          `Ya eres **Papoi**! 🥚\n\n`+
+          `**🔔 PASO 1:** Ve a ${pingCanal? `<#${pingCanal.id}>` : '#🔗│ping-roles'} y dale a **⚙ Configurar**\n\n`+
+          `**📚 MINI TUTORIAL:**\n`+
+          `⭐ Nivel/Beneficios → ${nivelesCanal? `<#${nivelesCanal.id}>` : '#niveles-papoi'}\n`+
+          `🔀 Fusiones → ${fusionesCanal? `<#${fusionesCanal.id}>` : '#fusiones'}\n`+
+          `💼 Chamba → ${chambaCanal? `<#${chambaCanal.id}>` : '#reclutamiento'}\n`+
+          `👁️ Último divino → ${aparicionesCanal? `<#${aparicionesCanal.id}>` : '#ultimas-apariciones'}\n`+
+          `📖 Guías → ${guiasCanal? `<#${guiasCanal.id}>` : '#guías'}\n`+
+          `💖 Apoyar → ${apoyoCanal? `<#${apoyoCanal.id}>` : '#como-apoyar'}`
+        )
+             .setThumbnail(inter.user.displayAvatarURL({ dynamic: true, size: 256 }))
+      .setFooter({ text: `Papois Empire • Ya somos ${inter.guild.memberCount} Papois` })
+      .setTimestamp();
+      await bienvenida.send({ content: `${inter.user} 🔔 ve a ${pingCanal? `<#${pingCanal.id}>` : '#ping-roles'} para que te suene todo 👑`, embeds: [embed] }).catch(()=>{});
       return inter.reply({ content: `✅ Enviado a ${bienvenida}`, flags: MessageFlags.Ephemeral });
     }
     
