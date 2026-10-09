@@ -75,6 +75,7 @@ const CONFIG = {
     chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos'],
     chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores'],
     chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
+    adminAbuse: ['admin-abuse', '👑│admin-abuse', '⏰│admin-abuse', '💥│admin-abuse', 'admin-abuse-countdown'],
     apoyoInfo: ['como-apoyar', '📢│como-apoyar'],
     apoyoTienda: ['tienda-roblox', '🥚│tienda-roblox'],
     apoyoLogs: ['apoyo-logs', '📋│apoyo-logs', 'donaciones-logs'],
@@ -170,6 +171,7 @@ const client = new Client({
 const DATA_DIR = fs.existsSync('/data') ? '/data' : './';
 const XP_PATH = path.join(DATA_DIR, 'xp.json');
 const TIKTOK_PATH = path.join(DATA_DIR, 'tiktok.json');
+const ADMIN_ABUSE_PATH = path.join(DATA_DIR, 'admin_abuse.json');
 
 function safeLoadJSON(filePath, defaultValue) {
   try {
@@ -217,6 +219,13 @@ const saveFusionesActivas = async () => {
 
 // --- CHAMBEADORES PERSISTENCIA ---
 const CHAMBEADORES_PATH = path.join(DATA_DIR, 'chambeadores.json');
+let adminAbuseData = safeLoadJSON(ADMIN_ABUSE_PATH, { channelId: null, messageId: null, customImageUrl: null, customIsVideo: false });
+const saveAdminAbuse = async () => { 
+  safeSaveJSON(ADMIN_ABUSE_PATH, adminAbuseData);
+  if(useMongo && global.AdminAbuseModel){
+    await global.AdminAbuseModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { ...adminAbuseData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
+  }
+};
 let chambeadoresData = safeLoadJSON(CHAMBEADORES_PATH, {});
 let ChambeadorModel = null;
 
@@ -335,6 +344,16 @@ async function initMongo() {
       }
     }
 
+          const adminAbuseSchema = new mongoose.Schema({ guildId: String, channelId: String, messageId: String, customImageUrl: String, customIsVideo: Boolean }, { strict: false });
+    const AdminAbuseModel = mongoose.model('AdminAbuse', adminAbuseSchema);
+    const abMongo = await AdminAbuseModel.findOne({ guildId: process.env.GUILD_ID });
+    if(abMongo){
+      adminAbuseData = { channelId: abMongo.channelId, messageId: abMongo.messageId, customImageUrl: abMongo.customImageUrl, customIsVideo: abMongo.customIsVideo };
+      console.log(`✅ Admin Abuse cargado de Mongo: ${abMongo.customImageUrl? 'CON PORTADA' : 'sin portada'}`);
+      safeSaveJSON(ADMIN_ABUSE_PATH, adminAbuseData);
+    }
+    // guarda la función para usar después
+    global.AdminAbuseModel = AdminAbuseModel;
     const donadorSchema = new mongoose.Schema({ userId: String, puntos: Number, totalRobux: Number, totalEfectivo: Number, fakes: Number, baneado: Boolean, createdAt: Number }, { strict: false });
     DonadorModel = mongoose.model('Donador', donadorSchema);
     const donadoresMongo = await DonadorModel.find({});
@@ -494,6 +513,10 @@ const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
 const BUTTERFLY_EMOJI = '<:Mariposa:1556413173500739656>';
 const BUTTERFLY_CHANNEL_NAME = '🦋 | floracion-mariposas';
+// --- V11: ADMIN ABUSE COUNTDOWN - SÁBADOS 9AM MX ---
+const ADMIN_ABUSE_ROLE_NAME = 'Admin Abuse';
+const ADMIN_ABUSE_CHANNEL_NAME = '👑│admin-abuse';
+const ADMIN_ABUSE_HOUR_MX = 9; // 9am Centro MX = 15:00 UTC
 
 // --- GUIAS FORO ---
 const GUIAS_TAGS = [
@@ -591,6 +614,7 @@ function checkCooldown(userId, command, seconds) {
 
 // --- SCHEDULER GLOBAL CADA 30 MIN ---
 let lastButterflyPingKey = null;
+let lastAdminAbusePing = null; // <- ANTI-SPAM PING ADMIN ABUSE
 async function ensureButterflyRole(guild){
   let role = findRole(guild, BUTTERFLY_ROLE_NAME);
   if(!role){
@@ -669,6 +693,232 @@ async function ensureMultimediaChannel(guild){
     await canal.permissionOverwrites.edit(client.user.id, { ViewChannel:true, SendMessages:true, ManageMessages:true, ReadMessageHistory:true, EmbedLinks:true, AttachFiles:true }).catch(()=>{});
     await canal.setRateLimitPerUser(600).catch(()=>{});
   }catch{}
+}
+// ========== ADMIN ABUSE FUNCTIONS ==========
+async function ensureAdminAbuseRole(guild){
+  let role = findRole(guild, ADMIN_ABUSE_ROLE_NAME);
+  if(!role){
+    role = await guild.roles.create({ name: ADMIN_ABUSE_ROLE_NAME, color: 0xFFD700, reason: 'Rol para ping Admin Abuse sábados 9am', mentionable: true }).catch(()=>null);
+  }
+  return role;
+}
+function getNextSaturday9amMX(){
+  const now = new Date();
+  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 15, 0, 0, 0));
+  const day = target.getUTCDay();
+  let diff = (6 - day + 7) % 7;
+  // Solo brinca a la próxima semana DESPUÉS de 1 hora del evento, no al segundo 0
+  if(diff === 0 && target.getTime() + 3600000 <= now.getTime()) diff = 7;
+  target.setUTCDate(target.getUTCDate() + diff);
+  return target;
+}
+function formatTiempoRestante(target){
+  const diff = target - new Date();
+  if(diff <= 0) return { txt: '¡EN VIVO AHORA!', bar: '██████████ 100%', pct: 100, enVivo: true };
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  const totalWeek = 7*24*60*60*1000;
+  const pct = Math.max(0, Math.min(100, 100 - Math.floor((diff/totalWeek)*100)));
+  const filled = Math.floor(pct/10);
+  const bar = '█'.repeat(filled) + '░'.repeat(10-filled) + ` ${pct}%`;
+  let txt = '';
+  if(d>0) txt += `${d}D `;
+  txt += `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return { txt, bar, pct, enVivo: false };
+}
+function buildAdminAbuseEmbed(guild, target){
+  const unix = Math.floor(target.getTime()/1000);
+  const tiempo = formatTiempoRestante(target);
+  const color = tiempo.enVivo? 0xFFD700 : tiempo.pct > 80? 0xED4245 : tiempo.pct > 50? 0xF1C40F : tiempo.pct > 20? 0x57F287 : 0x5865F2;
+  const titulo = tiempo.enVivo? '💥 ¡ADMIN ABUSE EN VIVO AHORA!' : '👑 ADMIN ABUSE - SÁBADOS 9AM';
+  const embed = new EmbedBuilder()
+  .setColor(color)
+  .setTitle(titulo)
+  .setDescription(
+    `**⏰ SÁBADOS 9:00 AM HORA CENTRO MÉXICO**\n\n`+
+    `### ⏳ FALTAN: \`${tiempo.txt}\`\n`+
+    `\`${tiempo.bar}\`\n\n`+
+    `**🕒 En tu hora local:**\n<t:${unix}:F> - <t:${unix}:R>\n\n`+
+    `**🌎 Horarios fijos:**\n`+
+    `🇲🇽 MX 9:00 AM | 🇨🇴 COL 10:00 AM | 🇵🇪 PE 10:00 AM\n`+
+    `🇦🇷 ARG 12:00 PM | 🇨🇱 CHI 12:00 PM | 🇪🇸 ESP 5:00 PM | 🇺🇸 EST 11:00 AM\n\n`+
+    (adminAbuseData.customImageUrl? `**🔥 PORTADA DE LA SEMANA:**\n> Subida directa por el Papoi Mayor\n` : `> Usa \`/admin-portada\` para subir la imagen/video de esta semana`)
+   )
+  .setFooter({ text: `Papois Empire • Sábados 9AM MX • Actualiza automático` })
+  .setTimestamp(target);
+  if(adminAbuseData.customImageUrl &&!adminAbuseData.customIsVideo){
+    embed.setImage(adminAbuseData.customImageUrl);
+  }
+  if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
+  return embed;
+}
+async function ensureAdminAbuseChannel(guild){
+  await ensureAdminAbuseRole(guild);
+  let canal = findChannel(guild, CONFIG.channels.adminAbuse);
+  const categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+  const modRole = findRole(guild, 'moderador');
+  const mayorRole = findRole(guild, 'papoi mayor');
+  const ownerId = process.env.OWNER_ID;
+  if(!canal){
+    const overwrites = [
+      { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ManageChannels] },
+    ];
+    if(modRole) overwrites.push({ id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+    if(mayorRole) overwrites.push({ id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] });
+    if(ownerId) overwrites.push({ id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] });
+    canal = await guild.channels.create({
+      name: ADMIN_ABUSE_CHANNEL_NAME,
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: '⏰ Cuenta regresiva Admin Abuse - SÁBADOS 9AM Centro MX - Solo bot escribe aquí - <t:0:R> en tu hora local',
+      permissionOverwrites: overwrites
+    }).catch(()=>null);
+    console.log(`✅ Canal Admin Abuse creado: ${canal?.name}`);
+  } else {
+    try{
+      if(categoria && canal.parentId!== categoria.id) await canal.setParent(categoria.id).catch(()=>{});
+      await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(()=>{});
+      await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, ManageMessages: true, AttachFiles: true, ManageChannels: true }).catch(()=>{});
+      if(modRole) await canal.permissionOverwrites.edit(modRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true }).catch(()=>{});
+      if(mayorRole) await canal.permissionOverwrites.edit(mayorRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true, ManageChannels: true }).catch(()=>{});
+    }catch{}
+  }
+  if(canal) adminAbuseData.channelId = canal.id;
+  await saveAdminAbuse();
+  return canal;
+}
+async function crearPanelAdminAbuse(guild){
+  const canal = await ensureAdminAbuseChannel(guild);
+  if(!canal) return null;
+  try{
+    const msgs = await canal.messages.fetch({ limit: 30 }).catch(()=>null);
+    if(msgs){
+      const old = msgs.filter(m=>m.author.id===client.user.id);
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
+    }
+  }catch{}
+  const target = getNextSaturday9amMX();
+  const embed = buildAdminAbuseEmbed(guild, target);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('admin_abuse_notify').setLabel('🔔 Avísame del Admin Abuse').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('admin_abuse_mi_hora').setLabel('🕒 Ver mi hora local').setStyle(ButtonStyle.Secondary)
+  );
+  const files = [];
+  let msg = null;
+  if(adminAbuseData.customIsVideo && adminAbuseData.customImageUrl){
+    msg = await canal.send({ embeds: [embed], components: [row], files: [{ attachment: adminAbuseData.customImageUrl }] }).catch(()=>null);
+  } else {
+    msg = await canal.send({ embeds: [embed], components: [row] }).catch(()=>null);
+  }
+  if(msg){
+    adminAbuseData.messageId = msg.id;
+    adminAbuseData.channelId = canal.id;
+    await saveAdminAbuse();
+    try{ await msg.pin().catch(()=>{}); }catch{}
+  }
+  return msg;
+}
+async function actualizarPanelAdminAbuse(guild){
+  try{
+    const canalId = adminAbuseData.channelId || findChannel(guild, CONFIG.channels.adminAbuse)?.id;
+    if(!canalId) return;
+    const canal = guild.channels.cache.get(canalId) || await guild.channels.fetch(canalId).catch(()=>null);
+    if(!canal) return;
+    let msg = null;
+    if(adminAbuseData.messageId){
+      msg = await canal.messages.fetch(adminAbuseData.messageId).catch(()=>null);
+    }
+    if(!msg){
+      const msgs = await canal.messages.fetch({ limit: 20 }).catch(()=>null);
+      if(msgs) msg = msgs.find(m=>m.author.id===client.user.id) || null;
+    }
+    if(!msg) return crearPanelAdminAbuse(guild);
+    const target = getNextSaturday9amMX();
+    const embed = buildAdminAbuseEmbed(guild, target);
+
+    const tiempo = formatTiempoRestante(target);
+    // Ahora sí detecta EN VIVO durante 9am-10am MX
+    if(tiempo.enVivo && canal.name!== '💥│ADMIN-ABUSE-AHORA'){
+      await canal.setName('💥│ADMIN-ABUSE-AHORA').catch(()=>{});
+    }
+    if(!tiempo.enVivo && canal.name === '💥│ADMIN-ABUSE-AHORA'){
+      await canal.setName('👑│admin-abuse').catch(()=>{});
+    }
+
+    const payload = { embeds: [embed] };
+    if(adminAbuseData.customIsVideo && adminAbuseData.customImageUrl){
+      payload.files = [{ attachment: adminAbuseData.customImageUrl }];
+      await msg.edit(payload).catch(async()=>{
+        await msg.edit({ embeds: [embed] }).catch(()=>{});
+      });
+    } else {
+      await msg.edit(payload).catch(()=>{});
+    }
+  }catch(e){ console.log('AdminAbuse update error', e.message); }
+}
+function startAdminAbuseScheduler(){
+  console.log('👑 Scheduler Admin Abuse iniciado - Sábados 9AM MX');
+  setTimeout(async ()=>{
+    const guild = client.guilds.cache.get(process.env.GUILD_ID);
+    if(guild) await actualizarPanelAdminAbuse(guild);
+  }, 10000);
+
+  setInterval(async ()=>{
+    try{
+      const guild = client.guilds.cache.get(process.env.GUILD_ID);
+      if(!guild) return;
+
+      // CALCULA EL SABADO DE ESTA SEMANA, NO EL SIGUIENTE
+      const now = new Date();
+      const thisSaturday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 15, 0, 0, 0));
+      const day = thisSaturday.getUTCDay();
+      thisSaturday.setUTCDate(thisSaturday.getUTCDate() - ((day - 6 + 7) % 7)); // retrocede al sábado de esta semana
+
+      const diffThis = thisSaturday - now;
+
+      // PING si estamos Sábado entre 15:00 y 16:00 UTC (9am-10am MX)
+      if(now.getUTCDay() === 6 && diffThis <= 0 && diffThis > -3600000){
+        const dayKey = now.toISOString().slice(0,10);
+        if(lastAdminAbusePing!== dayKey){
+          lastAdminAbusePing = dayKey;
+          const role = findRole(guild, ADMIN_ABUSE_ROLE_NAME);
+          const canal = findChannel(guild, CONFIG.channels.adminAbuse);
+          if(canal && role){
+            const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('💥 ¡ADMIN ABUSE EMPEZÓ AHORA!').setDescription(`${role} **¡ENTRA YA A ROBA UN HUEVO!**\n\nSábado 9AM Centro MX`);
+            await canal.send({ content: `${role} 💥 ¡EMPEZÓ!`, embeds: [embed] }).catch(()=>{});
+          }
+        }
+      }
+      await actualizarPanelAdminAbuse(guild);
+    }catch(e){ console.log('AdminAbuse scheduler', e.message); }
+  }, 60*1000);
+}
+async function handleAdminAbuseInteraction(inter){
+  const guild = inter.guild;
+  try{
+    if(inter.isButton()){
+      if(inter.customId === 'admin_abuse_notify'){
+        const role = findRole(guild, ADMIN_ABUSE_ROLE_NAME) || await ensureAdminAbuseRole(guild);
+        if(!role) return inter.reply({ content: '❌ No encontré rol', flags: MessageFlags.Ephemeral });
+        const member = await guild.members.fetch(inter.user.id);
+        if(member.roles.cache.has(role.id)){
+          await member.roles.remove(role.id).catch(()=>{});
+          return inter.reply({ content: `🔕 Ya no te avisaré del Admin Abuse`, flags: MessageFlags.Ephemeral });
+        } else {
+          await member.roles.add(role.id).catch(()=>{});
+          return inter.reply({ content: `🔔 ¡Listo! Te pingeo los sábados 9AM MX. Rol: ${role}`, flags: MessageFlags.Ephemeral });
+        }
+      }
+      if(inter.customId === 'admin_abuse_mi_hora'){
+        const target = getNextSaturday9amMX();
+        const unix = Math.floor(target.getTime()/1000);
+        return inter.reply({ content: `🕒 **Tu hora local:** <t:${unix}:F> - <t:${unix}:R>\n\n🌎 Eso es Sábado 9AM Centro México`, flags: MessageFlags.Ephemeral });
+      }
+    }
+  }catch(e){ console.log('AdminAbuse inter', e.message); if(!inter.replied) inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
 }
 
 async function ensureChambeadorRoles(guild){
@@ -2072,6 +2322,9 @@ client.on(Events.ClientReady, async () => {
       { name: 'setup-guias', description: 'Crea el foro 📚│guías-roba-un-huevo con tags', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'publicar-guia', description: 'Publica una guía con imagen en el foro', options: [{ name: 'titulo', description: 'Título de la guía', type: 3, required: true }, { name: 'categoria', description: 'Categoría', type: 3, required: true, choices: [{ name: '🟢 Principiantes', value: 'Principiantes' }, { name: '🥚 Huevos', value: 'Huevos' }, { name: '🔔 Notificaciones', value: 'Notificaciones' }, { name: '🔀 Fusiones', value: 'Fusiones' }, { name: '🦋 Mariposas', value: 'Mariposas' }, { name: '💼 Chambeadores', value: 'Chambeadores' }, { name: '💡 Trucos', value: 'Trucos' }] }, { name: 'descripcion', description: 'Texto paso a paso', type: 3, required: true }, { name: 'imagen', description: 'Imagen principal', type: 11, required: true }, { name: 'imagen2', description: 'Imagen extra opcional', type: 11, required: false }, { name: 'imagen3', description: 'Imagen extra opcional', type: 11, required: false }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'fix-canales-leyenda-booster', description: 'FIX: crea canales faltantes y limpia chat-leyendas', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+            { name: 'setup-admin-abuse', description: 'Crea canal y panel épico Admin Abuse sábados 9am MX', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'admin-portada', description: 'Sube imagen/video portada semanal Admin Abuse (archivo directo)', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen o video (subido directo a Discord)', type: 11, required: true }] },
+      { name: 'test-admin-abuse', description: 'Test ping Admin Abuse', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     ]});
     console.log('✅ Comandos V6 registrados');
   } catch (e) {
@@ -2096,6 +2349,9 @@ client.on(Events.ClientReady, async () => {
   // startTikTokMonitor deshabilitado - solo manual /video y /live
   startButterflyScheduler();
   startFusionesScheduler();
+  await ensureAdminAbuseChannel(guild).catch(()=>{});
+  await crearPanelAdminAbuse(guild).catch(()=>{});
+  startAdminAbuseScheduler();
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -2378,7 +2634,7 @@ client.on(Events.MessageCreate, async msg => {
       const contexto = hist? [...hist.values()].reverse().map(m => `${m.author.username}: ${m.content.slice(0,120)}`).join('\n') : '';
 
       const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').replace(/papoi/gi,'').trim().slice(0,500);
-      if(!pregunta &&!isReplyToBot) return;
+      if(!pregunta) return;
 
       const modelos = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct"];
       let chat = null;
@@ -2580,6 +2836,10 @@ client.on(Events.InteractionCreate, async inter => {
       await handleFusionesInteraction(inter);
       return;
     }
+        if((inter.customId && inter.customId.startsWith('admin_abuse_'))){
+      await handleAdminAbuseInteraction(inter);
+      return;
+    }
     if(inter.isButton() && inter.customId === 'btn_configurar_notis'){
       const data = await mostrarMenuConfiguracion(inter); return inter.reply(data);
     }
@@ -2723,6 +2983,37 @@ client.on(Events.InteractionCreate, async inter => {
           await crearPanelActivos(activos);
           await logs.send({ content: `✅ Logs privados Chambeadores inicializados - Solo <@${process.env.OWNER_ID}> ve este canal.` }).catch(()=>{});
           return inter.editReply({ content: `✅ Chambeadores V6.5:\n- ${recluta}\n- ${activos}\n- ${chat} <- **NUEVO CHAT 30s solo chambeadores + tú**\n- ${logs} (SOLO TU)\n\nComunidad para pagar: ${CHAMBEADORES_LINKS.comunidad}` });
+        }
+                        if(inter.commandName === 'setup-admin-abuse'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const ch = await ensureAdminAbuseChannel(inter.guild);
+          await crearPanelAdminAbuse(inter.guild);
+          return inter.editReply({ content: `✅ Admin Abuse épico creado: ${ch} - Sábados 9AM MX - Rol ${ADMIN_ABUSE_ROLE_NAME} - Usa /admin-portada para subir portada` });
+        }
+        if(inter.commandName === 'admin-portada'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const archivo = inter.options.getAttachment('archivo');
+          if(!archivo) return inter.editReply({ content: '❌ Sube archivo' });
+          const isVideo = archivo.contentType?.startsWith('video/');
+          const isImage = archivo.contentType?.startsWith('image/');
+          if(!isVideo &&!isImage) return inter.editReply({ content: '❌ Solo imagen o video' });
+          adminAbuseData.customImageUrl = archivo.url;
+          adminAbuseData.customIsVideo = isVideo;
+          await saveAdminAbuse();
+          await crearPanelAdminAbuse(inter.guild);
+          return inter.editReply({ content: `✅ Portada ${isVideo? 'VIDEO':'IMAGEN'} actualizada: ${archivo.name} - Ya se ve en ${findChannel(inter.guild, CONFIG.channels.adminAbuse)}` });
+        }
+        if(inter.commandName === 'test-admin-abuse'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const role = findRole(inter.guild, ADMIN_ABUSE_ROLE_NAME) || await ensureAdminAbuseRole(inter.guild);
+          const canal = findChannel(inter.guild, CONFIG.channels.adminAbuse);
+          if(!canal) return inter.editReply({ content: '❌ No canal' });
+          const target = getNextSaturday9amMX();
+          const unix = Math.floor(target.getTime()/1000);
+          await canal.send({ content: `${role} 💥 TEST Admin Abuse - <t:${unix}:F> - <t:${unix}:R>` });
+          return inter.editReply({ content: `✅ Test enviado a ${canal}` });
         }
                 if(inter.commandName === 'fix-canales-leyenda-booster'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
