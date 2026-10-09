@@ -85,7 +85,8 @@ const CONFIG = {
     chatLeyendasXp: ['chat-leyendas-xp', '👑│chat-papoi-leyenda', 'chat-papoi-leyenda', 'leyendas-xp'],
     boostersBeneficios: ['boosters-beneficios', '💎│boosters-beneficios', 'boosters-be'],
     boostersChat: ['chat-boosters', '💬│chat-boosters', 'boosters-chat'],
-    guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo']
+    guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo'],
+    biblioteca: ['biblioteca-papoi', '🎨│biblioteca-papoi', 'biblioteca-emojis', 'biblioteca']
   },
     categories: {
     robaHuevo: ['roba un huevo', 'roba'],
@@ -231,6 +232,15 @@ let ChambeadorModel = null;
 
 const DONADORES_PATH = path.join(DATA_DIR, 'donadores.json');
 let donadoresData = safeLoadJSON(DONADORES_PATH, { users: {} });
+const BIBLIOTECA_PATH = path.join(DATA_DIR, 'biblioteca.json');
+let bibliotecaData = safeLoadJSON(BIBLIOTECA_PATH, { roba: [], papoi: [] });
+const tempBibliotecaSelection = new Map();
+const saveBiblioteca = async () => {
+  safeSaveJSON(BIBLIOTECA_PATH, bibliotecaData);
+  if(useMongo && global.BibliotecaModel){
+    await global.BibliotecaModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, {...bibliotecaData, guildId: process.env.GUILD_ID}, {upsert:true}).catch(()=>{});
+  }
+};
 let DonadorModel = null;
 const saveChambeadores = async (soloUserId = null) => {
   safeSaveJSON(CHAMBEADORES_PATH, chambeadoresData);
@@ -354,6 +364,15 @@ async function initMongo() {
     }
     // guarda la función para usar después
     global.AdminAbuseModel = AdminAbuseModel;
+    const bibliotecaSchema = new mongoose.Schema({ guildId: String, roba: [String], papoi: [String] }, { strict:false });
+    const BibliotecaModel = mongoose.model('Biblioteca', bibliotecaSchema);
+    const bibMongo = await BibliotecaModel.findOne({ guildId: process.env.GUILD_ID });
+    if(bibMongo){
+      bibliotecaData = { roba: bibMongo.roba||[], papoi: bibMongo.papoi||[] };
+      safeSaveJSON(BIBLIOTECA_PATH, bibliotecaData);
+      console.log(`✅ Biblioteca cargada de Mongo: ${bibMongo.roba.length} roba, ${bibMongo.papoi.length} papoi`);
+    }
+    global.BibliotecaModel = BibliotecaModel;
     const donadorSchema = new mongoose.Schema({ userId: String, puntos: Number, totalRobux: Number, totalEfectivo: Number, fakes: Number, baneado: Boolean, createdAt: Number }, { strict: false });
     DonadorModel = mongoose.model('Donador', donadorSchema);
     const donadoresMongo = await DonadorModel.find({});
@@ -789,6 +808,131 @@ async function ensureAdminAbuseChannel(guild){
   await saveAdminAbuse();
   return canal;
 }
+// ========== BIBLIOTECA DE EMOJIS Y STICKERS - V6.2 ==========
+async function getBoostInfo(guild){
+  const count = guild.premiumSubscriptionCount || 0;
+  const tier = guild.premiumTier;
+  const limits = [
+    { tier: 0, emojis: 50, stickers: 5, need: 2 },
+    { tier: 1, emojis: 100, stickers: 15, need: 7 },
+    { tier: 2, emojis: 150, stickers: 30, need: 14 },
+    { tier: 3, emojis: 250, stickers: 60, need: 14 },
+  ];
+  const current = limits[tier] || limits[0];
+  const next = limits[tier+1] || null;
+  return { count, tier, current, next };
+}
+function esDeRobaUnHuevo(emojiName){
+  const n = emojiName.toLowerCase();
+  const claves = ['huevo','royal','world','archangel','kitsune','unicorn','celestial','skeleton','pegasus','gorilla','oni','mosasaurus','maja','lava','phoenix','ice','starry','razorfang','centaur','gargoyle','jelly','shark','stag','cosmic','tralaledon','trex','kraken','cerberus','yeti','snake','mariposa','nightflame'];
+  return claves.some(k => n.includes(k));
+}
+async function crearPanelBiblioteca(guild, customRobaIds = null, customPapoiIds = null){
+  let categoria = findCategory(guild, CONFIG.categories.comunidadPapoi);
+  let canal = findChannel(guild, CONFIG.channels.biblioteca);
+  if(!canal){
+    canal = await guild.channels.create({
+      name: '🎨│biblioteca-papoi',
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: '📚 Biblioteca de emojis y stickers - Solo el bot escribe',
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      ]
+    }).catch(()=>null);
+  } else {
+    if(categoria && canal.parentId!== categoria.id) await canal.setParent(categoria.id).catch(()=>{});
+  }
+  if(!canal) return null;
+  try{
+    const msgs = await canal.messages.fetch({ limit: 100 }).catch(()=>null);
+    if(msgs){
+      const old = msgs.filter(m=>m.author.id===client.user.id);
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,300)); }
+    }
+  }catch{}
+  const emojis = [...guild.emojis.cache.values()];
+  let roba, papoi;
+  if(customRobaIds || customPapoiIds || bibliotecaData.roba.length>0 || bibliotecaData.papoi.length>0){
+    const robaIds = customRobaIds || bibliotecaData.roba;
+    const papoiIds = customPapoiIds || bibliotecaData.papoi;
+    roba = emojis.filter(e => robaIds.includes(e.id)).sort((a,b)=>a.name.localeCompare(b.name));
+    papoi = emojis.filter(e => papoiIds.includes(e.id)).sort((a,b)=>a.name.localeCompare(b.name));
+    const asignados = new Set([...robaIds,...papoiIds]);
+    const noAsignados = emojis.filter(e=>!asignados.has(e.id));
+    if(noAsignados.length>0 &&!customRobaIds &&!customPapoiIds){
+      papoi = [...papoi,...noAsignados].sort((a,b)=>a.name.localeCompare(b.name));
+    }
+    if(customRobaIds || customPapoiIds){
+      bibliotecaData = { roba: roba.map(e=>e.id), papoi: papoi.map(e=>e.id) };
+      await saveBiblioteca();
+    }
+  } else {
+    const sorted = emojis.sort((a,b)=>a.name.localeCompare(b.name));
+    roba = sorted.filter(e => esDeRobaUnHuevo(e.name));
+    papoi = sorted.filter(e =>!esDeRobaUnHuevo(e.name));
+  }
+  const stickers = await guild.stickers.fetch().catch(()=> new Map());
+  const embedRoba = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 ROBA UN HUEVO - Emojis del juego')
+  .setDescription(roba.length? roba.map(e => `${e} \`:${e.name}:\``).join('\n').slice(0,4000) : '*Aún no hay emojis en esta categoría*')
+  .setFooter({ text: `${roba.length} emojis • Papois Empire` });
+  const embedPapoi = new EmbedBuilder().setColor(0x5865F2).setTitle('👑 PAPOI EMPIRE - Emojis de la comunidad')
+  .setDescription(papoi.length? papoi.map(e => `${e} \`:${e.name}:\``).join('\n').slice(0,4000) : '*Aún no hay emojis en esta categoría*')
+  .setFooter({ text: `${papoi.length} emojis • Papois Empire` });
+  const boost = await getBoostInfo(guild);
+  const embedStickers = new EmbedBuilder().setColor(0x57F287).setTitle(`📌 STICKERS (${stickers.size} / ${boost.current.stickers})`)
+  .setDescription([...stickers.values()].map(s => `**${s.name}**`).join('\n') || '*Solo 5 stickers sin boosts - ¡Boostea para más!*')
+  .setFooter({ text: 'Stickers del server' });
+  const pct = boost.next? Math.min(100, Math.floor((boost.count/boost.next.need)*100)) : 100;
+  const barra = '█'.repeat(Math.floor(pct/10)) + '░'.repeat(10-Math.floor(pct/10)) + ` ${pct}%`;
+  const embedBoost = new EmbedBuilder().setColor(0xFF73FA).setTitle('💎 ¿Por qué solo tenemos estos?')
+  .setDescription(`Actualmente somos **Nivel ${boost.tier} con ${boost.count} boosts**\n\`${barra} ${boost.count}/${boost.next?boost.next.need:boost.count} para Nivel ${boost.tier+1}\`\n\n`+(boost.next? `Si llegamos a **Nivel ${boost.tier+1} (${boost.next.need} boosts)** desbloqueamos:\n+ ${boost.next.emojis-boost.current.emojis} emojis más\n+ ${boost.next.stickers-boost.current.stickers} stickers más\n\n¡Boosta para desbloquear más Papoi-emojis! 🚀` : `¡YA SOMOS NIVEL MÁXIMO! 👑`)).setTimestamp().setFooter({ text: `Emojis: ${emojis.length}/${boost.current.emojis}` });
+  await canal.send({ embeds: [embedRoba] }).catch(()=>{});
+  await new Promise(r=>setTimeout(r,400));
+  await canal.send({ embeds: [embedPapoi] }).catch(()=>{});
+  if(stickers.size>0){ await new Promise(r=>setTimeout(r,400)); await canal.send({ embeds: [embedStickers] }).catch(()=>{}); }
+  await new Promise(r=>setTimeout(r,400));
+  await canal.send({ embeds: [embedBoost] }).catch(()=>{});
+  return canal;
+}
+async function mostrarSelectorBiblioteca(guild, inter, page=0){
+  await guild.emojis.fetch().catch(()=>{});
+  const emojis = [...guild.emojis.cache.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  if(emojis.length===0) return inter.editReply({ content: '❌ No hay emojis aún.' });
+  const guildId = guild.id;
+  if(!tempBibliotecaSelection.has(guildId)) tempBibliotecaSelection.set(guildId, { roba: new Set(bibliotecaData.roba), papoi: new Set(bibliotecaData.papoi) });
+  const temp = tempBibliotecaSelection.get(guildId);
+  const perPage = 25;
+  const totalPages = Math.ceil(emojis.length / perPage);
+  const pageEmojis = emojis.slice(page*perPage, page*perPage+perPage);
+  const makeOptions = (set) => pageEmojis.map(e => ({ label: e.name.slice(0,25), value: e.id, description: `${e.animated?'Animado':'Estatico'} :${e.name}:`, emoji: { id: e.id, name: e.name, animated: e.animated }, default: set.has(e.id) }));
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🎨 Configurar Biblioteca - Página ${page+1}/${totalPages}`).setDescription(`**Total:** ${emojis.length} | **Roba:** ${temp.roba.size} | **Papoi:** ${temp.papoi.size}\n\n• Menú 1 = 🥚 ROBA UN HUEVO\n• Menú 2 = 👑 PAPOI EMPIRE\n• Cambia de página, no se borra tu selección\n• **💾 Guardar y Crear** para terminar`).setFooter({ text: `Un emoji solo en una categoría` });
+  const rowRoba = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`biblioteca_roba_${page}`).setPlaceholder(`🥚 ROBA - Pag ${page+1}`).setMinValues(0).setMaxValues(Math.min(pageEmojis.length,25)).addOptions(makeOptions(temp.roba)));
+  const rowPapoi = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`biblioteca_papoi_${page}`).setPlaceholder(`👑 PAPOI - Pag ${page+1}`).setMinValues(0).setMaxValues(Math.min(pageEmojis.length,25)).addOptions(makeOptions(temp.papoi)));
+  const rowBtns = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`biblioteca_prev_${page}`).setLabel('◀ Ant').setStyle(ButtonStyle.Secondary).setDisabled(page===0), new ButtonBuilder().setCustomId(`biblioteca_next_${page}`).setLabel('Sig ▶').setStyle(ButtonStyle.Secondary).setDisabled(page>=totalPages-1), new ButtonBuilder().setCustomId(`biblioteca_save`).setLabel('💾 Guardar y Crear').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`biblioteca_auto`).setLabel('🤖 Auto').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`biblioteca_clear`).setLabel('🗑 Limpiar').setStyle(ButtonStyle.Danger));
+  const payload = { embeds: [embed], components: [rowRoba, rowPapoi, rowBtns] };
+  if(inter.deferred) return inter.editReply(payload); else return inter.update(payload);
+}
+async function handleBibliotecaInteraction(inter){
+  const guild = inter.guild; if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo owner', flags: MessageFlags.Ephemeral });
+  const guildId = guild.id; if(!tempBibliotecaSelection.has(guildId)) tempBibliotecaSelection.set(guildId, { roba: new Set(bibliotecaData.roba), papoi: new Set(bibliotecaData.papoi) });
+  const temp = tempBibliotecaSelection.get(guildId);
+  try{
+    if(inter.isStringSelectMenu()){
+      const page = parseInt(inter.customId.split('_').pop()); const emojis = [...guild.emojis.cache.values()].sort((a,b)=>a.name.localeCompare(b.name)); const perPage=25; const pageEmojis=emojis.slice(page*perPage, page*perPage+perPage);
+      if(inter.customId.startsWith('biblioteca_roba_')){ for(const e of pageEmojis) temp.roba.delete(e.id); for(const id of inter.values) temp.roba.add(id); await mostrarSelectorBiblioteca(guild, inter, page); return; }
+      if(inter.customId.startsWith('biblioteca_papoi_')){ for(const e of pageEmojis) temp.papoi.delete(e.id); for(const id of inter.values) temp.papoi.add(id); await mostrarSelectorBiblioteca(guild, inter, page); return; }
+    }
+    if(inter.isButton()){
+      if(inter.customId.startsWith('biblioteca_prev_') || inter.customId.startsWith('biblioteca_next_')){ const page=parseInt(inter.customId.split('_').pop()); const newPage=inter.customId.includes('prev')?page-1:page+1; await mostrarSelectorBiblioteca(guild, inter, newPage); return; }
+      if(inter.customId==='biblioteca_clear'){ temp.roba.clear(); temp.papoi.clear(); await mostrarSelectorBiblioteca(guild, inter, 0); return; }
+      if(inter.customId==='biblioteca_auto'){ tempBibliotecaSelection.delete(guildId); bibliotecaData={roba:[],papoi:[]}; await saveBiblioteca(); await inter.update({ content:'🤖 Generando automático...', embeds:[], components:[] }); const ch=await crearPanelBiblioteca(guild); return inter.followUp({ content:`✅ Auto-creado en ${ch}`, flags: MessageFlags.Ephemeral }); }
+      if(inter.customId==='biblioteca_save'){ const dup=[...temp.roba].filter(id=>temp.papoi.has(id)); if(dup.length>0) return inter.reply({ content:`❌ ${dup.length} emojis en AMBAS categorías. Quita duplicados.`, flags: MessageFlags.Ephemeral }); await inter.update({ content:'💾 Guardando...', embeds:[], components:[] }); const ch=await crearPanelBiblioteca(guild, [...temp.roba], [...temp.papoi]); tempBibliotecaSelection.delete(guildId); return inter.followUp({ content:`✅ Biblioteca guardada! ${ch} - 🥚 ${ch.guild.emojis.cache.size} total`, flags: MessageFlags.Ephemeral }); }
+    }
+  }catch(e){ console.log('Biblio inter', e.message); }
+}
+
 async function crearPanelAdminAbuse(guild){
   const canal = await ensureAdminAbuseChannel(guild);
   if(!canal) return null;
@@ -2324,6 +2468,8 @@ client.on(Events.ClientReady, async () => {
             { name: 'setup-admin-abuse', description: 'Crea canal y panel épico Admin Abuse sábados 9am MX', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'admin-portada', description: 'Sube imagen/video portada semanal Admin Abuse (archivo directo)', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen o video (subido directo a Discord)', type: 11, required: true }] },
       { name: 'test-admin-abuse', description: 'Test ping Admin Abuse', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-biblioteca', description: 'Crea biblioteca de emojis ordenada en comunidad papoi', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'actualizar-biblioteca', description: 'Actualiza biblioteca (cuando agregas emojis/stickers)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     ]});
     console.log('✅ Comandos V6 registrados');
   } catch (e) {
@@ -2835,6 +2981,10 @@ client.on(Events.InteractionCreate, async inter => {
       await handleFusionesInteraction(inter);
       return;
     }
+            if((inter.customId && inter.customId.startsWith('biblioteca_'))){
+      await handleBibliotecaInteraction(inter);
+      return;
+    }
         if((inter.customId && inter.customId.startsWith('admin_abuse_'))){
       await handleAdminAbuseInteraction(inter);
       return;
@@ -2989,6 +3139,18 @@ client.on(Events.InteractionCreate, async inter => {
           const ch = await ensureAdminAbuseChannel(inter.guild);
           await crearPanelAdminAbuse(inter.guild);
           return inter.editReply({ content: `✅ Admin Abuse épico creado: ${ch} - Sábados 9AM MX - Rol ${ADMIN_ABUSE_ROLE_NAME} - Usa /admin-portada para subir portada` });
+        }
+                                if(inter.commandName === 'setup-biblioteca'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          return await mostrarSelectorBiblioteca(inter.guild, inter, 0);
+        }
+        if(inter.commandName === 'actualizar-biblioteca'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const ch = await crearPanelBiblioteca(inter.guild);
+          const boost = await getBoostInfo(inter.guild);
+          return inter.editReply({ content: ch? `✅ Biblioteca actualizada en ${ch} - ${inter.guild.emojis.cache.size}/${boost.current.emojis} - Boosts: ${boost.count} Nivel ${boost.tier}` : '❌ No pude crear canal' });
         }
         if(inter.commandName === 'admin-portada'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
