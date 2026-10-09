@@ -235,6 +235,7 @@ let donadoresData = safeLoadJSON(DONADORES_PATH, { users: {} });
 const BIBLIOTECA_PATH = path.join(DATA_DIR, 'biblioteca.json');
 let bibliotecaData = safeLoadJSON(BIBLIOTECA_PATH, { roba: [], papoi: [] });
 const tempBibliotecaSelection = new Map();
+const bibliotecaMuseo = new Map(); // mensajeId -> { category, page, roba, papoi, stickers, boost, guildId }
 const saveBiblioteca = async () => {
   safeSaveJSON(BIBLIOTECA_PATH, bibliotecaData);
   if(useMongo && global.BibliotecaModel){
@@ -835,7 +836,7 @@ async function crearPanelBiblioteca(guild, customRobaIds = null, customPapoiIds 
       name: '🎨│biblioteca-papoi',
       type: ChannelType.GuildText,
       parent: categoria?.id || null,
-      topic: '📚 Biblioteca de emojis y stickers - Solo el bot escribe',
+      topic: '📚 Museo interactivo - 9 por página en grande',
       permissionOverwrites: [
         { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
         { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
@@ -849,10 +850,11 @@ async function crearPanelBiblioteca(guild, customRobaIds = null, customPapoiIds 
     const msgs = await canal.messages.fetch({ limit: 100 }).catch(()=>null);
     if(msgs){
       const old = msgs.filter(m=>m.author.id===client.user.id);
-      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,300)); }
+      for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); }
     }
   }catch{}
-  const emojis = [...guild.emojis.cache.values()];
+  await guild.emojis.fetch().catch(()=>{});
+  const emojis = [...guild.emojis.cache.values()].sort((a,b)=>a.name.localeCompare(b.name));
   let roba, papoi;
   if(customRobaIds || customPapoiIds || bibliotecaData.roba.length>0 || bibliotecaData.papoi.length>0){
     const robaIds = customRobaIds || bibliotecaData.roba;
@@ -861,7 +863,7 @@ async function crearPanelBiblioteca(guild, customRobaIds = null, customPapoiIds 
     papoi = emojis.filter(e => papoiIds.includes(e.id)).sort((a,b)=>a.name.localeCompare(b.name));
     const asignados = new Set([...robaIds,...papoiIds]);
     const noAsignados = emojis.filter(e=>!asignados.has(e.id));
-    if(noAsignados.length>0 &&!customRobaIds &&!customPapoiIds){
+    if(noAsignados.length>0 && !customRobaIds && !customPapoiIds){
       papoi = [...papoi,...noAsignados].sort((a,b)=>a.name.localeCompare(b.name));
     }
     if(customRobaIds || customPapoiIds){
@@ -869,32 +871,122 @@ async function crearPanelBiblioteca(guild, customRobaIds = null, customPapoiIds 
       await saveBiblioteca();
     }
   } else {
-    const sorted = emojis.sort((a,b)=>a.name.localeCompare(b.name));
-    roba = sorted.filter(e => esDeRobaUnHuevo(e.name));
-    papoi = sorted.filter(e =>!esDeRobaUnHuevo(e.name));
+    roba = emojis.filter(e => esDeRobaUnHuevo(e.name));
+    papoi = emojis.filter(e => !esDeRobaUnHuevo(e.name));
   }
-  const stickers = await guild.stickers.fetch().catch(()=> new Map());
-  const embedRoba = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 ROBA UN HUEVO - Emojis del juego')
-  .setDescription(roba.length? roba.map(e => `${e} \`:${e.name}:\``).join('\n').slice(0,4000) : '*Aún no hay emojis en esta categoría*')
-  .setFooter({ text: `${roba.length} emojis • Papois Empire` });
-  const embedPapoi = new EmbedBuilder().setColor(0x5865F2).setTitle('👑 PAPOI EMPIRE - Emojis de la comunidad')
-  .setDescription(papoi.length? papoi.map(e => `${e} \`:${e.name}:\``).join('\n').slice(0,4000) : '*Aún no hay emojis en esta categoría*')
-  .setFooter({ text: `${papoi.length} emojis • Papois Empire` });
+  const stickersMap = await guild.stickers.fetch().catch(()=> new Map());
+  const stickers = [...stickersMap.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const boost = await getBoostInfo(guild);
-  const embedStickers = new EmbedBuilder().setColor(0x57F287).setTitle(`📌 STICKERS (${stickers.size} / ${boost.current.stickers})`)
-  .setDescription([...stickers.values()].map(s => `**${s.name}**`).join('\n') || '*Solo 5 stickers sin boosts - ¡Boostea para más!*')
-  .setFooter({ text: 'Stickers del server' });
-  const pct = boost.next? Math.min(100, Math.floor((boost.count/boost.next.need)*100)) : 100;
-  const barra = '█'.repeat(Math.floor(pct/10)) + '░'.repeat(10-Math.floor(pct/10)) + ` ${pct}%`;
-  const embedBoost = new EmbedBuilder().setColor(0xFF73FA).setTitle('💎 ¿Por qué solo tenemos estos?')
-  .setDescription(`Actualmente somos **Nivel ${boost.tier} con ${boost.count} boosts**\n\`${barra} ${boost.count}/${boost.next?boost.next.need:boost.count} para Nivel ${boost.tier+1}\`\n\n`+(boost.next? `Si llegamos a **Nivel ${boost.tier+1} (${boost.next.need} boosts)** desbloqueamos:\n+ ${boost.next.emojis-boost.current.emojis} emojis más\n+ ${boost.next.stickers-boost.current.stickers} stickers más\n\n¡Boosta para desbloquear más Papoi-emojis! 🚀` : `¡YA SOMOS NIVEL MÁXIMO! 👑`)).setTimestamp().setFooter({ text: `Emojis: ${emojis.length}/${boost.current.emojis}` });
-  await canal.send({ embeds: [embedRoba] }).catch(()=>{});
-  await new Promise(r=>setTimeout(r,400));
-  await canal.send({ embeds: [embedPapoi] }).catch(()=>{});
-  if(stickers.size>0){ await new Promise(r=>setTimeout(r,400)); await canal.send({ embeds: [embedStickers] }).catch(()=>{}); }
-  await new Promise(r=>setTimeout(r,400));
-  await canal.send({ embeds: [embedBoost] }).catch(()=>{});
+
+  const state = { category: 'roba', page: 0, roba, papoi, stickers, boost, guildId: guild.id };
+  const built = buildMuseoEmbeds(state);
+  const components = buildMuseoComponents(state, built.totalPages);
+
+  const msg = await canal.send({ embeds: built.embeds, components }).catch(()=>null);
+  if(msg){
+    state.messageId = msg.id;
+    bibliotecaMuseo.set(msg.id, state);
+  }
   return canal;
+}
+
+function buildMuseoEmbeds(state){
+  const perPage = 9;
+  const list = state[state.category] || [];
+  const totalPages = Math.max(1, Math.ceil(list.length / perPage));
+  const safePage = Math.min(Math.max(0, state.page), totalPages-1);
+  state.page = safePage;
+  const slice = list.slice(safePage*perPage, safePage*perPage+perPage);
+  const boost = state.boost;
+  const pct = boost?.next ? Math.min(100, Math.floor((boost.count/boost.next.need)*100)) : 100;
+  const barra = '█'.repeat(Math.floor(pct/10)) + '░'.repeat(10-Math.floor(pct/10)) + ` ${pct}%`;
+  const headerColor = state.category==='roba'?0xF1C40F: state.category==='papoi'?0x5865F2 : 0x57F287;
+  const headerTitle = state.category==='roba'?`🥚 ROBA UN HUEVO - ${list.length} emojis` : state.category==='papoi'?`👑 PAPOI EMPIRE - ${list.length} emojis` : `📌 STICKERS - ${list.length}/${boost.current.stickers}`;
+  const headerDesc = `**Página ${safePage+1}/${totalPages}** - ${perPage} por página en GRANDE\n\`${barra} Nivel ${boost.tier} ${boost.count} boosts\`\n\nUsa los botones [ROBA] [PAPOI] [STICKERS] para cambiar`;
+
+  const header = new EmbedBuilder().setColor(headerColor).setTitle(headerTitle).setDescription(headerDesc).setFooter({ text: `Emojis: ${state.roba.length+state.papoi.length}/${boost.current.emojis} | Stickers: ${state.stickers.length}/${boost.current.stickers}` }).setTimestamp();
+  const embeds = [header];
+  if(slice.length===0){
+    embeds[0].setDescription(headerDesc + `\n\n*Sin emojis en esta categoría*`);
+  } else {
+    for(const item of slice){
+      if(state.category==='stickers'){
+        const url = item.url || `https://cdn.discordapp.net/stickers/${item.id}.png?size=1024`;
+        embeds.push(new EmbedBuilder().setColor(0x2ECC71).setTitle(`📌 ${item.name}`).setDescription(`\`ID: ${item.id}\``).setImage(url));
+      } else {
+        const url = item.url; // misma técnica que tienda - url grande
+        embeds.push(new EmbedBuilder().setColor(headerColor).setTitle(`${item} :${item.name}:`).setDescription(`\`:${item.name}:\`\nID: \`${item.id}\` • ${item.animated?'Animado':'Estático'}`).setImage(url).setFooter({ text: `:${item.name}:` }));
+      }
+    }
+  }
+  return { embeds, totalPages };
+}
+
+function buildMuseoComponents(state, totalPages){
+  const cat = state.category;
+  const rowCat = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('biblioteca_museo_cat_roba').setLabel(`🥚 ROBA (${state.roba.length})`).setStyle(cat==='roba'?ButtonStyle.Success:ButtonStyle.Secondary).setDisabled(cat==='roba'),
+    new ButtonBuilder().setCustomId('biblioteca_museo_cat_papoi').setLabel(`👑 PAPOI (${state.papoi.length})`).setStyle(cat==='papoi'?ButtonStyle.Success:ButtonStyle.Secondary).setDisabled(cat==='papoi'),
+    new ButtonBuilder().setCustomId('biblioteca_museo_cat_stickers').setLabel(`📌 STICKERS (${state.stickers.length})`).setStyle(cat==='stickers'?ButtonStyle.Success:ButtonStyle.Secondary).setDisabled(cat==='stickers')
+  );
+  const rowPag = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('biblioteca_museo_prev').setLabel('◀ Anterior').setStyle(ButtonStyle.Primary).setDisabled(state.page<=0),
+    new ButtonBuilder().setCustomId('biblioteca_museo_next').setLabel('Siguiente ▶').setStyle(ButtonStyle.Primary).setDisabled(state.page>=totalPages-1),
+    new ButtonBuilder().setCustomId('biblioteca_museo_refresh').setLabel('🔄 Actualizar').setStyle(ButtonStyle.Secondary)
+  );
+  return [rowCat, rowPag];
+}
+
+async function handleBibliotecaMuseoInteraction(inter){
+  try{
+    const msgId = inter.message?.id;
+    let state = bibliotecaMuseo.get(msgId);
+    const guild = inter.guild;
+    if(!state){
+      await guild.emojis.fetch().catch(()=>{});
+      const emojis = [...guild.emojis.cache.values()].sort((a,b)=>a.name.localeCompare(b.name));
+      let roba, papoi;
+      if(bibliotecaData.roba.length||bibliotecaData.papoi.length){
+        roba = emojis.filter(e=>bibliotecaData.roba.includes(e.id));
+        papoi = emojis.filter(e=>bibliotecaData.papoi.includes(e.id));
+        const asign = new Set([...bibliotecaData.roba,...bibliotecaData.papoi]);
+        papoi = [...papoi, ...emojis.filter(e=>!asign.has(e.id))];
+      } else {
+        roba = emojis.filter(e=>esDeRobaUnHuevo(e.name));
+        papoi = emojis.filter(e=>!esDeRobaUnHuevo(e.name));
+      }
+      const stickersMap = await guild.stickers.fetch().catch(()=> new Map());
+      const stickers = [...stickersMap.values()].sort((a,b)=>a.name.localeCompare(b.name));
+      const boost = await getBoostInfo(guild);
+      state = { category:'roba', page:0, roba, papoi, stickers, boost, guildId: guild.id, messageId: msgId };
+      bibliotecaMuseo.set(msgId, state);
+    }
+    if(inter.customId==='biblioteca_museo_cat_roba'){ state.category='roba'; state.page=0; }
+    else if(inter.customId==='biblioteca_museo_cat_papoi'){ state.category='papoi'; state.page=0; }
+    else if(inter.customId==='biblioteca_museo_cat_stickers'){ state.category='stickers'; state.page=0; }
+    else if(inter.customId==='biblioteca_museo_prev'){ state.page = Math.max(0, state.page-1); }
+    else if(inter.customId==='biblioteca_museo_next'){ state.page++; }
+    else if(inter.customId==='biblioteca_museo_refresh'){
+      await guild.emojis.fetch().catch(()=>{});
+      const emojis = [...guild.emojis.cache.values()].sort((a,b)=>a.name.localeCompare(b.name));
+      if(bibliotecaData.roba.length||bibliotecaData.papoi.length){
+        state.roba = emojis.filter(e=>bibliotecaData.roba.includes(e.id));
+        state.papoi = emojis.filter(e=>bibliotecaData.papoi.includes(e.id));
+        const asign = new Set([...bibliotecaData.roba,...bibliotecaData.papoi]);
+        state.papoi = [...state.papoi, ...emojis.filter(e=>!asign.has(e.id))];
+      } else {
+        state.roba = emojis.filter(e=>esDeRobaUnHuevo(e.name));
+        state.papoi = emojis.filter(e=>!esDeRobaUnHuevo(e.name));
+      }
+      const stickersMap = await guild.stickers.fetch().catch(()=> new Map());
+      state.stickers = [...stickersMap.values()].sort((a,b)=>a.name.localeCompare(b.name));
+      state.boost = await getBoostInfo(guild);
+    }
+    const built = buildMuseoEmbeds(state);
+    const components = buildMuseoComponents(state, built.totalPages);
+    bibliotecaMuseo.set(msgId, state);
+    await inter.update({ embeds: built.embeds, components });
+  }catch(e){ console.log('museo error', e.message); if(!inter.replied) await inter.reply({ content:`❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
 }
 async function mostrarSelectorBiblioteca(guild, inter, page=0){
   await guild.emojis.fetch().catch(()=>{});
@@ -2979,6 +3071,10 @@ client.on(Events.InteractionCreate, async inter => {
     }
     if((inter.customId && inter.customId.startsWith('fusion_')) || (inter.isModalSubmit() && inter.customId.startsWith('modal_fusion_')) || (inter.customId && inter.customId.startsWith('select_fusion_'))){
       await handleFusionesInteraction(inter);
+      return;
+    }
+            if((inter.customId && inter.customId.startsWith('biblioteca_museo_'))){
+      await handleBibliotecaMuseoInteraction(inter);
       return;
     }
             if((inter.customId && inter.customId.startsWith('biblioteca_'))){
