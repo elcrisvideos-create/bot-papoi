@@ -619,7 +619,7 @@ async function ensureButterflyRole(guild){
   let role = findRole(guild, BUTTERFLY_ROLE_NAME);
   if(!role){
     try{
-      role = await guild.roles.create({ name: BUTTERFLY_ROLE_NAME, color: 0x8A2BE2, reason: 'Rol para evento Floración Mariposas :Mariposa:', mentionable: true });
+      role = await guild.roles.create({ name: BUTTERFLY_ROLE_NAME, colors: { primaryColor: 0x8A2BE2 }, reason: 'Rol para evento Floración Mariposas :Mariposa:', mentionable: true });
       console.log(`✅ Rol auto-creado: ${BUTTERFLY_ROLE_NAME}`);
     }catch(e){ console.log('Error creando rol mariposas', e.message); return null; }
   }
@@ -698,7 +698,7 @@ async function ensureMultimediaChannel(guild){
 async function ensureAdminAbuseRole(guild){
   let role = findRole(guild, ADMIN_ABUSE_ROLE_NAME);
   if(!role){
-    role = await guild.roles.create({ name: ADMIN_ABUSE_ROLE_NAME, color: 0xFFD700, reason: 'Rol para ping Admin Abuse sábados 9am', mentionable: true }).catch(()=>null);
+    role = await guild.roles.create({ name: ADMIN_ABUSE_ROLE_NAME, colors: { primaryColor: 0xFFD700 }, reason: 'Rol para ping Admin Abuse sábados 9am', mentionable: true }).catch(()=>null);
   }
   return role;
 }
@@ -743,8 +743,7 @@ function buildAdminAbuseEmbed(guild, target){
     `**🕒 En tu hora local:**\n<t:${unix}:F> - <t:${unix}:R>\n\n`+
     `**🌎 Horarios fijos:**\n`+
     `🇲🇽 MX 9:00 AM | 🇨🇴 COL 10:00 AM | 🇵🇪 PE 10:00 AM\n`+
-    `🇦🇷 ARG 12:00 PM | 🇨🇱 CHI 12:00 PM | 🇪🇸 ESP 5:00 PM | 🇺🇸 EST 11:00 AM\n\n`+
-    (adminAbuseData.customImageUrl? `**🔥 PORTADA DE LA SEMANA:**\n> Subida directa por el Papoi Mayor\n` : `> Usa \`/admin-portada\` para subir la imagen/video de esta semana`)
+    `🇦🇷 ARG 12:00 PM | 🇨🇱 CHI 12:00 PM | 🇪🇸 ESP 5:00 PM | 🇺🇸 EST 11:00 AM\n`
    )
   .setFooter({ text: `Papois Empire • Sábados 9AM MX • Actualiza automático` })
   .setTimestamp(target);
@@ -773,7 +772,7 @@ async function ensureAdminAbuseChannel(guild){
       name: ADMIN_ABUSE_CHANNEL_NAME,
       type: ChannelType.GuildText,
       parent: categoria?.id || null,
-      topic: '⏰ Cuenta regresiva Admin Abuse - SÁBADOS 9AM Centro MX - Solo bot escribe aquí - <t:0:R> en tu hora local',
+      topic: '⏰ Cuenta regresiva Admin Abuse - SÁBADOS 9AM Centro MX - Solo bot escribe aquí',
       permissionOverwrites: overwrites
     }).catch(()=>null);
     console.log(`✅ Canal Admin Abuse creado: ${canal?.name}`);
@@ -931,7 +930,7 @@ async function ensureChambeadorRoles(guild){
   ];
   for(const r of rolesToCreate){
     if(!findRole(guild, r.name)){
-      await guild.roles.create({ name: r.name, color: r.color, reason: r.reason, mentionable: false }).catch(()=>{});
+      await guild.roles.create({ name: r.name, colors: { primaryColor: r.color }, reason: r.reason, mentionable: false }).catch(()=>{});
       await new Promise(res=>setTimeout(res, 300));
     }
   }
@@ -1058,7 +1057,7 @@ async function ensureDonadorRoles(guild){
   ];
   for(const r of rolesToCreate){
     if(!findRole(guild, r.name)){
-      await guild.roles.create({ name: r.name, color: r.color, reason: r.reason, mentionable: false }).catch(()=>{});
+      await guild.roles.create({ name: r.name, colors: { primaryColor: r.color }, reason: r.reason, mentionable: false }).catch(()=>{});
       await new Promise(res=>setTimeout(res, 300));
     }
   }
