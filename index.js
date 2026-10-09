@@ -86,7 +86,9 @@ const CONFIG = {
     boostersBeneficios: ['boosters-beneficios', '💎│boosters-beneficios', 'boosters-be'],
     boostersChat: ['chat-boosters', '💬│chat-boosters', 'boosters-chat'],
     guias: ['guías', 'guias', '📚│guías-roba-un-huevo', '📚│guias-roba-un-huevo', '📖│guías', 'guías-roba-un-huevo'],
-    biblioteca: ['biblioteca-papoi', '🎨│biblioteca-papoi', 'biblioteca-emojis', 'biblioteca']
+    biblioteca: ['biblioteca-papoi', '🎨│biblioteca-papoi', 'biblioteca-emojis', 'biblioteca'],
+    minijuegos: ['minijuegos', '🎮│minijuegos', '🎮-minijuegos'],
+    topsMinijuegos: ['tops-minijuegos', '🏆│tops-minijuegos', '🏆-tops']
   },
     categories: {
     robaHuevo: ['roba un huevo', 'roba'],
@@ -236,6 +238,31 @@ const BIBLIOTECA_PATH = path.join(DATA_DIR, 'biblioteca.json');
 let bibliotecaData = safeLoadJSON(BIBLIOTECA_PATH, { roba: [], papoi: [] });
 const tempBibliotecaSelection = new Map();
 const bibliotecaMuseo = new Map(); // mensajeId -> { category, page, roba, papoi, stickers, boost, guildId }
+// --- MINIJUEGOS PAPOI V7 ---
+const MINIJUEGOS_PATH = path.join(DATA_DIR, 'minijuegos.json');
+let minijuegosData = safeLoadJSON(MINIJUEGOS_PATH, { users: {}, weeklyStart: Date.now() });
+let MinijuegoModel = null;
+const minijuegoActivo = new Map(); // userId -> { tipo, startTime, readyAt, correctIndex, timeout }
+const MINIJUEGOS_ROL_CAMPEON = '🎮 Campeón Papoi';
+const saveMinijuegos = async (soloUserId = null) => {
+  safeSaveJSON(MINIJUEGOS_PATH, minijuegosData);
+  if(useMongo && MinijuegoModel){
+    try{
+      if(soloUserId){
+        const d = minijuegosData.users[soloUserId];
+        if(d) await MinijuegoModel.findOneAndUpdate({ userId: soloUserId }, {...d, userId: soloUserId}, {upsert:true});
+      } else {
+        for(const [uid, d] of Object.entries(minijuegosData.users)){
+          await MinijuegoModel.findOneAndUpdate({ userId: uid }, {...d, userId: uid}, {upsert:true});
+        }
+      }
+    }catch(e){ console.log('Minijuegos Mongo err', e.message); }
+  }
+};
+function getMinijuegoUser(userId){
+  if(!minijuegosData.users[userId]) minijuegosData.users[userId] = { puntos:0, weekly:0, atrapa:0, slot:0, ppt:0, memoria:0, bomba:0, fails:0, lastPlay:0 };
+  return minijuegosData.users[userId];
+}
 const saveBiblioteca = async () => {
   safeSaveJSON(BIBLIOTECA_PATH, bibliotecaData);
   if(useMongo && global.BibliotecaModel){
@@ -372,6 +399,15 @@ async function initMongo() {
       bibliotecaData = { roba: bibMongo.roba||[], papoi: bibMongo.papoi||[] };
       safeSaveJSON(BIBLIOTECA_PATH, bibliotecaData);
       console.log(`✅ Biblioteca cargada de Mongo: ${bibMongo.roba.length} roba, ${bibMongo.papoi.length} papoi`);
+    }
+        const minijuegoSchema = new mongoose.Schema({ userId: String, puntos: Number, weekly: Number, atrapa: Number, slot: Number, ppt: Number, memoria: Number, bomba: Number, fails: Number }, { strict:false });
+    MinijuegoModel = mongoose.model('Minijuego', minijuegoSchema);
+    const miniMongo = await MinijuegoModel.find({});
+    if(miniMongo.length>0){
+      minijuegosData.users = {};
+      miniMongo.forEach(d=>{ minijuegosData.users[d.userId] = { puntos:d.puntos||0, weekly:d.weekly||0, atrapa:d.atrapa||0, slot:d.slot||0, ppt:d.ppt||0, memoria:d.memoria||0, bomba:d.bomba||0, fails:d.fails||0, lastPlay:0 }; });
+      console.log(`✅ ${miniMongo.length} minijuegos cargados de Mongo`);
+      safeSaveJSON(MINIJUEGOS_PATH, minijuegosData);
     }
     global.BibliotecaModel = BibliotecaModel;
     const donadorSchema = new mongoose.Schema({ userId: String, puntos: Number, totalRobux: Number, totalEfectivo: Number, fakes: Number, baneado: Boolean, createdAt: Number }, { strict: false });
@@ -825,7 +861,7 @@ async function getBoostInfo(guild){
 }
 function esDeRobaUnHuevo(emojiName){
   const n = emojiName.toLowerCase();
-  const claves = ['huevo','royal','world','archangel','kitsune','unicorn','celestial','skeleton','pegasus','gorilla','oni','mosasaurus','maja','lava','phoenix','ice','starry','razorfang','centaur','gargoyle','jelly','shark','stag','cosmic','tralaledon','trex','kraken','cerberus','yeti','snake','mariposa','nightflame'];
+  const claves = ['huevo','royal','world','archangel','arcangel','kitsune','unicorn','celestial','skeleton','pegasus','gorilla','oni','mosasaurus','maja','lava','phoenix','fenix','ice','starry','razorfang','centaur','gargoyle','jelly','shark','stag','cosmic','tralaledon','trex','kraken','cerberus','yeti','snake','mariposa','nightflame','lunar','dragon'];
   return claves.some(k => n.includes(k));
 }
 async function crearPanelBiblioteca(guild, customRobaIds = null, customPapoiIds = null){
@@ -987,6 +1023,285 @@ async function handleBibliotecaMuseoInteraction(inter){
     bibliotecaMuseo.set(msgId, state);
     await inter.update({ embeds: built.embeds, components });
   }catch(e){ console.log('museo error', e.message); if(!inter.replied) await inter.reply({ content:`❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
+}
+// ========== MINIJUEGOS PAPOI - SISTEMA ANTI-MACRO ==========
+async function ensureMinijuegosRole(guild){
+  let role = findRole(guild, MINIJUEGOS_ROL_CAMPEON);
+  if(!role){
+    role = await guild.roles.create({ name: MINIJUEGOS_ROL_CAMPEON, colors:{primaryColor:0xFFD700}, reason:'Campeon semanal minijuegos', mentionable:true }).catch(()=>null);
+  }
+  return role;
+}
+async function ensureMinijuegosChannels(guild){
+  await ensureMinijuegosRole(guild);
+  const categoria = findCategory(guild, CONFIG.categories.comunidadPapoi);
+  let juegos = findChannel(guild, CONFIG.channels.minijuegos);
+  let tops = findChannel(guild, CONFIG.channels.topsMinijuegos);
+  const baseOver = [
+    { id: guild.roles.everyone.id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny:[PermissionFlagsBits.SendMessages] },
+    { id: client.user.id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+  ];
+  if(!juegos){
+    juegos = await guild.channels.create({ name:'🎮│minijuegos', type:ChannelType.GuildText, parent:categoria?.id||null, topic:'🎮 Solo vs Bot • Anti-macro • Random 100% • Solo botones', permissionOverwrites:baseOver }).catch(()=>null);
+  }
+  if(!tops){
+    tops = await guild.channels.create({ name:'🏆│tops-minijuegos', type:ChannelType.GuildText, parent:categoria?.id||null, topic:'🏆 Tops orgullo semanal • Campeón automático', permissionOverwrites:baseOver }).catch(()=>null);
+  }
+  return { juegos, tops };
+}
+function getRobaEmojis(guild, n=1){
+  const all = [...guild.emojis.cache.values()].filter(e=>esDeRobaUnHuevo(e.name));
+  const pool = all.length? all : [...guild.emojis.cache.values()];
+  const res=[];
+  for(let i=0;i<n;i++) res.push(pool[Math.floor(Math.random()*pool.length)]);
+  return n===1? res[0] : res;
+}
+async function crearPanelMinijuegos(guild){
+  const { juegos } = await ensureMinijuegosChannels(guild);
+  if(!juegos) return;
+  try{ const msgs=await juegos.messages.fetch({limit:30}).catch(()=>null); if(msgs){ for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,200)); } } }catch{}
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🎮 MINIJUEGOS PAPOI - VS BOT • ANTI-MACRO').setDescription(
+    `**Todo es contra el bot y 100% random para que no sirva autoclicker.**\n\n`+
+    `🥚 **Atrapa el Huevo** - Espera random 2-6s, aparece un huevo dorado en 1 de 5 botones random. Si clickeas antes o el botón falso, -5 pts. Mientras más rápido, más puntos (hasta 25).\n\n`+
+    `🎰 **Slot Papoi** - Usa TODOS los emojis de Roba un Huevo. 3 rodillos random. 3 iguales = 50 pts JACKPOT, 2 iguales = 10 pts.\n\n`+
+    `✂ **Piedra Papel Tijera** - Clásico vs bot, el bot elige random al momento. Gana = 15 pts.\n\n`+
+    `🧠 **Memoria Papoi** - Te muestro 3 huevos random 4s y luego pregunto ¿Cuál iba en medio? 4 opciones random. Acierto = 20 pts.\n\n`+
+    `💣 **Huevo Bomba** - Activa el huevo y tienes 1.5-3.5s random para desactivar. Si explota pierdes. Si la salvas = 30 pts.\n\n`+
+    `> Cooldown 8s por juego para evitar spam. Ranking solo orgullo. Campeón semanal gana rol ${MINIJUEGOS_ROL_CAMPEON} automático.`
+  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Anti-macro • Random'}).setTimestamp();
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('minijuego_atrapa').setLabel('🥚 Atrapa').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('minijuego_slot').setLabel('🎰 Slot').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('minijuego_ppt').setLabel('✂ PPT').setStyle(ButtonStyle.Secondary),
+  );
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('minijuego_memoria').setLabel('🧠 Memoria').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('minijuego_bomba').setLabel('💣 Bomba').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('minijuego_mis').setLabel('📊 Mis Stats').setStyle(ButtonStyle.Secondary),
+  );
+  await juegos.send({ embeds:[embed], components:[row1,row2] });
+  return juegos;
+}
+async function crearPanelTops(guild){
+  const { tops } = await ensureMinijuegosChannels(guild);
+  if(!tops) return;
+  try{ const msgs=await tops.messages.fetch({limit:10}).catch(()=>null); if(msgs){ for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,200)); } } }catch{}
+  const embed = buildTopsEmbed(guild);
+  await tops.send({ embeds:[embed] });
+}
+function buildTopsEmbed(guild){
+  const users = Object.entries(minijuegosData.users).sort((a,b)=>b[1].weekly - a[1].weekly).slice(0,10);
+  const total = Object.entries(minijuegosData.users).sort((a,b)=>b[1].puntos - a[1].puntos).slice(0,10);
+  const weeklyTxt = users.length? users.map(([id,d],i)=>`**${i+1}.** <@${id}> - **${d.weekly}** pts (A:${d.atrapa} S:${d.slot} PPT:${d.ppt} M:${d.memoria} B:${d.bomba})`).join('\n') : '*Nadie ha jugado esta semana*';
+  const totalTxt = total.length? total.map(([id,d],i)=>`**${i+1}.** <@${id}> - **${d.puntos}** pts totales`).join('\n') : '*Sin datos*';
+  const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 TOPS MINIJUEGOS - ORGULLO PAPOI').setDescription(
+    `**🔥 SEMANAL (Campeón gana rol ${MINIJUEGOS_ROL_CAMPEON}):**\n${weeklyTxt}\n\n`+
+    `**👑 HISTÓRICO:**\n${totalTxt}\n\n`+
+    `> Reset semanal: Domingo 00:00 MX. Solo orgullo, no XP.`
+  ).setFooter({text:`Semana desde ${new Date(minijuegosData.weeklyStart).toLocaleDateString('es-MX')} • Actualiza cada 5 min`}).setTimestamp();
+  return embed;
+}
+async function actualizarPanelTops(guild){
+  const tops = findChannel(guild, CONFIG.channels.topsMinijuegos);
+  if(!tops) return;
+  const msgs = await tops.messages.fetch({limit:5}).catch(()=>null);
+  const msg = msgs? msgs.find(m=>m.author.id===client.user.id) : null;
+  if(!msg) return crearPanelTops(guild);
+  await msg.edit({ embeds:[buildTopsEmbed(guild)] }).catch(()=>{});
+}
+async function actualizarCampeonSemanal(guild){
+  const role = await ensureMinijuegosRole(guild);
+  if(!role) return;
+  const top = Object.entries(minijuegosData.users).sort((a,b)=>b[1].weekly - a[1].weekly)[0];
+  // quitar a todos
+  for(const [,m] of guild.members.cache){
+    if(m.roles.cache.has(role.id)) await m.roles.remove(role.id).catch(()=>{});
+  }
+  if(!top || top[1].weekly<=0) return;
+  const member = await guild.members.fetch(top[0]).catch(()=>null);
+  if(member) await member.roles.add(role).catch(()=>{});
+}
+async function handleMinijuegosInteraction(inter){
+  const guild = inter.guild;
+  const userId = inter.user.id;
+  const now = Date.now();
+  const cd = checkCooldown(userId, 'minijuego', 8);
+  if(cd>0 &&!inter.customId.startsWith('minijuego_mis') &&!inter.customId.includes('atrapa_click') &&!inter.customId.includes('bomba_click') &&!inter.customId.includes('memoria_') &&!inter.customId.includes('ppt_')){
+    return inter.reply({ content:`⏳ Espera ${cd}s papoi, anti-spam`, flags: MessageFlags.Ephemeral });
+  }
+  const data = getMinijuegoUser(userId);
+
+  // --- MIS STATS ---
+  if(inter.customId==='minijuego_mis'){
+    const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`📊 Stats de ${inter.user.username}`).setDescription(
+      `**Total:** ${data.puntos} pts\n**Semanal:** ${data.weekly} pts\n\n🥚 Atrapa: ${data.atrapa} pts\n🎰 Slot: ${data.slot} (${Math.floor(data.slot/50)} jackpots)\n✂ PPT: ${data.ppt} pts\n🧠 Memoria: ${data.memoria} pts\n💣 Bomba: ${data.bomba} pts\n❌ Fails: ${data.fails}`
+    );
+    return inter.reply({ embeds:[embed], flags: MessageFlags.Ephemeral });
+  }
+
+  // --- ATRAPA ---
+  if(inter.customId==='minijuego_atrapa'){
+    const delay = 2000 + Math.floor(Math.random()*4000);
+    const correct = Math.floor(Math.random()*5);
+    minijuegoActivo.set(userId, { tipo:'atrapa', readyAt: now+delay, startTime:0, correctIndex:correct, active:false });
+    const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 ¡ATENTO!').setDescription(`El huevo dorado aparecerá en **${(delay/1000).toFixed(1)}s aprox** en 1 de los 5 botones random.\n\n⚠ Si clickeas antes o el botón falso = **-5 pts**\n> Anti-macro: posición random y tiempo random`);
+    const row = new ActionRowBuilder().addComponents(
+     ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel(i===correct? '❓' : '❓').setStyle(ButtonStyle.Secondary))
+    );
+    const msg = await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral, fetchReply:true });
+    setTimeout(async ()=>{
+      const state = minijuegoActivo.get(userId);
+      if(!state || state.tipo!=='atrapa') return;
+      state.active=true; state.startTime=Date.now();
+      const embed2 = new EmbedBuilder().setColor(0x57F287).setTitle('🥚 ¡AHORA! ¡ATRAPA!').setDescription(`¡CLICK AL DORADO! ¡RÁPIDO!`);
+      const row2 = new ActionRowBuilder().addComponents(
+       ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel(i===state.correctIndex? '🥚' : '💨').setStyle(i===state.correctIndex? ButtonStyle.Success: ButtonStyle.Secondary))
+      );
+      await inter.editReply({ embeds:[embed2], components:[row2] }).catch(()=>{});
+      setTimeout(()=>{ if(minijuegoActivo.get(userId)?.tipo==='atrapa' && minijuegoActivo.get(userId)?.active){ minijuegoActivo.delete(userId); inter.editReply({ content:'💨 Muy lento! El huevo escapó. -2 pts', embeds:[], components:[] }).catch(()=>{}); data.fails++; data.puntos=Math.max(0,data.puntos-2); saveMinijuegos(userId); } }, 3500);
+    }, delay);
+    return;
+  }
+  if(inter.customId.startsWith('minijuego_atrapa_click_')){
+    const idx = parseInt(inter.customId.split('_').pop());
+    const state = minijuegoActivo.get(userId);
+    if(!state || state.tipo!=='atrapa'){
+      return inter.reply({ content:'❌ Juego expirado, inicia otro en 🎮│minijuegos', flags: MessageFlags.Ephemeral });
+    }
+    if(!state.active){
+      minijuegoActivo.delete(userId);
+      data.fails++; data.puntos=Math.max(0,data.puntos-5); data.weekly=Math.max(0,data.weekly-5); await saveMinijuegos(userId);
+      return inter.update({ content:`⚠ ¡TRAMPOSO! Clickeaste antes. -5 pts (anti-macro)`, embeds:[], components:[] });
+    }
+    if(idx!==state.correctIndex){
+      minijuegoActivo.delete(userId);
+      data.fails++; data.puntos=Math.max(0,data.puntos-5); data.weekly=Math.max(0,data.weekly-5); await saveMinijuegos(userId);
+      return inter.update({ content:`❌ ¡FALSO! Era el otro botón. -5 pts`, embeds:[], components:[] });
+    }
+    const reaction = Date.now() - state.startTime;
+    const pts = Math.max(5, Math.floor(30 - reaction/100));
+    minijuegoActivo.delete(userId);
+    data.puntos+=pts; data.weekly+=pts; data.atrapa+=pts; data.lastPlay=now; await saveMinijuegos(userId);
+    return inter.update({ content:`✅ ¡ATRAPADO en ${reaction}ms! +${pts} pts`, embeds:[], components:[] });
+  }
+
+  // --- SLOT ---
+  if(inter.customId==='minijuego_slot'){
+    await guild.emojis.fetch().catch(()=>{});
+    const e1 = getRobaEmojis(guild); const e2 = getRobaEmojis(guild); const e3 = getRobaEmojis(guild);
+    let pts=0, txt='';
+    if(e1.id===e2.id && e2.id===e3.id){ pts=50; txt=`🎉 JACKPOT! 3x ${e1} +50 pts`; }
+    else if(e1.id===e2.id || e2.id===e3.id || e1.id===e3.id){ pts=10; txt=`✨ 2 iguales! +10 pts`; }
+    else { txt=`💨 Nada, sigue intentando`; }
+    data.puntos+=pts; data.weekly+=pts; data.slot+=pts; await saveMinijuegos(userId);
+    const embed = new EmbedBuilder().setColor(pts===50?0xFFD700:0x5865F2).setTitle('🎰 SLOT PAPOI').setDescription(`[ ${e1} | ${e2} | ${e3} ]\n\n${txt}\n**Total:** ${data.puntos} pts`);
+    return inter.reply({ embeds:[embed], flags: MessageFlags.Ephemeral });
+  }
+
+  // --- PPT ---
+  if(inter.customId==='minijuego_ppt'){
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('minijuego_ppt_rock').setLabel('🪨 Piedra').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('minijuego_ppt_paper').setLabel('📄 Papel').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('minijuego_ppt_scissors').setLabel('✂ Tijera').setStyle(ButtonStyle.Secondary),
+    );
+    return inter.reply({ content:'✂ Elige:', components:[row], flags: MessageFlags.Ephemeral });
+  }
+  if(inter.customId.startsWith('minijuego_ppt_')){
+    const choice = inter.customId.split('_').pop();
+    const bot = ['rock','paper','scissors'][Math.floor(Math.random()*3)];
+    const win = (choice==='rock'&&bot==='scissors')||(choice==='paper'&&bot==='rock')||(choice==='scissors'&&bot==='paper');
+    const draw = choice===bot;
+    let pts=0, res='';
+    if(win){ pts=15; res=`✅ Ganaste! +15 pts`; data.ppt+=pts; }
+    else if(draw){ res=`🤝 Empate`; }
+    else { res=`❌ Perdiste`; data.fails++; }
+    data.puntos+=pts; data.weekly+=pts; await saveMinijuegos(userId);
+    return inter.update({ content:`Tú: ${choice} vs Bot: ${bot}\n${res} • Total ${data.puntos}`, components:[] });
+  }
+
+  // --- MEMORIA ---
+  if(inter.customId==='minijuego_memoria'){
+    await guild.emojis.fetch().catch(()=>{});
+    const seq = [getRobaEmojis(guild), getRobaEmojis(guild), getRobaEmojis(guild)];
+const qIndex = Math.floor(Math.random()*3);
+    const correctEmoji = seq[qIndex];
+    const fakes = [getRobaEmojis(guild), getRobaEmojis(guild)].filter(e=>e.id!==correctEmoji.id).slice(0,3);
+    const options = [correctEmoji,...fakes].sort(()=>Math.random()-0.5);
+    minijuegoActivo.set(userId, { tipo:'memoria', correctId: correctEmoji.id, seq });
+    const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle('🧠 MEMORIZA 4s').setDescription(seq.map(e=>`${e}`).join(' ') + `\n\nPregunta en 4s...`).setFooter({text:`Posición ${qIndex+1} de 3`});
+    await inter.reply({ embeds:[embed], flags: MessageFlags.Ephemeral });
+    setTimeout(async ()=>{
+      const embed2 = new EmbedBuilder().setColor(0x5865F2).setTitle(`🧠 ¿Cuál iba en la posición ${qIndex+1}?`).setDescription(`Era: ${seq.map(()=> '❓').join(' ')}`);
+      const row = new ActionRowBuilder().addComponents(...options.map((e,i)=> new ButtonBuilder().setCustomId(`minijuego_memoria_opt_${e.id}`).setLabel(e.name.slice(0,20)).setEmoji({id:e.id, name:e.name}).setStyle(ButtonStyle.Secondary)));
+      await inter.editReply({ embeds:[embed2], components:[row] }).catch(()=>{});
+
+    }, 4000);
+    return;
+  }
+  if(inter.customId.startsWith('minijuego_memoria_opt_')){
+    const chosenId = inter.customId.replace('minijuego_memoria_opt_','');
+    const state = minijuegoActivo.get(userId);
+    if(!state || state.tipo!=='memoria') return inter.reply({ content:'❌ Expirado', flags: MessageFlags.Ephemeral });
+    minijuegoActivo.delete(userId);
+    if(chosenId===state.correctId){
+      data.puntos+=20; data.weekly+=20; data.memoria+=20; await saveMinijuegos(userId);
+      return inter.update({ content:`✅ ¡Correcto! Era ${state.seq.map(e=>`${e}`).join(' ')} +20 pts`, embeds:[], components:[] });
+    } else {
+      data.fails++; await saveMinijuegos(userId);
+      return inter.update({ content:`❌ Era ${state.seq.find(e=>e.id===state.correctId)} - Fallaste`, embeds:[], components:[] });
+    }
+  }
+
+  // --- BOMBA ---
+  if(inter.customId==='minijuego_bomba'){
+    const delay = 1500 + Math.floor(Math.random()*2000);
+    minijuegoActivo.set(userId, { tipo:'bomba', readyAt: now+delay, active:false });
+    const embed = new EmbedBuilder().setColor(0xED4245).setTitle('💣 ¡HUEVO BOMBA ACTIVADO!').setDescription(`Explotará en **${(delay/1000).toFixed(1)}s random**. ¡Desactívalo rápido!`);
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_bomba_click').setLabel('💣 DESACTIVAR').setStyle(ButtonStyle.Danger));
+    await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral });
+    const to = setTimeout(async ()=>{
+      const st = minijuegoActivo.get(userId);
+      if(st && st.tipo==='bomba'){
+        minijuegoActivo.delete(userId);
+        data.fails++; data.puntos=Math.max(0,data.puntos-3); await saveMinijuegos(userId);
+        inter.editReply({ content:'💥 ¡BOOM! Explotó -3 pts', embeds:[], components:[] }).catch(()=>{});
+      }
+    }, delay);
+    minijuegoActivo.get(userId).timeout = to;
+    return;
+  }
+  if(inter.customId==='minijuego_bomba_click'){
+    const st = minijuegoActivo.get(userId);
+    if(!st || st.tipo!=='bomba') return inter.reply({ content:'❌ Ya explotó', flags: MessageFlags.Ephemeral });
+    clearTimeout(st.timeout);
+    minijuegoActivo.delete(userId);
+    const pts = 30;
+    data.puntos+=pts; data.weekly+=pts; data.bomba+=pts; await saveMinijuegos(userId);
+    return inter.update({ content:`✅ ¡Salvado! +${pts} pts bomba desactivada`, embeds:[], components:[] });
+  }
+}
+function startMinijuegosScheduler(){
+  console.log('🎮 Scheduler Minijuegos iniciado');
+  setInterval(async ()=>{
+    const guild = client.guilds.cache.get(process.env.GUILD_ID);
+    if(guild) await actualizarPanelTops(guild).catch(()=>{});
+  }, 5*60*1000);
+  setInterval(async ()=>{
+    const guild = client.guilds.cache.get(process.env.GUILD_ID);
+    if(!guild) return;
+    // reset semanal domingo 00:00 MX = 06:00 UTC domingo
+    const now = new Date();
+    const last = minijuegosData.weeklyStart;
+    const diff = now - last;
+    if(diff > 7*24*60*60*1000){
+      await actualizarCampeonSemanal(guild).catch(()=>{});
+      for(const k in minijuegosData.users) minijuegosData.users[k].weekly = 0;
+      minijuegosData.weeklyStart = now.getTime();
+      await saveMinijuegos();
+      await crearPanelTops(guild).catch(()=>{});
+    }
+  }, 60*60*1000);
 }
 async function mostrarSelectorBiblioteca(guild, inter, page=0){
   await guild.emojis.fetch().catch(()=>{});
@@ -2562,6 +2877,9 @@ client.on(Events.ClientReady, async () => {
       { name: 'test-admin-abuse', description: 'Test ping Admin Abuse', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-biblioteca', description: 'Crea biblioteca de emojis ordenada en comunidad papoi', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-biblioteca', description: 'Actualiza biblioteca (cuando agregas emojis/stickers)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-minijuegos', description: 'Crea canales 🎮 minijuegos y 🏆 tops', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'actualizar-minijuegos', description: 'Recrea paneles de minijuegos', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'tops-minijuegos', description: 'Ver tu top de minijuegos', options: [] },
     ]});
     console.log('✅ Comandos V6 registrados');
   } catch (e) {
@@ -2589,6 +2907,10 @@ client.on(Events.ClientReady, async () => {
   await ensureAdminAbuseChannel(guild).catch(()=>{});
   await crearPanelAdminAbuse(guild).catch(()=>{});
   startAdminAbuseScheduler();
+  await ensureMinijuegosChannels(guild).catch(()=>{});
+  await crearPanelMinijuegos(guild).catch(()=>{});
+  await crearPanelTops(guild).catch(()=>{});
+  startMinijuegosScheduler();
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -3073,6 +3395,10 @@ client.on(Events.InteractionCreate, async inter => {
       await handleFusionesInteraction(inter);
       return;
     }
+                if((inter.customId && inter.customId.startsWith('minijuego_'))){
+      await handleMinijuegosInteraction(inter);
+      return;
+    }
             if((inter.customId && inter.customId.startsWith('biblioteca_museo_'))){
       await handleBibliotecaMuseoInteraction(inter);
       return;
@@ -3247,6 +3573,18 @@ client.on(Events.InteractionCreate, async inter => {
           const ch = await crearPanelBiblioteca(inter.guild);
           const boost = await getBoostInfo(inter.guild);
           return inter.editReply({ content: ch? `✅ Biblioteca actualizada en ${ch} - ${inter.guild.emojis.cache.size}/${boost.current.emojis} - Boosts: ${boost.count} Nivel ${boost.tier}` : '❌ No pude crear canal' });
+        }
+                if(inter.commandName === 'setup-minijuegos' || inter.commandName === 'actualizar-minijuegos'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const { juegos, tops } = await ensureMinijuegosChannels(inter.guild);
+          await crearPanelMinijuegos(inter.guild);
+          await crearPanelTops(inter.guild);
+          return inter.editReply({ content: `✅ Minijuegos épicos creados: ${juegos} y ${tops} - Rol ${MINIJUEGOS_ROL_CAMPEON}` });
+        }
+        if(inter.commandName === 'tops-minijuegos'){
+          const data = getMinijuegoUser(inter.user.id);
+          return inter.reply({ embeds:[new EmbedBuilder().setColor(0xFFD700).setTitle('📊 Tus Stats').setDescription(`Total ${data.puntos} | Semanal ${data.weekly}\n🥚${data.atrapa} 🎰${data.slot} ✂${data.ppt} 🧠${data.memoria} 💣${data.bomba}`)], flags: MessageFlags.Ephemeral });
         }
         if(inter.commandName === 'admin-portada'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
