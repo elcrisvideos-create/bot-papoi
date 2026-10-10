@@ -2479,6 +2479,25 @@ async function crearPostGuia(guild, { titulo, categoriaTag, descripcion, files }
     return thread;
   }catch(e){ console.log('crearPostGuia error', e.message); return null; }
 }
+async function editarGuia(guild, threadId, { titulo, categoriaTag, descripcion, files }){
+  const thread = await guild.channels.fetch(threadId).catch(()=>null);
+  if(!thread ||!thread.isThread()) throw new Error('No es un post de foro. Copia el ID del POST, no del canal');
+  const starter = await thread.fetchStarterMessage().catch(()=>null);
+  if(!starter) throw new Error('No pude obtener mensaje inicial');
+  if(titulo) await thread.setName(`${GUIAS_TAGS.find(t=>t.name.includes(categoriaTag||''))?.emoji || '📚'} ${titulo}`.slice(0,95)).catch(()=>{});
+  const embed = starter.embeds[0]? EmbedBuilder.from(starter.embeds[0]) : new EmbedBuilder().setColor(0xFFD700);
+  if(titulo) embed.setTitle(`📚 ${titulo}`);
+  if(descripcion) embed.setDescription(descripcion.slice(0,4000));
+  if(categoriaTag) embed.setFooter({ text: `Guía Papoi • ${categoriaTag} • Editada ${new Date().toLocaleDateString('es-MX')}` });
+  embed.setTimestamp();
+  let payload = { embeds: [embed] };
+  if(files?.length){
+    payload.files = files.map(f=>({ attachment: f.url, name: f.name }));
+    embed.setImage(`attachment://${files[0].name}`);
+  }
+  await starter.edit(payload);
+  return thread;
+}
 
 function isMensajeFusionesEnGeneral(msg){
   if(!msg.guild) return false;
@@ -3309,6 +3328,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'video', description: 'Anunciar video con aura', options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-guias', description: 'Crea el foro 📚│guías-roba-un-huevo con tags', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'publicar-guia', description: 'Publica una guía con imagen en el foro', options: [{ name: 'titulo', description: 'Título de la guía', type: 3, required: true }, { name: 'categoria', description: 'Categoría', type: 3, required: true, choices: [{ name: '🟢 Principiantes', value: 'Principiantes' }, { name: '🥚 Huevos', value: 'Huevos' }, { name: '🔔 Notificaciones', value: 'Notificaciones' }, { name: '🔀 Fusiones', value: 'Fusiones' }, { name: '🦋 Mariposas', value: 'Mariposas' }, { name: '💼 Chambeadores', value: 'Chambeadores' }, { name: '💡 Trucos', value: 'Trucos' }] }, { name: 'descripcion', description: 'Texto paso a paso', type: 3, required: true }, { name: 'imagen', description: 'Imagen principal', type: 11, required: true }, { name: 'imagen2', description: 'Imagen extra opcional', type: 11, required: false }, { name: 'imagen3', description: 'Imagen extra opcional', type: 11, required: false }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'editar-guia', description: 'Edita una guía existente sin borrarla', options: [{ name: 'post', description: 'ID del post del foro (click derecho > copiar ID)', type: 3, required: true }, { name: 'titulo', description: 'Nuevo titulo (opcional)', type: 3, required: false }, { name: 'categoria', description: 'Nueva categoria (opcional)', type: 3, required: false, choices: [{ name: '🟢 Principiantes', value: 'Principiantes' }, { name: '🥚 Huevos', value: 'Huevos' }, { name: '🔔 Notificaciones', value: 'Notificaciones' }, { name: '🔀 Fusiones', value: 'Fusiones' }, { name: '🦋 Mariposas', value: 'Mariposas' }, { name: '💼 Chambeadores', value: 'Chambeadores' }, { name: '💡 Trucos', value: 'Trucos' }] }, { name: 'descripcion', description: 'Nuevo texto (opcional)', type: 3, required: false }, { name: 'imagen', description: 'Nueva imagen principal', type: 11, required: false }, { name: 'imagen2', description: 'Imagen extra', type: 11, required: false }, { name: 'imagen3', description: 'Imagen extra', type: 11, required: false }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'fix-canales-leyenda-booster', description: 'FIX: crea canales faltantes y limpia chat-leyendas', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
             { name: 'setup-admin-abuse', description: 'Crea canal y panel épico Admin Abuse sábados 9am MX', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'admin-portada', description: 'Sube imagen/video portada semanal Admin Abuse (archivo directo)', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen o video (subido directo a Discord)', type: 11, required: true }] },
@@ -3991,6 +4011,21 @@ client.on(Events.InteractionCreate, async inter => {
           const thread = await crearPostGuia(inter.guild, { titulo, categoriaTag: categoria, descripcion, files });
           if(!thread) return inter.editReply({ content: '❌ Error creando guía' });
           return inter.editReply({ content: `✅ Guía publicada: ${thread} | ${categoria} | ${titulo} (${files.length} imgs)` });
+        }
+        if(inter.commandName === 'editar-guia'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const threadId = inter.options.getString('post');
+          const titulo = inter.options.getString('titulo');
+          const categoria = inter.options.getString('categoria');
+          const descripcion = inter.options.getString('descripcion');
+          const img1 = inter.options.getAttachment('imagen');
+          const img2 = inter.options.getAttachment('imagen2');
+          const img3 = inter.options.getAttachment('imagen3');
+          const files = [img1, img2, img3].filter(Boolean).filter(f=>f.contentType?.startsWith('image/'));
+          try{
+            const thread = await editarGuia(inter.guild, threadId, { titulo, categoriaTag: categoria, descripcion, files });
+            return inter.editReply({ content: `✅ Editada sin borrar: ${thread} | ${titulo||'sin cambio'} (${files.length} imgs)` });
+          }catch(e){ return inter.editReply({ content: `❌ ${e.message}` }); }
         }
         if(inter.commandName === 'setup-fusiones'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
