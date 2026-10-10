@@ -229,11 +229,13 @@ let adminAbuseData = safeLoadJSON(ADMIN_ABUSE_PATH, { channelId: null, messageId
 const PREDICCIONES_CHANNEL_NAME = '🔮│predicciones-huevos';
 const PREDICCIONES_PATH = path.join(DATA_DIR, 'predicciones.json');
 const SPAWNS_PATH = path.join(DATA_DIR, 'spawns.json');
-let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageIds: [], messageId: null, lastScanId: null, lastUpdate: 0 });
+let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageIds: [], messageId: null, lastScanId: null, lastUpdate: 0, stats: { total: 0, hits: 0, history: [] }, lastPrediction: { ts: 0, top3: [] } });
 // migración si viene del formato viejo
-if(prediccionesData.messageId && !prediccionesData.messageIds?.length){
+if(prediccionesData.messageId &&!prediccionesData.messageIds?.length){
   prediccionesData.messageIds = [prediccionesData.messageId];
 }
+if(!prediccionesData.stats) prediccionesData.stats = { total: 0, hits: 0, history: [] };
+if(!prediccionesData.lastPrediction) prediccionesData.lastPrediction = { ts: 0, top3: [] };
 let spawnLogs = safeLoadJSON(SPAWNS_PATH, []); // {pet, categoria, ts, messageId}
 let SpawnModel = null;
 const savePredicciones = async () => { safeSaveJSON(PREDICCIONES_PATH, prediccionesData); };
@@ -1573,100 +1575,94 @@ async function ensurePrediccionesChannel(guild){
   }
   return canal;
 }
-function calcularStatsPredicciones(){
+function calcularStatsPrediccionesV2(){
   const now = Date.now();
-  const map = new Map(); // pet -> {pet, categoria, lastTs, count30d, times}
-  for(const pet of ALL_PETS){ const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet)); map.set(pet, {pet, categoria:cat, lastTs:0, count30d:0, drought: Infinity}); }
+  const map = new Map();
+  for(const pet of ALL_PETS){
+    const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet));
+    map.set(pet, {pet, categoria:cat, times:[], lastTs:0, count30d:0, gaps:[], mean:0, std:0, drought:0});
+  }
   for(const log of spawnLogs){
     const d = map.get(log.pet); if(!d) continue;
+    d.times.push(log.ts);
     if(log.ts > d.lastTs) d.lastTs = log.ts;
     if(now - log.ts < 30*24*60*60*1000) d.count30d++;
   }
-  for(const v of map.values()){ v.drought = v.lastTs ? now - v.lastTs : 999*24*60*60*1000; }
+  for(const v of map.values()){
+    v.times.sort((a,b)=>a-b);
+    for(let i=1;i<v.times.length;i++) v.gaps.push(v.times[i]-v.times[i-1]);
+    if(v.gaps.length){
+      const m = v.gaps.reduce((a,b)=>a+b,0)/v.gaps.length;
+      const variance = v.gaps.reduce((a,b)=>a+(b-m)**2,0)/v.gaps.length;
+      v.mean = m; v.std = Math.sqrt(variance) || m*0.5;
+    }
+    v.drought = v.lastTs? now - v.lastTs : 999*24*60*60*1000;
+  }
   return [...map.values()];
 }
-function calcGanasPapoi(s){
-  const now = Date.now();
-  if(!s.lastTs) return 100;
-  const elapsedH = (now - s.lastTs) / 3600000; // horas reales
-  if(s.count30d === 0){
-    const d = elapsedH / 24;
-    return Math.min(95, Math.round(30 + d * 2));
+function calcularStatsPredicciones(){ return calcularStatsPrediccionesV2(); }
+
+function calcGanasPapoiV2(s, total30d){
+  if(!s.lastTs) return 95;
+  const probBase = total30d? s.count30d / total30d : 0;
+  let probOverdue = 0.5;
+  if(s.mean && s.gaps.length >= 3){
+    const z = (s.drought - s.mean) / (s.std || s.mean*0.5);
+    probOverdue = 1 / (1 + Math.exp(-z*1.5));
+  } else {
+    const expectedH = (30*24) / (s.count30d || 1);
+    const ratio = (s.drought/3600000) / expectedH;
+    probOverdue = 1 - Math.exp(-ratio*1.2);
   }
-  const expectedH = (30*24) / s.count30d; // cada cuantas horas DEBERIA salir
-  const ratio = elapsedH / expectedH; // 1 = a tiempo, 2 = doble de tarde
-  let pct = 100 * (1 - Math.exp(-ratio * 1.2));
-  return Math.round(Math.max(5, Math.min(98, pct)));
+  const final = probOverdue*0.75 + Math.min(probBase*3,0.4)*0.25;
+  return Math.round(Math.max(3, Math.min(98, final*100)));
+}
+function calcGanasPapoi(s){
+  const total30d = spawnLogs.filter(l=>Date.now()-l.ts < 30*24*60*60*1000).length || 1;
+  return calcGanasPapoiV2(s, total30d);
 }
 function buildPrediccionesEmbeds(guild){
-  const stats = calcularStatsPredicciones();
+  const stats = calcularStatsPrediccionesV2();
+  const total30d = stats.reduce((a,b)=>a+b.count30d,0) || 1;
   const getEmoji = (pet) => { const e=getPetEmoji(guild, pet); return e? `${e}` : '🥚'; };
-  const getCatEmoji = (cat) => getCategoriaEmoji(guild, cat);
   const getBar = (pct) => { const f = Math.floor(pct/10); return '█'.repeat(f) + '░'.repeat(10-f); };
   const getColorBar = (pct) => { if(pct>=85) return '🟥'; if(pct>=65) return '🟧'; if(pct>=45) return '🟨'; if(pct>=20) return '🟩'; return '🟦'; };
-
-  const canalFuente = findChannel(guild, CONFIG.channels.aparicionesEnVivo);
-  const header = new EmbedBuilder().setColor(0xFFD700)
-  .setTitle('🔮 PREDICCIONES PAPOI • SOLO MORBO 🎲')
-  .setDescription(
-      `**⚠ 100% RNG - No predice futuro - Solo diversión**\n`+
-      `📊 **${spawnLogs.length}** spawns registrados\n`+
-      `⏱ Actualiza cada **10 min** • Fuente: ${canalFuente? `<#${canalFuente.id}>` : '#apariciones-en-vivo'}\n`+
-      `› Cada % son **ganas papoi**: mientras más tiempo sin salir, más ganas.`
-    ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Sistema no oficial • RNG puro'}).setTimestamp();
-
   const formatEntry = (s) => {
     const emoji = getEmoji(s.pet);
-    const pct = calcGanasPapoi(s);
+    const catEmoji = getCategoriaEmoji(guild, s.categoria);
+    const pct = calcGanasPapoiV2(s, total30d);
     const bar = getBar(pct);
     const cbar = getColorBar(pct);
     const dH = Math.floor(s.drought/3600000);
-    let timeTxt =!s.lastTs? '`nunca visto`' : dH<1? `\`${Math.floor(s.drought/60000)}m\`` : dH<24? `\`${dH}h\`` : `\`${Math.floor(dH/24)}d ${dH%24}h\``;
-    // SIN > para quitar barra gris, con ### para emoji gigante
-    return `### ${emoji} ${s.pet} ${getCatEmoji(s.categoria)}\n${cbar} \`${bar}\` **${pct}%** • Últ: ${timeTxt} • **${s.count30d}x**/30d`;
+    let timeTxt =!s.lastTs? '`nunca`' : dH<1? `\`${Math.floor(s.drought/60000)}m\`` : dH<24? `\`${dH}h\`` : `\`${Math.floor(dH/24)}d\``;
+    const basePct = ((s.count30d/total30d)*100).toFixed(1);
+    return `### ${emoji} ${s.pet} ${catEmoji}\n${cbar} \`${bar}\` **${pct}%** • Últ: ${timeTxt} • ${basePct}% base • **${s.count30d}x**/30d`;
   };
-
-  const makeSafe = (list, maxLen=3500) => {
+  const makeSafe = (list) => {
     if(!list.length) return '*Sin datos aún*';
-    let out='';
-    for(const s of list){
-      const entry = formatEntry(s);
-      const add = (out? '\n\n':'') + entry;
-      if(out.length + add.length > maxLen) break; // corta por pet completo, nunca a mitad
-      out += add;
-    }
-    return out || '*Sin datos*';
+    let out=''; for(const s of list){ const e=formatEntry(s); if(out.length+e.length>3800) break; out+=(out?'\n\n':'')+e; } return out;
   };
-
-  const chunkList = (list, perChunk) => {
-    const chunks=[]; let cur=[];
-    for(const s of list){
-      if(cur.length>=perChunk){ chunks.push(cur); cur=[s]; }
-      else cur.push(s);
-    }
-    if(cur.length) chunks.push(cur);
-    return chunks;
+  const divinosAll = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>calcGanasPapoiV2(b,total30d)-calcGanasPapoiV2(a,total30d));
+  const eternosTop = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>calcGanasPapoiV2(b,total30d)-calcGanasPapoiV2(a,total30d)).slice(0,6);
+  const secretosTop = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>calcGanasPapoiV2(b,total30d)-calcGanasPapoiV2(a,total30d)).slice(0,6);
+  const total = prediccionesData.stats.total || 0;
+  const hits = prediccionesData.stats.hits || 0;
+  const acc = total? (hits/total*100).toFixed(1) : '0.0';
+  const nextMin = 5 - (new Date().getUTCMinutes() % 5);
+  const nextUnix = Math.floor((Date.now() + nextMin*60000)/1000);
+  const header = new EmbedBuilder().setColor(0xFFD700)
+ .setTitle('🔮 PREDICCIONES PAPOI • AUTO-LEARNING V3')
+ .setDescription(`**🎯 Acertividad del Bot de ElCris: ${acc}% (${hits}/${total})**\n> Top 3 vs real • Random sería ~9.3%\n📊 **${spawnLogs.length}** spawns • Total 30d: ${total30d}\n⏱ Próximo spawn <t:${nextUnix}:R> • Actualizo en :01,:06,:11...`)
+ if(guild.iconURL()) header.setThumbnail(guild.iconURL());
+  header.setTimestamp();
+  return {
+    embeds: [
+      header,
+      new EmbedBuilder().setColor(0xFFD700).setTitle(`${getCategoriaEmoji(guild,'Divino')} DIVINOS - Los 6`).setDescription(makeSafe(divinosAll)),
+      new EmbedBuilder().setColor(0x3498DB).setTitle(`${getCategoriaEmoji(guild,'Eterno')} ETERNOS - Top 6`).setDescription(makeSafe(eternosTop)),
+      new EmbedBuilder().setColor(0x2ECC71).setTitle(`${getCategoriaEmoji(guild,'Secreto')} SECRETOS - Top 6`).setDescription(makeSafe(secretosTop)),
+    ]
   };
-
-  // LIMITES BAJOS PARA NUNCA CRASHEAR
-  const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,5);
-  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
-  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,6);
-  const secretosAll = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought);
-  const secretosChunks = chunkList(secretosAll, 6); // 6 por mensaje = 3 mensajes, nunca llega a 4096
-  const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,5);
-
-  const embeds=[];
-  embeds.push(header);
-  embeds.push(new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES - Más tiempo sin salir').setDescription(makeSafe(calientes)));
-  embeds.push(new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS - Top 5`).setDescription(makeSafe(divinos)));
-  embeds.push(new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS - Top 6`).setDescription(makeSafe(eternos)));
-  secretosChunks.forEach((chunk,i)=>{
-    embeds.push(new EmbedBuilder().setColor(0x2ECC71).setTitle(i===0? `🍀 SECRETOS - ${secretosAll.length} total` : `🍀 SECRETOS - parte ${i+1}`).setDescription(makeSafe(chunk)));
-  });
-  embeds.push(new EmbedBuilder().setColor(0x57F287).setTitle('❄ FRÍOS - Salieron hace poquito').setDescription(makeSafe(frios)));
-
-  return { embeds };
 }
 async function crearPanelPredicciones(guild){
   await guild.emojis.fetch().catch(()=>{});
@@ -1765,10 +1761,45 @@ async function escanearHistorialApariciones(guild, full=false){
   await savePredicciones();
   return total;
 }
+function guardarPrediccionActual(){
+  const stats = calcularStatsPrediccionesV2();
+  const total30d = stats.reduce((a,b)=>a+b.count30d,0) || 1;
+  const sorted = [...stats].sort((a,b)=>calcGanasPapoiV2(b,total30d)-calcGanasPapoiV2(a,total30d));
+  const top3 = sorted.slice(0,3).map(s=>s.pet);
+  prediccionesData.lastPrediction = { ts: Date.now(), top3 };
+  savePredicciones();
+}
+function checkAcierto(spawnReal){
+  const pred = prediccionesData.lastPrediction;
+  if(!pred ||!pred.top3.length) return;
+  if(Date.now() - pred.ts > 7*60*1000) return;
+  const hit = pred.top3.includes(spawnReal.pet);
+  prediccionesData.stats.total++;
+  if(hit) prediccionesData.stats.hits++;
+  prediccionesData.stats.history.push({ predicted: pred.top3, actual: spawnReal.pet, hit, ts: spawnReal.ts });
+  if(prediccionesData.stats.history.length>100) prediccionesData.stats.history = prediccionesData.stats.history.slice(-100);
+  savePredicciones();
+  console.log(`🎯 Pred: [${pred.top3.join(', ')}] | Real: ${spawnReal.pet} | ${hit?'ACIERTO':'FALLO'} | Acc: ${(prediccionesData.stats.hits/prediccionesData.stats.total*100).toFixed(1)}%`);
+}
 function startPrediccionesScheduler(){
-  console.log('🔮 Scheduler Predicciones iniciado cada 10 min');
-  setTimeout(async()=>{ const g=client.guilds.cache.get(process.env.GUILD_ID); if(g){ await escanearHistorialApariciones(g,false).catch(()=>{}); await actualizarPanelPredicciones(g).catch(()=>{}); } }, 15000);
-  setInterval(async()=>{ const g=client.guilds.cache.get(process.env.GUILD_ID); if(!g) return; await escanearHistorialApariciones(g,false).catch(()=>{}); await actualizarPanelPredicciones(g).catch(()=>{}); }, 10*60*1000);
+  console.log('🔮 Scheduler V3 - Escaneo 30s + Update :01,:06,:11...');
+  setTimeout(async()=>{ const g=client.guilds.cache.get(process.env.GUILD_ID); if(g){ await escanearHistorialApariciones(g,false).catch(()=>{}); guardarPrediccionActual(); await actualizarPanelPredicciones(g).catch(()=>{}); } }, 15000);
+  setInterval(async()=>{
+    const g=client.guilds.cache.get(process.env.GUILD_ID); if(!g) return;
+    const nuevos = await escanearHistorialApariciones(g,false).catch(()=>0);
+    if(nuevos>0){
+      const ultimo = spawnLogs[spawnLogs.length-1];
+      if(ultimo) checkAcierto(ultimo);
+    }
+  }, 30*1000);
+  setInterval(async()=>{
+    const now = new Date();
+    if([1,6,11,16,21,26,31,36,41,46,51,56].includes(now.getUTCMinutes()) && now.getUTCSeconds()<15){
+      const g=client.guilds.cache.get(process.env.GUILD_ID); if(!g) return;
+      guardarPrediccionActual();
+      await actualizarPanelPredicciones(g).catch(()=>{});
+    }
+  }, 15*1000);
 }
 function startAdminAbuseScheduler(){
   console.log('👑 Scheduler Admin Abuse iniciado - Sábados 9AM MX');
