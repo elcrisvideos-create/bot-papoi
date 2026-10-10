@@ -76,6 +76,7 @@ const CONFIG = {
     chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores'],
     chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
     predicciones: ['predicciones-huevos', '🔮│predicciones', 'predicciones', 'predicciones-papoi'],
+    carreras: ['carreras', '🏁│carreras', '🏁 | carreras', 'carreras-papoi', 'mario-kart'],
     adminAbuse: ['admin-abuse', '👑│admin-abuse', '⏰│admin-abuse', '💥│admin-abuse', 'admin-abuse-countdown'],
     apoyoInfo: ['como-apoyar', '📢│como-apoyar'],
     apoyoTienda: ['tienda-roblox', '🥚│tienda-roblox'],
@@ -598,6 +599,13 @@ const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
 const BUTTERFLY_EMOJI = '<:Mariposa:1556413173500739656>';
 const BUTTERFLY_CHANNEL_NAME = '🦋 | floracion-mariposas';
+// --- CARRERAS MARIO KART ---
+const RACE_ROLE_NAME = '🏁 Carreras';
+const RACE_EMOJI = '🏁';
+const RACE_CHANNEL_NAME = '🏁│carreras';
+const RACE_DATA_PATH = path.join(DATA_DIR, 'carreras.json');
+let raceData = safeLoadJSON(RACE_DATA_PATH, { channelId: null, messageId: null, customImageUrl: null, customIsVideo: false });
+const saveRaceData = async () => { safeSaveJSON(RACE_DATA_PATH, raceData); };
 // --- V11: ADMIN ABUSE COUNTDOWN - SÁBADOS 9AM MX ---
 const ADMIN_ABUSE_ROLE_NAME = 'Admin Abuse';
 const ADMIN_ABUSE_CHANNEL_NAME = '👑│admin-abuse';
@@ -699,6 +707,7 @@ function checkCooldown(userId, command, seconds) {
 
 // --- SCHEDULER GLOBAL CADA 30 MIN ---
 let lastButterflyPingKey = null;
+let lastRacePingKey = null;
 let lastAdminAbusePing = null; // <- ANTI-SPAM PING ADMIN ABUSE
 async function ensureButterflyRole(guild){
   let role = findRole(guild, BUTTERFLY_ROLE_NAME);
@@ -709,6 +718,77 @@ async function ensureButterflyRole(guild){
     }catch(e){ console.log('Error creando rol mariposas', e.message); return null; }
   }
   return role;
+}
+async function ensureRaceRole(guild){
+  let role = findRole(guild, RACE_ROLE_NAME);
+  if(!role){
+    try{
+      role = await guild.roles.create({ name: RACE_ROLE_NAME, color: 0xFF0000, reason: 'Rol para evento Carreras Mario Kart 🏁', mentionable: true });
+      console.log(`✅ Rol auto-creado: ${RACE_ROLE_NAME}`);
+    }catch(e){ console.log('Error creando rol carreras', e.message); return null; }
+  }
+  return role;
+}
+function getNextRaceDate(){
+  const now = new Date();
+  const target = new Date(now);
+  target.setSeconds(0,0);
+  if(now.getMinutes() < 30){
+    target.setMinutes(30,0,0);
+  } else {
+    target.setHours(target.getHours()+1);
+    target.setMinutes(0,0,0);
+  }
+  return target;
+}
+function buildRaceEmbed(guild, target){
+  const unix = Math.floor(target.getTime()/1000);
+  const embed = new EmbedBuilder()
+  .setColor(0xFF0000)
+  .setTitle(`${RACE_EMOJI} ¡CARRERAS MARIO KART EN 1 MINUTO!`)
+  .setDescription(
+    `**Próxima carrera en:** <t:${unix}:R> - <t:${unix}:F>\n\n`+
+    `El evento **CARRERAS** empieza en **1 minuto**\n`+
+    `📍 Ve al portal para entrar a la carrera\n`+
+    `${RACE_EMOJI} ¡Corre por el 1er lugar!\n`
+  )
+  .setFooter({ text: `Papois Empire • ${RACE_EMOJI} Carreras cada 30 min` })
+  .setTimestamp(target);
+  if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
+  if(raceData.customImageUrl && !raceData.customIsVideo){
+    embed.setImage(raceData.customImageUrl);
+  }
+  return embed;
+}
+async function ensureRaceChannel(guild){
+  await ensureRaceRole(guild);
+  let canal = findChannel(guild, CONFIG.channels.carreras);
+  const categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+  const modRole = findRole(guild, 'moderador');
+  const mayorRole = findRole(guild, 'papoi mayor');
+  if(!canal){
+    const overwrites = [
+      { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+      { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ManageChannels] },
+    ];
+    if(modRole) overwrites.push({ id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+    if(mayorRole) overwrites.push({ id: mayorRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] });
+    canal = await guild.channels.create({
+      name: RACE_CHANNEL_NAME,
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: '🏁 Carreras Mario Kart cada 30 min - Aviso 1 min antes',
+      permissionOverwrites: overwrites
+    }).catch(()=>null);
+  } else {
+    try{
+      if(categoria && canal.parentId!== categoria.id) await canal.setParent(categoria.id).catch(()=>{});
+      await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(()=>{});
+      await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, ManageMessages: true, AttachFiles: true, ManageChannels: true }).catch(()=>{});
+    }catch{}
+  }
+  if(canal){ raceData.channelId = canal.id; await saveRaceData(); }
+  return canal;
 }
 
 async function fixPapoisAlIniciar(guild){
@@ -2441,10 +2521,38 @@ async function checkButterflyEvent(){
     await ch.send({ content: role? `${role} ${BUTTERFLY_EMOJI} **¡El evento de mariposas empieza en 1 minuto, prepárate!**` : `${BUTTERFLY_EMOJI} **¡Evento en 1 minuto!**`, embeds: [embed] }).catch(()=>{});
   }catch(e){ console.log('Butterfly error', e.message); }
 }
+async function checkRaceEvent(){
+  try{
+    const now = new Date();
+    const m = now.getUTCMinutes();
+    const h = now.getUTCHours();
+    if(m!== 29 && m!== 59) return;
+    const eventMinute = m === 29? 30 : 0;
+    const key = `${h}:${eventMinute}_race`;
+    if(lastRacePingKey === key) return;
+    lastRacePingKey = key;
+    const guild = client.guilds.cache.get(process.env.GUILD_ID);
+    if(!guild) return;
+    await ensureRaceRole(guild);
+    const role = findRole(guild, RACE_ROLE_NAME);
+    const ch = findChannel(guild, CONFIG.channels.carreras) || findChannel(guild, CONFIG.channels.apariciones) || findChannel(guild, CONFIG.channels.general);
+    if(!ch) return;
+    const target = getNextRaceDate();
+    const embed = buildRaceEmbed(guild, target);
+    let payload = { content: role? `${role} ${RACE_EMOJI} **¡Carrera empieza en 1 minuto! Ve al portal!**` : `${RACE_EMOJI} **¡Carrera en 1 minuto!**`, embeds: [embed] };
+    if(raceData.customIsVideo && raceData.customImageUrl) payload.files = [{ attachment: raceData.customImageUrl }];
+    await ch.send(payload).catch(()=>{});
+  }catch(e){ console.log('Race error', e.message); }
+}
 function startButterflyScheduler(){
   console.log('🦋 Scheduler Mariposas GLOBAL iniciado :14 y :44 UTC = 1 min antes');
   setTimeout(checkButterflyEvent, 5000);
   setInterval(checkButterflyEvent, 30000);
+}
+function startRaceScheduler(){
+  console.log('🏁 Scheduler Carreras iniciado :29 y :59 UTC = 1 min antes');
+  setTimeout(checkRaceEvent, 7000);
+  setInterval(checkRaceEvent, 30000);
 }
 
 function esRobloxUsernameValido(input){
@@ -3124,6 +3232,9 @@ client.on(Events.ClientReady, async () => {
       { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'crear-canal-mariposas', description: 'Crea el canal y rol de floracion-mariposas :Mariposa:', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'test-mariposas', description: 'Probar ping del evento de mariposas', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'crear-canal-carreras', description: 'Crea el canal y rol 🏁 Carreras', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'test-carreras', description: 'Probar ping de carreras Mario Kart', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'carreras-portada', description: 'Sube imagen portada carreras (archivo)', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen (subida directa)', type: 11, required: true }] },
       { name: 'crear-categoria-staff', description: 'Crea categoría STAFF con chat, anuncios, logs y sanciones (privado solo mods)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-fusiones', description: 'Crea el panel de fusiones en #fusiones', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
@@ -3170,6 +3281,7 @@ client.on(Events.ClientReady, async () => {
   }
   // startTikTokMonitor deshabilitado - solo manual /video y /live
   startButterflyScheduler();
+  startRaceScheduler();
   startFusionesScheduler();
   await ensureAdminAbuseChannel(guild).catch(()=>{});
   await crearPanelAdminAbuse(guild).catch(()=>{});
@@ -3592,7 +3704,7 @@ async function crearPanelPingRoles(channel){
       ` ${secretoEmoji} **Secreto** - ${PETS.Secreto.length} huevos\n`+
       ` ${eternoEmoji} **Eterno** - ${PETS.Eterno.length} huevos\n`+
       ` ${divinoEmoji} **Divino** - ${PETS.Divino.length} huevos\n`+
-      ` ${BUTTERFLY_EMOJI} **Eventos** - Floración Mariposas (cada 30 min)\n\n`+
+      ` ${BUTTERFLY_EMOJI} **Eventos** - Floración Mariposas + ${RACE_EMOJI} Carreras (cada 30 min)\n\n`+
       `**4⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
       `**5⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
       `**6⃣** ¿Quieres TODO de una categoría? Marca **TODOS**\n`+
@@ -3600,8 +3712,9 @@ async function crearPanelPingRoles(channel){
       ` → Si marcas TODOS los Eterno, te damos ${eternoEmoji} **Huevo Eterno**\n`+
       ` → Si marcas TODOS los Divino, te damos ${divinoEmoji} **Huevo Divino**\n`+
       ` → Si marcas ${BUTTERFLY_EMOJI}, te avisamos **1 min antes** del evento de mariposas\n\n`+
-      `> **${BUTTERFLY_EMOJI} Evento mariposas: cada 30 min global**\n`+
-      `> **Te pingea 1 min antes con "${BUTTERFLY_EMOJI} ¡Empieza en 1 min!"**\n\n`+
+      `> **${BUTTERFLY_EMOJI} Mariposas: :15 y :45**\n`+
+      `> **${RACE_EMOJI} Carreras: :00 y :30**\n`+
+      `> **Te pingea 1 min antes**\n\n`+
       `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 4 categorías.`
     )
    .setThumbnail(guild.iconURL() || client.user.displayAvatarURL())
@@ -3638,10 +3751,15 @@ async function mostrarMenuConfiguracion(interaction){
     return new StringSelectMenuBuilder().setCustomId(`select_${categoria}`).setPlaceholder(hasCatRole? `✅ Ya tienes TODOS los ${categoria}` : `Elige ${categoria} - ya tienes ${options.filter(o=>o.default).length}`).setMinValues(0).setMaxValues(options.length).addOptions(options);
   };
   const buildEventosSelect = () => {
-    const hasEvent = hasRole(BUTTERFLY_ROLE_NAME);
+    const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
+    const hasRace = hasRole(RACE_ROLE_NAME);
     const mariposaEmoji = getPetEmoji(guild, 'Floración Mariposas');
-    const eventoEmoji = mariposaEmoji? { id: mariposaEmoji.id, name: mariposaEmoji.name } : '🦋';
-    return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(hasEvent? `✅ Tienes ping de mariposas` : `🦋 Elige eventos`).setMinValues(0).setMaxValues(1).addOptions([{ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes (global)', emoji: eventoEmoji, default: hasEvent }]);
+    const mariposaObj = mariposaEmoji? { id: mariposaEmoji.id, name: mariposaEmoji.name } : '🦋';
+    const placeholder = (hasButterfly && hasRace) ? `✅ Mariposas + Carreras` : hasButterfly ? `✅ Mariposas` : hasRace ? `✅ Carreras` : `🦋🏁 Elige eventos`;
+    return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(placeholder).setMinValues(0).setMaxValues(2).addOptions([
+      { label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes :15 y :45', emoji: mariposaObj, default: hasButterfly },
+      { label: 'Carreras Mario Kart - cada 30 min', value: RACE_ROLE_NAME, description: 'Te avisa 1 min antes :00 y :30', emoji: '🏁', default: hasRace }
+    ]);
   };
   const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca ${BUTTERFLY_EMOJI} para el evento de mariposas\n\n**${BUTTERFLY_EMOJI} Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
@@ -3706,10 +3824,16 @@ client.on(Events.InteractionCreate, async inter => {
         }).join('\n');
       };
 
-      const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
+            const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
+      const hasRace = hasRole(RACE_ROLE_NAME);
       const mariposaObj = getPetEmoji(guild, 'Floración Mariposas');
       const mariposaStr = mariposaObj? `${mariposaObj}` : BUTTERFLY_EMOJI;
-      const butterflyText = hasButterfly? `✅ ${mariposaStr} **${BUTTERFLY_ROLE_NAME}**\n→ Te avisamos 1 min antes ${mariposaStr}` : `*Ninguno activado*\n→ Toca ⚙️ Configurar y marca ${mariposaStr}`;
+      let eventosTxt = '';
+      if(hasButterfly) eventosTxt += `✅ ${mariposaStr} **${BUTTERFLY_ROLE_NAME}** :15 y :45\n`;
+      if(hasRace) eventosTxt += `✅ ${RACE_EMOJI} **${RACE_ROLE_NAME}** :00 y :30\n`;
+      if(!eventosTxt) eventosTxt = `*Ninguno activado*\n→ Toca ⚙ Configurar`;
+      else eventosTxt += `→ Te avisamos 1 min antes`;
+      const butterflyText = eventosTxt;
 
       const embed = new EmbedBuilder().setColor(0x00f2ea).setTitle('📋 Mis Pings actuales').setDescription(`Así es como lo tienes ahora mismo:`).addFields(
         { name: `${getCategoriaEmoji(guild,'Secreto')} Secreto`, value: buildCatText('Secreto'), inline: false },
@@ -3727,15 +3851,17 @@ client.on(Events.InteractionCreate, async inter => {
         const guild = inter.guild;
         const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
         const selectedValues = inter.values;
-        const newHasEvent = selectedValues.includes(BUTTERFLY_ROLE_NAME);
-        const oldHasEvent = hasRole(BUTTERFLY_ROLE_NAME);
         let agregados = [], quitados = [];
-        const role = findRole(guild, BUTTERFLY_ROLE_NAME) || await ensureButterflyRole(guild);
-        if(newHasEvent &&!oldHasEvent){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(BUTTERFLY_ROLE_NAME); } }
-        else if(!newHasEvent && oldHasEvent){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(BUTTERFLY_ROLE_NAME); } }
-                let msg = `**${BUTTERFLY_EMOJI} Eventos actualizado:**\n`;
-        if(agregados.length) msg += `✅ Ahora te avisamos de: **${agregados.join(', ')}**\n`;
-        if(quitados.length) msg += `❌ Ya no te avisamos de: **${quitados.join(', ')}**\n`;
+        for(const roleName of [BUTTERFLY_ROLE_NAME, RACE_ROLE_NAME]){
+          const newHas = selectedValues.includes(roleName);
+          const oldHas = hasRole(roleName);
+          const role = findRole(guild, roleName) || (roleName===RACE_ROLE_NAME? await ensureRaceRole(guild) : await ensureButterflyRole(guild));
+          if(newHas &&!oldHas){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(roleName); } }
+          else if(!newHas && oldHas){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(roleName); } }
+        }
+        let msg = `**${BUTTERFLY_EMOJI}${RACE_EMOJI} Eventos actualizado:**\n`;
+        if(agregados.length) msg += `✅ Ahora: **${agregados.join(', ')}**\n`;
+        if(quitados.length) msg += `❌ Ya no: **${quitados.join(', ')}**\n`;
         if(!agregados.length &&!quitados.length) msg += `Sin cambios.`;
         const updatedMenu = await mostrarMenuConfiguracion(inter);
         await inter.editReply({ content: msg,...updatedMenu }); return;
@@ -3943,14 +4069,15 @@ client.on(Events.InteractionCreate, async inter => {
           return inter.reply({ content: `📋 Tus búsquedas:\n${txt}`, flags: MessageFlags.Ephemeral });
         }
         if(inter.commandName === 'mis-pings'){
-
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       const rolesPet = inter.member.roles.cache.filter(r => ALL_PETS.some(p => p.toLowerCase() === r.name.toLowerCase())).map(r => r.name);
       const hasButterfly = inter.member.roles.cache.some(r => r.name.toLowerCase() === BUTTERFLY_ROLE_NAME.toLowerCase());
-      if(!rolesPet.length &&!hasButterfly) return inter.editReply({ content: '📭 No tienes pings activos.' });
+      const hasRace = inter.member.roles.cache.some(r => r.name.toLowerCase() === RACE_ROLE_NAME.toLowerCase());
+      if(!rolesPet.length &&!hasButterfly &&!hasRace) return inter.editReply({ content: '📭 No tienes pings activos.' });
       let texto = '';
       if(rolesPet.length) texto += `📋 Tus pings: ${rolesPet.join(', ')}`;
       if(hasButterfly) texto += `${texto? '\n' : ''}${BUTTERFLY_EMOJI} Eventos: ${BUTTERFLY_ROLE_NAME}`;
+      if(hasRace) texto += `${texto? '\n' : ''}${RACE_EMOJI} Eventos: ${RACE_ROLE_NAME}`;
       return inter.editReply({ content: texto });
     }
     if(inter.commandName === 'crear-canal-ping-roles'){
@@ -3993,9 +4120,36 @@ client.on(Events.InteractionCreate, async inter => {
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       const role = findRole(inter.guild, BUTTERFLY_ROLE_NAME) || await ensureButterflyRole(inter.guild);
       const canal = findChannel(inter.guild, CONFIG.channels.butterfly) || inter.channel;
-            const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(`${BUTTERFLY_EMOJI} ¡Floración en 1 minuto! [TEST]`).setDescription(`**¡Prepara tu red!** ${BUTTERFLY_EMOJI}\nEl evento **THE BUTTERFLY BLOOM** empieza en 1 min - Global cada 30 min`);
+      const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(`${BUTTERFLY_EMOJI} ¡Floración en 1 minuto! [TEST]`).setDescription(`**¡Prepara tu red!** ${BUTTERFLY_EMOJI}\nEl evento **THE BUTTERFLY BLOOM** empieza en 1 min - Global cada 30 min`);
       await canal.send({ content: role? `${role} ${BUTTERFLY_EMOJI} **¡Empieza en 1 minuto, prepárate!**` : `${BUTTERFLY_EMOJI} **¡Evento en 1 minuto!**`, embeds: [embed] });
       return inter.editReply({ content: `✅ Test enviado a ${canal}` });
+    }
+    if(inter.commandName === 'crear-canal-carreras'){
+      await inter.deferReply({ flags: MessageFlags.Ephemeral });
+      const ch = await ensureRaceChannel(inter.guild);
+      return inter.editReply({ content: ch? `✅ Canal carreras creado: ${ch} | Rol: ${RACE_ROLE_NAME}` : '❌ Error' });
+    }
+    if(inter.commandName === 'test-carreras'){
+      await inter.deferReply({ flags: MessageFlags.Ephemeral });
+      const role = findRole(inter.guild, RACE_ROLE_NAME) || await ensureRaceRole(inter.guild);
+      const canal = findChannel(inter.guild, CONFIG.channels.carreras) || inter.channel;
+      const target = getNextRaceDate();
+      const embed = buildRaceEmbed(inter.guild, target);
+      let payload = { content: role? `${role} ${RACE_EMOJI} **¡Carrera en 1 min! [TEST]**` : `${RACE_EMOJI} **¡Carrera en 1 min!**`, embeds: [embed] };
+      if(raceData.customIsVideo && raceData.customImageUrl) payload.files = [{ attachment: raceData.customImageUrl }];
+      await canal.send(payload);
+      return inter.editReply({ content: `✅ Test carreras enviado a ${canal}` });
+    }
+    if(inter.commandName === 'carreras-portada'){
+      await inter.deferReply({ flags: MessageFlags.Ephemeral });
+      if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+      const archivo = inter.options.getAttachment('archivo');
+      if(!archivo) return inter.editReply({ content: '❌ Sube archivo' });
+      const isVideo = archivo.contentType?.startsWith('video/');
+      raceData.customImageUrl = archivo.url;
+      raceData.customIsVideo = isVideo;
+      await saveRaceData();
+      return inter.editReply({ content: `✅ Portada ${isVideo?'VIDEO':'IMAGEN'} carreras guardada: ${archivo.name}` });
     }
 
         if(inter.commandName === 'crear-categoria-staff'){
