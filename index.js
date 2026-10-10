@@ -1495,7 +1495,7 @@ function buildPrediccionesEmbeds(guild){
     const catEm = getCategoriaEmoji(guild, s.categoria);
     const timeTxt = isNever ? 'nunca visto 🔥' : `${droughtDays}d sin salir`;
     const lastTxt = isNever ? '' : ` • Visto ${fmtR(s.lastTs)}`;
-    return `# ${emoji} ${s.pet}\n> ${catEm} Huevo ${s.categoria} • ${timeTxt}${lastTxt} • **Ganas:** \`${barStr}\` **${pct}%** • ${s.count30d}x en 30d`;
+    return `# ${emoji} ${s.pet}\n> ${catEm} Huevo ${s.categoria} • ${timeTxt}${lastTxt} • **Ganas de salir:** \`${barStr}\` **${pct}%** • ${s.count30d}x en 30d`;
   }).join('\n\n').slice(0,1000) || '*Sin datos*';
 
   const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
