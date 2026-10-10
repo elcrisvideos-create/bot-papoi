@@ -1500,35 +1500,40 @@ function buildPrediccionesEmbeds(guild){
     `**ElCris lo puede mejorar visualmente siempre**`
   ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Predicciones no oficiales • Solo diversión'}).setTimestamp();
 
-  // OPCIÓN B + EMOJIS GRANDES
-  const makeList = (list) => list.map(s=>{
-    const emojiObj = getPetEmoji(guild, s.pet);
-    const emoji = emojiObj ? `${emojiObj}` : getEmoji(s.pet);
-    const isNever = !s.lastTs || s.drought > 365*86400000;
-    const pct = calcGanasPapoi(s);
-    let barColor = pct >= 85 ? '🟥' : pct >= 65 ? '🟧' : pct >= 45 ? '🟨' : '🟩';
-    if(pct < 20) barColor = '🟦';
-    const filled = Math.floor(pct/10);
-    const barStr = barColor.repeat(filled) + '⬛'.repeat(10-filled);
-    const catEm = getCategoriaEmoji(guild, s.categoria);
-    const droughtH = Math.floor(s.drought/3600000);
-    const droughtM = Math.floor((s.drought%3600000)/60000);
-    let timeTxt;
-    if(isNever) timeTxt = 'nunca visto 🔥';
-    else if(droughtH < 1) timeTxt = `${droughtM}m sin salir`;
-    else if(droughtH < 24) timeTxt = `${droughtH}h ${droughtM}m sin salir`;
-    else {
-      const d = Math.floor(droughtH/24);
-      const h = droughtH%24;
-      timeTxt = h>0 ? `${d}d ${h}h sin salir` : `${d}d sin salir`;
+  const makeList = (list) => {
+    if(!list.length) return '*Sin datos*';
+    let out = '';
+    for(const s of list){
+      const emojiObj = getPetEmoji(guild, s.pet);
+      const emoji = emojiObj ? `${emojiObj}` : getEmoji(s.pet);
+      const isNever = !s.lastTs || s.drought > 365*86400000;
+      const pct = calcGanasPapoi(s);
+      let barColor = pct >= 85 ? '🟥' : pct >= 65 ? '🟧' : pct >= 45 ? '🟨' : '🟩';
+      if(pct < 20) barColor = '🟦';
+      const barStr = barColor.repeat(Math.floor(pct/10)) + '⬛'.repeat(10-Math.floor(pct/10));
+      const catEm = getCategoriaEmoji(guild, s.categoria);
+      const droughtH = Math.floor(s.drought/3600000);
+      const droughtM = Math.floor((s.drought%3600000)/60000);
+      let timeTxt;
+      if(isNever) timeTxt = 'nunca visto 🔥';
+      else if(droughtH < 1) timeTxt = `${droughtM}m`;
+      else if(droughtH < 24) timeTxt = `${droughtH}h ${droughtM}m`;
+      else {
+        const d = Math.floor(droughtH/24);
+        const h = droughtH%24;
+        timeTxt = h>0 ? `${d}d ${h}h` : `${d}d`;
+      }
+      const lastTxt = isNever ? '' : ` • ${fmtR(s.lastTs)}`;
+      const line = `# ${emoji} ${s.pet}\n> ${catEm} ${s.categoria} • ${timeTxt} sin salir${lastTxt} • ${barStr} **${pct}%** • ${s.count30d}x 30d`;
+      if((out + '\n\n' + line).length > 3800) break; // no corta a mitad
+      out += (out ? '\n\n' : '') + line;
     }
-    const lastTxt = isNever ? '' : ` • Visto ${fmtR(s.lastTs)}`;
-    return `# ${emoji} ${s.pet}\n> ${catEm} Huevo ${s.categoria} • ${timeTxt}${lastTxt} • **Probabilidades de salir:** ${barStr} **${pct}%** • ${s.count30d}x en 30d`;
-  }).join('\n\n').slice(0,1000) || '*Sin datos*';
+    return out || '*Sin datos*';
+  };
 
-  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
-  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,5);
-  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,5);
+  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,6);
+  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,10);
+  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,20);
   const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,5);
   const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,5);
 
