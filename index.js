@@ -1500,11 +1500,15 @@ async function actualizarPanelAdminAbuse(guild){
     const embed = buildAdminAbuseEmbed(guild, target);
 
     const tiempo = formatTiempoRestante(target);
-    // Ahora sí detecta EN VIVO durante 9am-10am MX
-    if(tiempo.enVivo && canal.name!== '💥│ADMIN-ABUSE-AHORA'){
-      await canal.setName('💥│ADMIN-ABUSE-AHORA').catch(()=>{});
+
+    // FIX: Discord guarda todo en minúsculas, compara en minúsculas
+    const nombreLower = canal.name.toLowerCase();
+    const esAhora = nombreLower.includes('ahora');
+
+    if(tiempo.enVivo &&!esAhora){
+      await canal.setName('💥│admin-abuse-ahora').catch(()=>{});
     }
-    if(!tiempo.enVivo && canal.name === '💥│ADMIN-ABUSE-AHORA'){
+    if(!tiempo.enVivo && esAhora){
       await canal.setName('👑│admin-abuse').catch(()=>{});
     }
 
