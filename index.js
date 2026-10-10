@@ -1499,58 +1499,40 @@ function calcGanasPapoi(s){
 }
 function buildPrediccionesEmbeds(guild){
   const stats = calcularStatsPredicciones();
-  const fmtR = (ts) => ts ? `<t:${Math.floor(ts/1000)}:R>` : '`nunca visto`';
   const getEmoji = (pet) => { const e=getPetEmoji(guild, pet); return e ? `${e}` : '🥚'; };
   
-  const header = new EmbedBuilder().setColor(0xFFD700).setTitle('🔮 PREDICCIONES PAPOI • SOLO DIVERSIÓN 🎲').setDescription(
-    `> **⚠ TODO es 100% RNG / Aleatorio. Nadie sabe cuando sale. Esto es solo por diversión basado en #apariciones-en-vivo**\n\n`+
-    `**📊 Datos reales del server:** ${spawnLogs.length} spawns registrados\n`+
-    `**🔄 Actualiza solo cada 10 min** leyendo #apariciones-en-vivo\n`+
-    `**ElCris lo puede mejorar visualmente siempre**`
-  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Predicciones no oficiales • Solo diversión'}).setTimestamp();
+  const header = new EmbedBuilder().setColor(0xFFD700).setTitle('🔮 PREDICCIONES PAPOI • SOLO MORBO 🎲').setDescription(
+    `⚠ 100% RNG - Solo diversión\n📊 ${spawnLogs.length} spawns • Actualiza 10m • Fuente: #apariciones-en-vivo`
+  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • No oficial • No predice futuro'}).setTimestamp();
 
-  const makeList = (list) => {
+  const makeList = (list, max=850) => {
     if(!list.length) return '*Sin datos*';
     let out = '';
     for(const s of list){
-      const emojiObj = getPetEmoji(guild, s.pet);
-      const emoji = emojiObj ? `${emojiObj}` : getEmoji(s.pet);
-      const isNever = !s.lastTs || s.drought > 365*86400000;
+      const emoji = getEmoji(s.pet);
       const pct = calcGanasPapoi(s);
-      let barColor = pct >= 85 ? '🟥' : pct >= 65 ? '🟧' : pct >= 45 ? '🟨' : '🟩';
-      if(pct < 20) barColor = '🟦';
-      const barStr = barColor.repeat(Math.floor(pct/10)) + '⬛'.repeat(10-Math.floor(pct/10));
-      const catEm = getCategoriaEmoji(guild, s.categoria);
-      const droughtH = Math.floor(s.drought/3600000);
-      const droughtM = Math.floor((s.drought%3600000)/60000);
-      let timeTxt;
-      if(isNever) timeTxt = 'nunca visto 🔥';
-      else if(droughtH < 1) timeTxt = `${droughtM}m`;
-      else if(droughtH < 24) timeTxt = `${droughtH}h ${droughtM}m`;
-      else {
-        const d = Math.floor(droughtH/24);
-        const h = droughtH%24;
-        timeTxt = h>0 ? `${d}d ${h}h` : `${d}d`;
-      }
-      const lastTxt = isNever ? '' : ` • ${fmtR(s.lastTs)}`;
-      const line = `# ${emoji} ${s.pet}\n> ${catEm} ${s.categoria} • ${timeTxt} sin salir${lastTxt} • ${barStr} **${pct}%** • ${s.count30d}x 30d`;
-      if((out + '\n\n' + line).length > 3800) break; // no corta a mitad
-      out += (out ? '\n\n' : '') + line;
+      let bar = pct>=85?'🟥':pct>=65?'🟧':pct>=45?'🟨':pct<20?'🟦':'🟩';
+      bar = bar.repeat(Math.max(1, Math.min(5, Math.floor(pct/20)+1)));
+      const dH = Math.floor(s.drought/3600000);
+      let timeTxt = !s.lastTs ? 'nunca' : dH<1 ? `${Math.floor(s.drought/60000)}m` : dH<24 ? `${dH}h` : `${Math.floor(dH/24)}d`;
+      const line = `${emoji} **${s.pet}** • ${timeTxt} • ${bar} ${pct}% • ${s.count30d}x`;
+      if((out + '\n' + line).length > max) break;
+      out += (out ? '\n' : '') + line;
     }
     return out || '*Sin datos*';
   };
 
-  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,6);
-  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,10);
-  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,20);
+  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
+  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,6);
+  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,8);
   const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,5);
-  const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,5);
+  const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,4);
 
-  const embedCal = new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES - En sequía extrema').setDescription(makeList(calientes));
-  const embedFrio = new EmbedBuilder().setColor(0x57F287).setTitle('❄ FRÍOS - Acaban de salir').setDescription(makeList(frios));
-  const embedDiv = new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS • ${getCategoriaEmoji(guild,'Divino')} Huevo Divino`).setDescription(makeList(divinos));
-  const embedEte = new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS • ${getCategoriaEmoji(guild,'Eterno')} Huevo Eterno`).setDescription(makeList(eternos));
-  const embedSec = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🍀 SECRETOS • ${getCategoriaEmoji(guild,'Secreto')} Huevo Secreto`).setDescription(makeList(secretos));
+  const embedCal = new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES').setDescription(makeList(calientes, 750));
+  const embedDiv = new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS`).setDescription(makeList(divinos, 750));
+  const embedEte = new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS`).setDescription(makeList(eternos, 850));
+  const embedSec = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🍀 SECRETOS`).setDescription(makeList(secretos, 850));
+  const embedFrio = new EmbedBuilder().setColor(0x57F287).setTitle('❄ FRÍOS').setDescription(makeList(frios, 650));
 
   return { embeds: [header, embedCal, embedDiv, embedEte, embedSec, embedFrio] };
 }
