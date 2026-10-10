@@ -745,7 +745,7 @@ function buildRaceEmbed(guild, target){
   const unix = Math.floor(target.getTime()/1000);
   const embed = new EmbedBuilder()
   .setColor(0xFF0000)
-  .setTitle(`${RACE_EMOJI} ¡CARRERAS MARIO KART EN 1 MINUTO!`)
+  .setTitle(`${RACE_EMOJI} ¡PRÓXIMA CARRERA EN 1 MINUTO!`)
   .setDescription(
     `**Próxima carrera en:** <t:${unix}:R> - <t:${unix}:F>\n\n`+
     `El evento **CARRERAS** empieza en **1 minuto**\n`+
