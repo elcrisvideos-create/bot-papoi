@@ -75,6 +75,7 @@ const CONFIG = {
     chambeadoresActivos: ['chambeadores-activos', '🥚│chambeadores-activos'],
     chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores'],
     chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
+    predicciones: ['predicciones-huevos', '🔮│predicciones', 'predicciones', 'predicciones-papoi'],
     adminAbuse: ['admin-abuse', '👑│admin-abuse', '⏰│admin-abuse', '💥│admin-abuse', 'admin-abuse-countdown'],
     apoyoInfo: ['como-apoyar', '📢│como-apoyar'],
     apoyoTienda: ['tienda-roblox', '🥚│tienda-roblox'],
@@ -223,6 +224,14 @@ const saveFusionesActivas = async () => {
 // --- CHAMBEADORES PERSISTENCIA ---
 const CHAMBEADORES_PATH = path.join(DATA_DIR, 'chambeadores.json');
 let adminAbuseData = safeLoadJSON(ADMIN_ABUSE_PATH, { channelId: null, messageId: null, customImageUrl: null, customIsVideo: false });
+const PREDICCIONES_CHANNEL_NAME = '🔮│predicciones-huevos';
+const PREDICCIONES_PATH = path.join(DATA_DIR, 'predicciones.json');
+const SPAWNS_PATH = path.join(DATA_DIR, 'spawns.json');
+let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageId: null, lastScanId: null, lastUpdate: 0 });
+let spawnLogs = safeLoadJSON(SPAWNS_PATH, []); // {pet, categoria, ts, messageId}
+let SpawnModel = null;
+const savePredicciones = async () => { safeSaveJSON(PREDICCIONES_PATH, prediccionesData); };
+const saveSpawns = async () => { safeSaveJSON(SPAWNS_PATH, spawnLogs.slice(-5000)); if(useMongo && SpawnModel){ try{ /* upsert en lotes pequeño */ }catch{} } };
 const saveAdminAbuse = async () => { 
   safeSaveJSON(ADMIN_ABUSE_PATH, adminAbuseData);
   if(useMongo && global.AdminAbuseModel){
@@ -410,7 +419,14 @@ async function initMongo() {
       safeSaveJSON(MINIJUEGOS_PATH, minijuegosData);
     }
     global.BibliotecaModel = BibliotecaModel;
+        const spawnSchema = new mongoose.Schema({ pet: String, categoria: String, ts: Number, messageId: String }, { strict: false });
+    SpawnModel = mongoose.model('Spawn', spawnSchema);
+    const spawnsMongo = await SpawnModel.find({}).sort({ts:-1}).limit(5000);
+    if(spawnsMongo.length>0){ spawnLogs = spawnsMongo.map(s=>({pet:s.pet, categoria:s.categoria, ts:s.ts, messageId:s.messageId})).reverse(); safeSaveJSON(SPAWNS_PATH, spawnLogs); console.log(`✅ ${spawnsMongo.length} spawns cargados`); }
+    else if(spawnLogs.length>0){ await SpawnModel.insertMany(spawnLogs.slice(-2000)).catch(()=>{}); }
+
     const donadorSchema = new mongoose.Schema({ userId: String, puntos: Number, totalRobux: Number, totalEfectivo: Number, fakes: Number, baneado: Boolean, createdAt: Number }, { strict: false });
+    
     DonadorModel = mongoose.model('Donador', donadorSchema);
     const donadoresMongo = await DonadorModel.find({});
     if(donadoresMongo.length > 0){
@@ -1408,6 +1424,145 @@ async function actualizarPanelAdminAbuse(guild){
       await msg.edit(payload).catch(()=>{});
     }
   }catch(e){ console.log('AdminAbuse update error', e.message); }
+}
+// ========== PREDICCIONES PAPOI - SOLO MORBO, VISUAL 1000% ==========
+function parsePetFromText(text){
+  if(!text) return null;
+  const t = text.toLowerCase();
+  for(const pet of ALL_PETS){ if(t.includes(pet.toLowerCase())){ const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet)); return {pet, categoria: cat}; } }
+  return null;
+}
+async function ensurePrediccionesChannel(guild){
+  let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+  let canal = findChannel(guild, CONFIG.channels.predicciones);
+  if(!canal){
+    canal = await guild.channels.create({
+      name: PREDICCIONES_CHANNEL_NAME,
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: '🔮 Predicciones solo por morbo - 100% RNG - No oficial - Se actualiza solo cada 10 min',
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      ]
+    }).catch(()=>null);
+  } else {
+    if(categoria && canal.parentId!==categoria.id) await canal.setParent(categoria.id).catch(()=>{});
+  }
+  if(canal) prediccionesData.channelId = canal.id;
+  await savePredicciones();
+  return canal;
+}
+function calcularStatsPredicciones(){
+  const now = Date.now();
+  const map = new Map(); // pet -> {pet, categoria, lastTs, count30d, times}
+  for(const pet of ALL_PETS){ const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet)); map.set(pet, {pet, categoria:cat, lastTs:0, count30d:0, drought: Infinity}); }
+  for(const log of spawnLogs){
+    const d = map.get(log.pet); if(!d) continue;
+    if(log.ts > d.lastTs) d.lastTs = log.ts;
+    if(now - log.ts < 30*24*60*60*1000) d.count30d++;
+  }
+  for(const v of map.values()){ v.drought = v.lastTs ? now - v.lastTs : 999*24*60*60*1000; }
+  return [...map.values()];
+}
+function buildPrediccionesEmbeds(guild){
+  const stats = calcularStatsPredicciones();
+  const now = Date.now();
+  const fmtR = (ts) => ts ? `<t:${Math.floor(ts/1000)}:R>` : '`nunca visto`';
+  const bar = (pct) => { const f=Math.min(10,Math.floor(pct/10)); return '█'.repeat(f)+'░'.repeat(10-f)+` ${pct}%`; };
+  const getEmoji = (pet) => { const e=getPetEmoji(guild, pet); return e ? `${e}` : '🥚'; };
+  
+  const header = new EmbedBuilder().setColor(0xFFD700).setTitle('🔮 PREDICCIONES PAPOI • SOLO MORBO 🎲').setDescription(
+    `> **⚠ TODO es 100% RNG / Aleatorio. Nadie sabe cuando sale. Esto es solo por diversión basado en #apariciones-en-vivo**\n\n`+
+    `**📊 Datos reales del server:** ${spawnLogs.length} spawns registrados\n`+
+    `**🔄 Actualiza solo cada 10 min** leyendo #apariciones-en-vivo\n`+
+    `**ElCris lo puede mejorar visualmente siempre**`
+  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Predicciones no oficiales • Solo morbo'}).setTimestamp();
+
+  const makeList = (list) => list.map(s=>{
+    const emoji = getEmoji(s.pet);
+    const isNever = !s.lastTs || s.drought > 365*86400000;
+    const droughtDays = isNever ? 999 : Math.floor(s.drought/86400000);
+    const morbo = isNever ? 100 : Math.min(100, Math.floor((droughtDays/7)*100) + (s.count30d===0?20:0));
+    const catEm = getCategoriaEmoji(guild, s.categoria);
+    const timeTxt = isNever ? '`nunca visto` 🔥' : `${fmtR(s.lastTs)} • Hace ${droughtDays}d`;
+    return `${emoji} **${s.pet}** ${catEm} • ${timeTxt} • \`${bar(morbo)} morbo\` • ${s.count30d}x/30d`;
+  }).join('\n').slice(0,4000) || '*Sin datos*';
+
+  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,6);
+  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,8);
+  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,8);
+
+  const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,5);
+  const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,5);
+
+  const embedCal = new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES - En sequía extrema (pueden salir)').setDescription(makeList(calientes));
+  const embedFrio = new EmbedBuilder().setColor(0x57F287).setTitle('❄️ FRÍOS - Acaban de salir').setDescription(makeList(frios));
+  const embedDiv = new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS • ${getCategoriaEmoji(guild,'Divino')} Huevo Divino`).setDescription(makeList(divinos));
+  const embedEte = new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS • ${getCategoriaEmoji(guild,'Eterno')} Huevo Eterno`).setDescription(makeList(eternos));
+  const embedSec = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🍀 SECRETOS • ${getCategoriaEmoji(guild,'Secreto')} Huevo Secreto`).setDescription(makeList(secretos));
+
+  return { embeds: [header, embedCal, embedDiv, embedEte, embedSec, embedFrio] };
+}
+async function crearPanelPredicciones(guild){
+  const canal = await ensurePrediccionesChannel(guild);
+  if(!canal) return null;
+  try{ const msgs=await canal.messages.fetch({limit:20}).catch(()=>null); if(msgs){ for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,200)); } } }catch{}
+  const {embeds} = buildPrediccionesEmbeds(guild);
+  const msg = await canal.send({ embeds }).catch(()=>null);
+  if(msg){ prediccionesData.messageId=msg.id; prediccionesData.lastUpdate=Date.now(); await savePredicciones(); }
+  return msg;
+}
+async function actualizarPanelPredicciones(guild){
+  try{
+    const canalId = prediccionesData.channelId || findChannel(guild, CONFIG.channels.predicciones)?.id;
+    if(!canalId) return;
+    const canal = guild.channels.cache.get(canalId) || await guild.channels.fetch(canalId).catch(()=>null);
+    if(!canal) return;
+    let msg = null;
+    if(prediccionesData.messageId) msg = await canal.messages.fetch(prediccionesData.messageId).catch(()=>null);
+    if(!msg){ const msgs=await canal.messages.fetch({limit:10}).catch(()=>null); msg=msgs?.find(m=>m.author.id===client.user.id) || null; }
+    const {embeds} = buildPrediccionesEmbeds(guild);
+    if(msg) await msg.edit({embeds}).catch(()=>{}); else await crearPanelPredicciones(guild);
+    prediccionesData.lastUpdate=Date.now(); await savePredicciones();
+  }catch(e){ console.log('predicciones update', e.message); }
+}
+async function escanearHistorialApariciones(guild, full=false){
+  const canales = [findChannel(guild, CONFIG.channels.aparicionesEnVivo), findChannel(guild, CONFIG.channels.apariciones)].filter(Boolean);
+  let total=0;
+  for(const ch of canales){
+    let lastId = full ? undefined : prediccionesData.lastScanId;
+    let fetched = 0;
+    while(true){
+      const batch = await ch.messages.fetch({ limit: 100, ...(lastId?{before:lastId}:{}) }).catch(()=>null);
+      if(!batch || batch.size===0) break;
+      for(const m of batch.values()){
+        const txt = (m.content||'') + ' ' + (m.embeds[0]?.title||'') + ' ' + (m.embeds[0]?.description||'');
+        const parsed = parsePetFromText(txt);
+        if(parsed){ 
+          if(!spawnLogs.some(s=>s.messageId===m.id)){
+            spawnLogs.push({pet:parsed.pet, categoria:parsed.categoria, ts:m.createdTimestamp, messageId:m.id});
+            if(useMongo && SpawnModel) await SpawnModel.create({pet:parsed.pet, categoria:parsed.categoria, ts:m.createdTimestamp, messageId:m.id}).catch(()=>{});
+            total++;
+          }
+        }
+        lastId = m.id;
+      }
+      fetched+=batch.size;
+      if(!full && fetched>=500) break;
+      if(batch.size<100) break;
+      await new Promise(r=>setTimeout(r,400));
+    }
+  }
+  await saveSpawns();
+  prediccionesData.lastScanId = spawnLogs[spawnLogs.length-1]?.messageId || prediccionesData.lastScanId;
+  await savePredicciones();
+  return total;
+}
+function startPrediccionesScheduler(){
+  console.log('🔮 Scheduler Predicciones iniciado cada 10 min');
+  setTimeout(async()=>{ const g=client.guilds.cache.get(process.env.GUILD_ID); if(g){ await escanearHistorialApariciones(g,false).catch(()=>{}); await actualizarPanelPredicciones(g).catch(()=>{}); } }, 15000);
+  setInterval(async()=>{ const g=client.guilds.cache.get(process.env.GUILD_ID); if(!g) return; await escanearHistorialApariciones(g,false).catch(()=>{}); await actualizarPanelPredicciones(g).catch(()=>{}); }, 10*60*1000);
 }
 function startAdminAbuseScheduler(){
   console.log('👑 Scheduler Admin Abuse iniciado - Sábados 9AM MX');
@@ -2878,6 +3033,9 @@ client.on(Events.ClientReady, async () => {
       { name: 'setup-biblioteca', description: 'Crea biblioteca de emojis ordenada en comunidad papoi', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-biblioteca', description: 'Actualiza biblioteca (cuando agregas emojis/stickers)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-minijuegos', description: 'Crea canales 🎮 minijuegos y 🏆 tops', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+            { name: 'setup-predicciones', description: 'Crea canal 🔮 predicciones épico y escanea historial', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'actualizar-predicciones', description: 'Actualiza panel predicciones manualmente', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'scan-historial', description: 'Escanea TODO el historial de apariciones (tarda)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-minijuegos', description: 'Recrea paneles de minijuegos', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'tops-minijuegos', description: 'Ver tu top de minijuegos', options: [] },
     ]});
@@ -2911,6 +3069,8 @@ client.on(Events.ClientReady, async () => {
   await crearPanelMinijuegos(guild).catch(()=>{});
   await crearPanelTops(guild).catch(()=>{});
   startMinijuegosScheduler();
+  await ensurePrediccionesChannel(guild).catch(()=>{});
+  startPrediccionesScheduler();
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -3567,6 +3727,26 @@ client.on(Events.InteractionCreate, async inter => {
           const ch = await crearPanelBiblioteca(inter.guild);
           const boost = await getBoostInfo(inter.guild);
           return inter.editReply({ content: ch? `✅ Biblioteca actualizada en ${ch} - ${inter.guild.emojis.cache.size}/${boost.current.emojis} - Boosts: ${boost.count} Nivel ${boost.tier}` : '❌ No pude crear canal' });
+        }
+                        if(inter.commandName === 'setup-predicciones'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+          const ch = await ensurePrediccionesChannel(inter.guild);
+          const nuevos = await escanearHistorialApariciones(inter.guild, false);
+          await crearPanelPredicciones(inter.guild);
+          return inter.editReply({ content: `✅ Predicciones creado: ${ch} - ${nuevos} spawns nuevos detectados - Se actualiza solo cada 10 min 🔮` });
+        }
+        if(inter.commandName === 'actualizar-predicciones'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          await escanearHistorialApariciones(inter.guild, false);
+          await actualizarPanelPredicciones(inter.guild);
+          return inter.editReply({ content: `✅ Panel actualizado - Total spawns: ${spawnLogs.length}` });
+        }
+        if(inter.commandName === 'scan-historial'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const total = await escanearHistorialApariciones(inter.guild, true);
+          await actualizarPanelPredicciones(inter.guild);
+          return inter.editReply({ content: `✅ Scan completo terminado - ${total} nuevos - Total ${spawnLogs.length} spawns en DB` });
         }
                 if(inter.commandName === 'setup-minijuegos' || inter.commandName === 'actualizar-minijuegos'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
