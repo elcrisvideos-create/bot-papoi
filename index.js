@@ -231,7 +231,17 @@ let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messag
 let spawnLogs = safeLoadJSON(SPAWNS_PATH, []); // {pet, categoria, ts, messageId}
 let SpawnModel = null;
 const savePredicciones = async () => { safeSaveJSON(PREDICCIONES_PATH, prediccionesData); };
-const saveSpawns = async () => { safeSaveJSON(SPAWNS_PATH, spawnLogs.slice(-5000)); if(useMongo && SpawnModel){ try{ /* upsert en lotes pequeño */ }catch{} } };
+const saveSpawns = async () => {
+  safeSaveJSON(SPAWNS_PATH, spawnLogs.slice(-5000));
+  if(useMongo && SpawnModel){
+    try{
+      if(spawnLogs.length>0){
+        const cutoff = spawnLogs[0]?.ts;
+        if(cutoff) await SpawnModel.deleteMany({ ts: { $lt: cutoff } }).catch(()=>{});
+      }
+    }catch(e){ console.log('saveSpawns mongo', e.message); }
+  }
+};
 const saveAdminAbuse = async () => { 
   safeSaveJSON(ADMIN_ABUSE_PATH, adminAbuseData);
   if(useMongo && global.AdminAbuseModel){
@@ -450,9 +460,8 @@ const saveXP = async () => {
   safeSaveJSON(XP_PATH, xpData);
   if (useMongo && XpModel) {
     try {
-      for (const [userId, xp] of Object.entries(xpData)) {
-        await XpModel.findOneAndUpdate({ userId }, { xp }, { upsert: true });
-      }
+      const ops = Object.entries(xpData).map(([userId, xp])=>({ updateOne: { filter:{userId}, update:{xp}, upsert:true }}));
+      if(ops.length) await XpModel.bulkWrite(ops, { ordered:false });
     } catch (e) {
       console.log(`Error guardando XP en Mongo: ${e.message}`);
     }
@@ -1308,9 +1317,10 @@ function startMinijuegosScheduler(){
     if(!guild) return;
     // reset semanal domingo 00:00 MX = 06:00 UTC domingo
     const now = new Date();
-    const last = minijuegosData.weeklyStart;
-    const diff = now - last;
-    if(diff > 7*24*60*60*1000){
+    const last = new Date(minijuegosData.weeklyStart);
+    const isSunday = now.getUTCDay()===0 && now.getUTCHours()>=6; // domingo 00:00 MX = 06:00 UTC
+    const sameWeek = now - last < 7*24*60*60*1000;
+    if(isSunday &&!sameWeek){
       await actualizarCampeonSemanal(guild).catch(()=>{});
       for(const k in minijuegosData.users) minijuegosData.users[k].weekly = 0;
       minijuegosData.weeklyStart = now.getTime();
@@ -1465,6 +1475,19 @@ function calcularStatsPredicciones(){
   for(const v of map.values()){ v.drought = v.lastTs ? now - v.lastTs : 999*24*60*60*1000; }
   return [...map.values()];
 }
+function calcGanasPapoi(s){
+  const now = Date.now();
+  if(!s.lastTs) return 100;
+  const elapsedH = (now - s.lastTs) / 3600000; // horas reales
+  if(s.count30d === 0){
+    const d = elapsedH / 24;
+    return Math.min(95, Math.round(30 + d * 2));
+  }
+  const expectedH = (30*24) / s.count30d; // cada cuantas horas DEBERIA salir
+  const ratio = elapsedH / expectedH; // 1 = a tiempo, 2 = doble de tarde
+  let pct = 100 * (1 - Math.exp(-ratio * 1.2));
+  return Math.round(Math.max(5, Math.min(98, pct)));
+}
 function buildPrediccionesEmbeds(guild){
   const stats = calcularStatsPredicciones();
   const fmtR = (ts) => ts ? `<t:${Math.floor(ts/1000)}:R>` : '`nunca visto`';
@@ -1482,20 +1505,25 @@ function buildPrediccionesEmbeds(guild){
     const emojiObj = getPetEmoji(guild, s.pet);
     const emoji = emojiObj ? `${emojiObj}` : getEmoji(s.pet);
     const isNever = !s.lastTs || s.drought > 365*86400000;
-    const droughtDays = isNever ? 999 : Math.floor(s.drought/86400000);
-    let pct;
-    if(isNever) pct = 100;
-    else {
-      const baseComun = Math.min(30, Math.floor(s.count30d / 4));
-      const bonusSequia = Math.min(70, Math.floor(droughtDays * 2.5));
-      pct = baseComun + bonusSequia + (s.count30d===0?25:0);
-      pct = Math.min(100, Math.max(pct, 10));
-    }
-    const barStr = '█'.repeat(Math.floor(pct/10)) + '░'.repeat(10-Math.floor(pct/10));
+    const pct = calcGanasPapoi(s);
+    let barColor = pct >= 85 ? '🟥' : pct >= 65 ? '🟧' : pct >= 45 ? '🟨' : '🟩';
+    if(pct < 20) barColor = '🟦';
+    const filled = Math.floor(pct/10);
+    const barStr = barColor.repeat(filled) + '⬛'.repeat(10-filled);
     const catEm = getCategoriaEmoji(guild, s.categoria);
-    const timeTxt = isNever ? 'nunca visto 🔥' : `${droughtDays}d sin salir`;
+    const droughtH = Math.floor(s.drought/3600000);
+    const droughtM = Math.floor((s.drought%3600000)/60000);
+    let timeTxt;
+    if(isNever) timeTxt = 'nunca visto 🔥';
+    else if(droughtH < 1) timeTxt = `${droughtM}m sin salir`;
+    else if(droughtH < 24) timeTxt = `${droughtH}h ${droughtM}m sin salir`;
+    else {
+      const d = Math.floor(droughtH/24);
+      const h = droughtH%24;
+      timeTxt = h>0 ? `${d}d ${h}h sin salir` : `${d}d sin salir`;
+    }
     const lastTxt = isNever ? '' : ` • Visto ${fmtR(s.lastTs)}`;
-    return `# ${emoji} ${s.pet}\n> ${catEm} Huevo ${s.categoria} • ${timeTxt}${lastTxt} • **Ganas de salir:** \`${barStr}\` **${pct}%** • ${s.count30d}x en 30d`;
+    return `# ${emoji} ${s.pet}\n> ${catEm} Huevo ${s.categoria} • ${timeTxt}${lastTxt} • **Ganas de salir:** ${barStr} **${pct}%** • ${s.count30d}x en 30d`;
   }).join('\n\n').slice(0,1000) || '*Sin datos*';
 
   const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
@@ -1541,26 +1569,28 @@ async function actualizarPanelPredicciones(guild){
 async function escanearHistorialApariciones(guild, full=false){
   const canales = [findChannel(guild, CONFIG.channels.aparicionesEnVivo), findChannel(guild, CONFIG.channels.apariciones)].filter(Boolean);
   let total=0;
+  const knownIds = new Set(spawnLogs.map(s=>s.messageId));
   for(const ch of canales){
-    let lastId = full ? undefined : prediccionesData.lastScanId;
-    let fetched = 0;
+    let lastId = undefined;
     while(true){
-      const batch = await ch.messages.fetch({ limit: 100, ...(lastId?{before:lastId}:{}) }).catch(()=>null);
+      const opts = { limit: 100 };
+      if(full && lastId) opts.before = lastId;
+      const batch = await ch.messages.fetch(opts).catch(()=>null);
       if(!batch || batch.size===0) break;
       for(const m of batch.values()){
         const txt = (m.content||'') + ' ' + (m.embeds[0]?.title||'') + ' ' + (m.embeds[0]?.description||'');
         const parsed = parsePetFromText(txt);
-        if(parsed){ 
-          if(!spawnLogs.some(s=>s.messageId===m.id)){
+        if(parsed){
+          if(!knownIds.has(m.id)){
             spawnLogs.push({pet:parsed.pet, categoria:parsed.categoria, ts:m.createdTimestamp, messageId:m.id});
+            knownIds.add(m.id);
             if(useMongo && SpawnModel) await SpawnModel.create({pet:parsed.pet, categoria:parsed.categoria, ts:m.createdTimestamp, messageId:m.id}).catch(()=>{});
             total++;
           }
         }
         lastId = m.id;
       }
-      fetched+=batch.size;
-      if(!full && fetched>=500) break;
+      if(!full) break;
       if(batch.size<100) break;
       await new Promise(r=>setTimeout(r,400));
     }
