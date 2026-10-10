@@ -210,6 +210,7 @@ let fusionesActivasRaw = safeLoadJSON(FUSIONES_ACTIVAS_PATH, []);
 let fusionesActivas = new Map(fusionesActivasRaw.map(o => [o.channelId, o]));
 let FusionModel = null;
 let FusionActivaModel = null;
+let RaceModel = null;
 
 const saveFusiones = async () => {
   safeSaveJSON(FUSIONES_PATH, fusionesQueue);
@@ -224,7 +225,7 @@ const saveFusionesActivas = async () => {
 
 // --- CHAMBEADORES PERSISTENCIA ---
 const CHAMBEADORES_PATH = path.join(DATA_DIR, 'chambeadores.json');
-let adminAbuseData = safeLoadJSON(ADMIN_ABUSE_PATH, { channelId: null, messageId: null, customImageUrl: null, customIsVideo: false });
+let adminAbuseData = safeLoadJSON(ADMIN_ABUSE_PATH, { channelId: null, messageId: null, customImageUrl: null, customLocalPath: null, customIsVideo: false });
 const PREDICCIONES_CHANNEL_NAME = '🔮│predicciones-huevos';
 const PREDICCIONES_PATH = path.join(DATA_DIR, 'predicciones.json');
 const SPAWNS_PATH = path.join(DATA_DIR, 'spawns.json');
@@ -387,9 +388,22 @@ async function initMongo() {
       fusionesActivas = new Map(activasMongo.map(d=> [d.channelId, { channelId: d.channelId, users: d.users, fusionId: d.fusionId, reqs: d.reqs, createdAt: d.createdAt, confirms: d.confirms||[], lastPing: Date.now() }]));
       console.log(`✅ ${activasMongo.length} fusiones ACTIVAS cargadas desde MongoDB`);
       safeSaveJSON(FUSIONES_ACTIVAS_PATH, [...fusionesActivas.values()]);
-    } else if(fusionesActivasRaw.length > 0){
+    } else     if(fusionesActivasRaw.length > 0){
       console.log(`📤 Migrando ${fusionesActivasRaw.length} fusiones activas a MongoDB...`);
       await FusionActivaModel.insertMany(fusionesActivasRaw).catch(()=>{});
+    }
+
+    const raceSchema = new mongoose.Schema({ guildId: String, channelId: String, messageId: String, customImageUrl: String, customLocalPath: String, customIsVideo: Boolean }, { strict: false });
+    RaceModel = mongoose.model('Race', raceSchema);
+    global.RaceModel = RaceModel;
+    const raceMongo = await RaceModel.findOne({ guildId: process.env.GUILD_ID });
+    if(raceMongo){
+      raceData = { channelId: raceMongo.channelId, messageId: raceMongo.messageId, customImageUrl: raceMongo.customImageUrl, customLocalPath: raceMongo.customLocalPath || null, customIsVideo: raceMongo.customIsVideo || false };
+      console.log(`✅ Carreras cargado de Mongo: ${raceMongo.customImageUrl? 'CON PORTADA' : 'sin portada'}`);
+      safeSaveJSON(RACE_DATA_PATH, raceData);
+    } else if(raceData.customImageUrl || raceData.customLocalPath){
+      console.log('📤 Migrando carreras a MongoDB...');
+      await RaceModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, {...raceData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
     }
 
     const chambeadorSchema = new mongoose.Schema({ userId: String, robloxUser: String, puntos: Number, baneado: Boolean, lastReport: Number, createdAt: Number }, { strict: false });
@@ -406,11 +420,11 @@ async function initMongo() {
       }
     }
 
-          const adminAbuseSchema = new mongoose.Schema({ guildId: String, channelId: String, messageId: String, customImageUrl: String, customIsVideo: Boolean }, { strict: false });
+          const adminAbuseSchema = new mongoose.Schema({ guildId: String, channelId: String, messageId: String, customImageUrl: String, customLocalPath: String, customIsVideo: Boolean }, { strict: false });
     const AdminAbuseModel = mongoose.model('AdminAbuse', adminAbuseSchema);
     const abMongo = await AdminAbuseModel.findOne({ guildId: process.env.GUILD_ID });
     if(abMongo){
-      adminAbuseData = { channelId: abMongo.channelId, messageId: abMongo.messageId, customImageUrl: abMongo.customImageUrl, customIsVideo: abMongo.customIsVideo };
+      adminAbuseData = { channelId: abMongo.channelId, messageId: abMongo.messageId, customImageUrl: abMongo.customImageUrl, customLocalPath: abMongo.customLocalPath || null, customIsVideo: abMongo.customIsVideo };
       console.log(`✅ Admin Abuse cargado de Mongo: ${abMongo.customImageUrl? 'CON PORTADA' : 'sin portada'}`);
       safeSaveJSON(ADMIN_ABUSE_PATH, adminAbuseData);
     }
@@ -604,8 +618,16 @@ const RACE_ROLE_NAME = '🏁 Carreras';
 const RACE_EMOJI = '🏁';
 const RACE_CHANNEL_NAME = '🏁│carreras';
 const RACE_DATA_PATH = path.join(DATA_DIR, 'carreras.json');
-let raceData = safeLoadJSON(RACE_DATA_PATH, { channelId: null, messageId: null, customImageUrl: null, customIsVideo: false });
-const saveRaceData = async () => { safeSaveJSON(RACE_DATA_PATH, raceData); };
+let raceData = safeLoadJSON(RACE_DATA_PATH, { channelId: null, messageId: null, customImageUrl: null, customLocalPath: null, customIsVideo: false });
+const saveRaceData = async () => {
+  safeSaveJSON(RACE_DATA_PATH, raceData);
+  if(useMongo && RaceModel){
+    await RaceModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, {...raceData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
+  }
+  if(useMongo && global.RaceModel){
+    await global.RaceModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, {...raceData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
+  }
+};
 // --- V11: ADMIN ABUSE COUNTDOWN - SÁBADOS 9AM MX ---
 const ADMIN_ABUSE_ROLE_NAME = 'Admin Abuse';
 const ADMIN_ABUSE_CHANNEL_NAME = '👑│admin-abuse';
@@ -741,22 +763,22 @@ function getNextRaceDate(){
   }
   return target;
 }
-function buildRaceEmbed(guild, target){
+function buildRaceEmbed(guild, target, attachFilename = null){
   const unix = Math.floor(target.getTime()/1000);
   const embed = new EmbedBuilder()
-  .setColor(0xFF0000)
-  .setTitle(`${RACE_EMOJI} ¡PRÓXIMA CARRERA EN 1 MINUTO!`)
-  .setDescription(
+ .setColor(0xFF0000)
+ .setTitle(`${RACE_EMOJI} ¡PRÓXIMA CARRERA EN 1 MINUTO!`)
+ .setDescription(
     `**Próxima carrera en:** <t:${unix}:R> - <t:${unix}:F>\n\n`+
     `El evento **CARRERAS** empieza en **1 minuto**\n`+
     `📍 Ve al portal para entrar a la carrera\n`+
     `${RACE_EMOJI} ¡Corre por el 1er lugar!\n`
   )
-  .setFooter({ text: `Papois Empire • ${RACE_EMOJI} Carreras cada 30 min` })
-  .setTimestamp(target);
+ .setFooter({ text: `Papois Empire • ${RACE_EMOJI} Carreras cada 30 min` })
+ .setTimestamp(target);
   if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
-  if(raceData.customImageUrl && !raceData.customIsVideo){
-    embed.setImage(raceData.customImageUrl);
+  if(attachFilename &&!raceData.customIsVideo){
+    embed.setImage(`attachment://${attachFilename}`);
   }
   return embed;
 }
@@ -893,27 +915,24 @@ function formatTiempoRestante(target){
   txt += `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   return { txt, bar, pct, enVivo: false };
 }
-function buildAdminAbuseEmbed(guild, target){
+function buildAdminAbuseEmbed(guild, target, attachFilename = null){
   const unix = Math.floor(target.getTime()/1000);
   const tiempo = formatTiempoRestante(target);
   const color = tiempo.enVivo? 0xFFD700 : tiempo.pct > 80? 0xED4245 : tiempo.pct > 50? 0xF1C40F : tiempo.pct > 20? 0x57F287 : 0x5865F2;
   const titulo = tiempo.enVivo? '💥 ¡ADMIN ABUSE EN VIVO AHORA!' : '👑 ADMIN ABUSE - SÁBADOS 9AM';
+  const tabla = "```\n🇲🇽 México → 09:00 AM\n🇨🇴 Colombia → 10:00 AM\n🇵🇪 Perú → 10:00 AM\n🇪🇨 Ecuador → 10:00 AM\n🇺🇸 Miami/EST → 11:00 AM\n🇻🇪 Venezuela → 11:00 AM\n🇨🇱 Chile → 12:00 PM\n🇦🇷 Argentina → 12:00 PM\n🇪🇸 España → 05:00 PM\n```";
   const embed = new EmbedBuilder()
-  .setColor(color)
-  .setTitle(titulo)
-  .setDescription(
-    `**⏰ SÁBADOS 9:00 AM HORA CENTRO MÉXICO**\n\n`+
-    `### ⏳ FALTAN: \`${tiempo.txt}\`\n`+
-    `\`${tiempo.bar}\`\n\n`+
-    `**🕒 En tu hora local:**\n<t:${unix}:F> - <t:${unix}:R>\n\n`+
-    `**🌎 Horarios fijos:**\n`+
-    `🇲🇽 MX 9:00 AM | 🇨🇴 COL 10:00 AM | 🇵🇪 PE 10:00 AM\n`+
-    `🇦🇷 ARG 12:00 PM | 🇨🇱 CHI 12:00 PM | 🇪🇸 ESP 5:00 PM | 🇺🇸 EST 11:00 AM\n`
-   )
-  .setFooter({ text: `Papois Empire • Sábados 9AM MX • Actualiza automático` })
-  .setTimestamp(target);
-  if(adminAbuseData.customImageUrl &&!adminAbuseData.customIsVideo){
-    embed.setImage(adminAbuseData.customImageUrl);
+ .setColor(color)
+ .setTitle(titulo)
+ .setDescription(`**⏰ SÁBADOS 9:00 AM • CENTRO MÉXICO**\n\n### ⏳ FALTAN: \`${tiempo.txt}\`\n\`${tiempo.bar}\``)
+ .addFields(
+    { name: '🕒 Tu hora local', value: `<t:${unix}:F>\n<t:${unix}:R>`, inline: false },
+    { name: '🌎 Horarios del mundo', value: tabla, inline: false }
+  )
+ .setFooter({ text: `Papois Empire • Sábados 9AM MX • Auto` })
+ .setTimestamp(target);
+  if(attachFilename &&!adminAbuseData.customIsVideo){
+    embed.setImage(`attachment://${attachFilename}`);
   }
   if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
   return embed;
@@ -1461,18 +1480,23 @@ async function crearPanelAdminAbuse(guild){
     }
   }catch{}
   const target = getNextSaturday9amMX();
-  const embed = buildAdminAbuseEmbed(guild, target);
+  const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
+  const source = localPath || adminAbuseData.customImageUrl;
+  let fileName = null;
+  let payload = {};
+  if(source){
+    const ext = path.extname(source.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
+    fileName = `admin_abuse_portada.${ext}`;
+    payload.files = [{ attachment: source, name: fileName }];
+  }
+  const embed = buildAdminAbuseEmbed(guild, target, fileName);
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('admin_abuse_notify').setLabel('🔔 Avísame del Admin Abuse').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('admin_abuse_mi_hora').setLabel('🕒 Ver mi hora local').setStyle(ButtonStyle.Secondary)
   );
-  const files = [];
-  let msg = null;
-  if(adminAbuseData.customIsVideo && adminAbuseData.customImageUrl){
-    msg = await canal.send({ embeds: [embed], components: [row], files: [{ attachment: adminAbuseData.customImageUrl }] }).catch(()=>null);
-  } else {
-    msg = await canal.send({ embeds: [embed], components: [row] }).catch(()=>null);
-  }
+  payload.embeds = [embed];
+  payload.components = [row];
+  const msg = await canal.send(payload).catch(()=>null);
   if(msg){
     adminAbuseData.messageId = msg.id;
     adminAbuseData.channelId = canal.id;
@@ -1497,30 +1521,19 @@ async function actualizarPanelAdminAbuse(guild){
     }
     if(!msg) return crearPanelAdminAbuse(guild);
     const target = getNextSaturday9amMX();
-    const embed = buildAdminAbuseEmbed(guild, target);
-
-    const tiempo = formatTiempoRestante(target);
-
-    // FIX: Discord guarda todo en minúsculas, compara en minúsculas
-    const nombreLower = canal.name.toLowerCase();
-    const esAhora = nombreLower.includes('ahora');
-
-    if(tiempo.enVivo &&!esAhora){
-      await canal.setName('💥│admin-abuse-ahora').catch(()=>{});
+    const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
+    const source = localPath || adminAbuseData.customImageUrl;
+    let fileName = null;
+    if(source){
+      const ext = path.extname(source.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
+      fileName = `admin_abuse_portada.${ext}`;
     }
-    if(!tiempo.enVivo && esAhora){
-      await canal.setName('👑│admin-abuse').catch(()=>{});
-    }
-
-    const payload = { embeds: [embed] };
-    if(adminAbuseData.customIsVideo && adminAbuseData.customImageUrl){
-      payload.files = [{ attachment: adminAbuseData.customImageUrl }];
-      await msg.edit(payload).catch(async()=>{
-        await msg.edit({ embeds: [embed] }).catch(()=>{});
-      });
-    } else {
-      await msg.edit(payload).catch(()=>{});
-    }
+    const embed = buildAdminAbuseEmbed(guild, target, fileName);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin_abuse_notify').setLabel('🔔 Avísame del Admin Abuse').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin_abuse_mi_hora').setLabel('🕒 Ver mi hora local').setStyle(ButtonStyle.Secondary)
+    );
+    await msg.edit({ embeds: [embed], components: [row] }).catch(()=>{});
   }catch(e){ console.log('AdminAbuse update error', e.message); }
 }
 // ========== PREDICCIONES PAPOI - SOLO MORBO, VISUAL 1000% ==========
@@ -2542,10 +2555,25 @@ async function checkRaceEvent(){
     const ch = findChannel(guild, CONFIG.channels.carreras) || findChannel(guild, CONFIG.channels.apariciones) || findChannel(guild, CONFIG.channels.general);
     if(!ch) return;
     const target = getNextRaceDate();
-    const embed = buildRaceEmbed(guild, target);
-    let payload = { content: role? `${role} ${RACE_EMOJI} **¡Carrera empieza en 1 minuto! Ve al portal!**` : `${RACE_EMOJI} **¡Carrera en 1 minuto!**`, embeds: [embed] };
-    if(raceData.customIsVideo && raceData.customImageUrl) payload.files = [{ attachment: raceData.customImageUrl }];
-    await ch.send(payload).catch(()=>{});
+
+    let payload = {};
+    let fileName = null;
+
+    // Usa archivo local si existe, si no el url
+    const localPath = raceData.customLocalPath && fs.existsSync(raceData.customLocalPath)? raceData.customLocalPath : null;
+    const source = localPath || raceData.customImageUrl;
+
+    if(source){
+      const ext = path.extname(source.split('?')[0]).replace('.','') || (raceData.customIsVideo? 'mp4' : 'png');
+      fileName = `carrera_portada.${ext}`;
+      payload.files = [{ attachment: source, name: fileName }];
+    }
+
+    const embed = buildRaceEmbed(guild, target, fileName);
+    payload.content = role? `${role} ${RACE_EMOJI} **¡Carrera empieza en 1 minuto! Ve al portal!**` : `${RACE_EMOJI} **¡Carrera en 1 minuto!**`;
+    payload.embeds = [embed];
+
+    await ch.send(payload).catch(e=>console.log('Race send fail', e.message));
   }catch(e){ console.log('Race error', e.message); }
 }
 function startButterflyScheduler(){
@@ -4013,13 +4041,18 @@ client.on(Events.InteractionCreate, async inter => {
           const archivo = inter.options.getAttachment('archivo');
           if(!archivo) return inter.editReply({ content: '❌ Sube archivo' });
           const isVideo = archivo.contentType?.startsWith('video/');
-          const isImage = archivo.contentType?.startsWith('image/');
-          if(!isVideo &&!isImage) return inter.editReply({ content: '❌ Solo imagen o video' });
+          const ext = archivo.name.split('.').pop() || (isVideo?'mp4':'png');
+          const localPath = path.join(DATA_DIR, `admin_abuse_portada.${ext}`);
+          try{
+            const res = await axios.get(archivo.url, { responseType: 'arraybuffer' });
+            fs.writeFileSync(localPath, res.data);
+          }catch(e){ return inter.editReply({ content: `❌ No pude descargar: ${e.message}` }); }
           adminAbuseData.customImageUrl = archivo.url;
+          adminAbuseData.customLocalPath = localPath;
           adminAbuseData.customIsVideo = isVideo;
           await saveAdminAbuse();
           await crearPanelAdminAbuse(inter.guild);
-          return inter.editReply({ content: `✅ Portada ${isVideo? 'VIDEO':'IMAGEN'} actualizada: ${archivo.name} - Ya se ve en ${findChannel(inter.guild, CONFIG.channels.adminAbuse)}` });
+          return inter.editReply({ content: `✅ Portada ${isVideo?'VIDEO':'IMAGEN'} PERMANENTE: ${archivo.name}` });
         }
         if(inter.commandName === 'test-admin-abuse'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
@@ -4133,28 +4166,50 @@ client.on(Events.InteractionCreate, async inter => {
       const ch = await ensureRaceChannel(inter.guild);
       return inter.editReply({ content: ch? `✅ Canal carreras creado: ${ch} | Rol: ${RACE_ROLE_NAME}` : '❌ Error' });
     }
-    if(inter.commandName === 'test-carreras'){
-      await inter.deferReply({ flags: MessageFlags.Ephemeral });
-      const role = findRole(inter.guild, RACE_ROLE_NAME) || await ensureRaceRole(inter.guild);
-      const canal = findChannel(inter.guild, CONFIG.channels.carreras) || inter.channel;
-      const target = getNextRaceDate();
-      const embed = buildRaceEmbed(inter.guild, target);
-      let payload = { content: role? `${role} ${RACE_EMOJI} **¡Carrera en 1 min! [TEST]**` : `${RACE_EMOJI} **¡Carrera en 1 min!**`, embeds: [embed] };
-      if(raceData.customIsVideo && raceData.customImageUrl) payload.files = [{ attachment: raceData.customImageUrl }];
-      await canal.send(payload);
-      return inter.editReply({ content: `✅ Test carreras enviado a ${canal}` });
-    }
-    if(inter.commandName === 'carreras-portada'){
-      await inter.deferReply({ flags: MessageFlags.Ephemeral });
-      if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
-      const archivo = inter.options.getAttachment('archivo');
-      if(!archivo) return inter.editReply({ content: '❌ Sube archivo' });
-      const isVideo = archivo.contentType?.startsWith('video/');
-      raceData.customImageUrl = archivo.url;
-      raceData.customIsVideo = isVideo;
-      await saveRaceData();
-      return inter.editReply({ content: `✅ Portada ${isVideo?'VIDEO':'IMAGEN'} carreras guardada: ${archivo.name}` });
-    }
+   if(inter.commandName === 'carreras-portada'){
+  await inter.deferReply({ flags: MessageFlags.Ephemeral });
+  if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+  const archivo = inter.options.getAttachment('archivo');
+  if(!archivo) return inter.editReply({ content: '❌ Sube archivo' });
+  const isVideo = archivo.contentType?.startsWith('video/');
+  const ext = archivo.name.split('.').pop() || (isVideo? 'mp4' : 'png');
+  const localFileName = `carrera_portada.${ext}`;
+  const localPath = path.join(DATA_DIR, localFileName);
+
+  try{
+    // DESCARGA PERMANENTE - esto arregla la expiración
+    const res = await axios.get(archivo.url, { responseType: 'arraybuffer' });
+    fs.writeFileSync(localPath, res.data);
+  }catch(e){
+    return inter.editReply({ content: `❌ No pude descargar: ${e.message}` });
+  }
+
+  raceData.customImageUrl = archivo.url;
+  raceData.customLocalPath = localPath;
+  raceData.customIsVideo = isVideo;
+  await saveRaceData();
+  return inter.editReply({ content: `✅ Portada ${isVideo?'VIDEO':'IMAGEN'} guardada PERMANENTE: ${archivo.name} -> ${localPath}` });
+}
+
+if(inter.commandName === 'test-carreras'){
+  await inter.deferReply({ flags: MessageFlags.Ephemeral });
+  const role = findRole(inter.guild, RACE_ROLE_NAME) || await ensureRaceRole(inter.guild);
+  const canal = findChannel(inter.guild, CONFIG.channels.carreras) || inter.channel;
+  const target = getNextRaceDate();
+
+  const localPath = raceData.customLocalPath && fs.existsSync(raceData.customLocalPath)? raceData.customLocalPath : null;
+  const source = localPath || raceData.customImageUrl;
+  let fileName = null;
+  let files = [];
+  if(source){
+    const ext = path.extname(source.split('?')[0]).replace('.','') || (raceData.customIsVideo?'mp4':'png');
+fileName = `carrera_portada.${ext}`;
+    files = [{ attachment: source, name: fileName }];
+  }
+  const embed = buildRaceEmbed(inter.guild, target, fileName);
+  await canal.send({ content: role? `${role} ${RACE_EMOJI} **¡Carrera en 1 min! [TEST]**` : `${RACE_EMOJI} **¡Carrera en 1 min!**`, embeds: [embed], files });
+  return inter.editReply({ content: `✅ Test enviado a ${canal}` });
+}
 
         if(inter.commandName === 'crear-categoria-staff'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
