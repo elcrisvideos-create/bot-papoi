@@ -920,7 +920,7 @@ function buildAdminAbuseEmbed(guild, target, attachFilename = null){
   const tiempo = formatTiempoRestante(target);
   const color = tiempo.enVivo? 0xFFD700 : tiempo.pct > 80? 0xED4245 : tiempo.pct > 50? 0xF1C40F : tiempo.pct > 20? 0x57F287 : 0x5865F2;
   const titulo = tiempo.enVivo? '💥 ¡ADMIN ABUSE EN VIVO AHORA!' : '👑 ADMIN ABUSE - SÁBADOS 9AM';
-  const tabla = "```\n🇲🇽 México → 09:00 AM\n🇨🇴 Colombia → 10:00 AM\n🇵🇪 Perú → 10:00 AM\n🇪🇨 Ecuador → 10:00 AM\n🇺🇸 Miami/EST → 11:00 AM\n🇻🇪 Venezuela → 11:00 AM\n🇨🇱 Chile → 12:00 PM\n🇦🇷 Argentina → 12:00 PM\n🇪🇸 España → 05:00 PM\n```";
+const tabla = "**🇲🇽 México → 09:00 AM**\n**🇨🇴 Colombia → 10:00 AM**\n**🇵🇪 Perú → 10:00 AM**\n**🇪🇨 Ecuador → 10:00 AM**\n**🇺🇸 Miami/EST → 11:00 AM**\n**🇻🇪 Venezuela → 11:00 AM**\n**🇨🇱 Chile → 12:00 PM**\n**🇦🇷 Argentina → 12:00 PM**\n**🇪🇸 España → 05:00 PM**";
   const embed = new EmbedBuilder()
  .setColor(color)
  .setTitle(titulo)
