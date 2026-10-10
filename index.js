@@ -1510,40 +1510,66 @@ function buildPrediccionesEmbeds(guild){
 
   const canalFuente = findChannel(guild, CONFIG.channels.aparicionesEnVivo);
   const header = new EmbedBuilder().setColor(0xFFD700)
-   .setTitle('🔮 PREDICCIONES PAPOI • 1000% VISUAL • SOLO MORBO 🎲')
-   .setDescription(
-      `**⚠ 100% RNG - No predice futuro - Solo diversión**\n\n`+
+  .setTitle('🔮 PREDICCIONES PAPOI • SOLO MORBO 🎲')
+  .setDescription(
+      `**⚠ 100% RNG - No predice futuro - Solo diversión**\n`+
       `📊 **${spawnLogs.length}** spawns registrados\n`+
-      `⏱ Actualiza cada **10 min** • Fuente: ${canalFuente? `<#${canalFuente.id}>` : '#apariciones-en-vivo'}\n\n`+
-      `> Cada % son **ganas papoi**: mientras más tiempo sin salir, más ganas de que toque.`
+      `⏱ Actualiza cada **10 min** • Fuente: ${canalFuente? `<#${canalFuente.id}>` : '#apariciones-en-vivo'}\n`+
+      `› Cada % son **ganas papoi**: mientras más tiempo sin salir, más ganas.`
     ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Sistema no oficial • RNG puro'}).setTimestamp();
 
-  const makeBonita = (list) => {
-    if(!list.length) return '*Sin datos aún - escaneando historial...*';
-    return list.map(s=>{
-      const emoji = getEmoji(s.pet);
-      const pct = calcGanasPapoi(s);
-      const bar = getBar(pct);
-      const cbar = getColorBar(pct);
-      const dH = Math.floor(s.drought/3600000);
-      let timeTxt =!s.lastTs? '`nunca visto`' : dH<1? `\`${Math.floor(s.drought/60000)}m\`` : dH<24? `\`${dH}h\`` : `\`${Math.floor(dH/24)}d ${dH%24}h\``;
-      return `${emoji} **${s.pet}** ${getCatEmoji(s.categoria)}\n${cbar} \`${bar}\` **${pct}%** • Últ: ${timeTxt} • **${s.count30d}x**/30d`;
-    }).join('\n\n');
+  const formatEntry = (s) => {
+    const emoji = getEmoji(s.pet);
+    const pct = calcGanasPapoi(s);
+    const bar = getBar(pct);
+    const cbar = getColorBar(pct);
+    const dH = Math.floor(s.drought/3600000);
+    let timeTxt =!s.lastTs? '`nunca visto`' : dH<1? `\`${Math.floor(s.drought/60000)}m\`` : dH<24? `\`${dH}h\`` : `\`${Math.floor(dH/24)}d ${dH%24}h\``;
+    // SIN > para quitar barra gris, con ### para emoji gigante
+    return `### ${emoji} ${s.pet} ${getCatEmoji(s.categoria)}\n${cbar} \`${bar}\` **${pct}%** • Últ: ${timeTxt} • **${s.count30d}x**/30d`;
   };
 
-  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,6);
-  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,11);
-  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,15);
-  const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,6);
+  const makeSafe = (list, maxLen=3500) => {
+    if(!list.length) return '*Sin datos aún*';
+    let out='';
+    for(const s of list){
+      const entry = formatEntry(s);
+      const add = (out? '\n\n':'') + entry;
+      if(out.length + add.length > maxLen) break; // corta por pet completo, nunca a mitad
+      out += add;
+    }
+    return out || '*Sin datos*';
+  };
+
+  const chunkList = (list, perChunk) => {
+    const chunks=[]; let cur=[];
+    for(const s of list){
+      if(cur.length>=perChunk){ chunks.push(cur); cur=[s]; }
+      else cur.push(s);
+    }
+    if(cur.length) chunks.push(cur);
+    return chunks;
+  };
+
+  // LIMITES BAJOS PARA NUNCA CRASHEAR
+  const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,5);
+  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
+  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,6);
+  const secretosAll = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought);
+  const secretosChunks = chunkList(secretosAll, 6); // 6 por mensaje = 3 mensajes, nunca llega a 4096
   const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,5);
 
-  const embedCal = new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES - Más tiempo sin salir').setDescription(makeBonita(calientes));
-  const embedDiv = new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS - ${divinos.length}/6`).setDescription(makeBonita(divinos));
-  const embedEte = new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS - ${eternos.length}/11`).setDescription(makeBonita(eternos));
-  const embedSec = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🍀 SECRETOS - ${secretos.length}/15`).setDescription(makeBonita(secretos));
-  const embedFrio = new EmbedBuilder().setColor(0x57F287).setTitle('❄ FRÍOS - Salieron hace poquito').setDescription(makeBonita(frios));
+  const embeds=[];
+  embeds.push(header);
+  embeds.push(new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES - Más tiempo sin salir').setDescription(makeSafe(calientes)));
+  embeds.push(new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS - Top 5`).setDescription(makeSafe(divinos)));
+  embeds.push(new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS - Top 6`).setDescription(makeSafe(eternos)));
+  secretosChunks.forEach((chunk,i)=>{
+    embeds.push(new EmbedBuilder().setColor(0x2ECC71).setTitle(i===0? `🍀 SECRETOS - ${secretosAll.length} total` : `🍀 SECRETOS - parte ${i+1}`).setDescription(makeSafe(chunk)));
+  });
+  embeds.push(new EmbedBuilder().setColor(0x57F287).setTitle('❄ FRÍOS - Salieron hace poquito').setDescription(makeSafe(frios)));
 
-  return { embeds: [header, embedCal, embedDiv, embedEte, embedSec, embedFrio] };
+  return { embeds };
 }
 async function crearPanelPredicciones(guild){
   await guild.emojis.fetch().catch(()=>{});
