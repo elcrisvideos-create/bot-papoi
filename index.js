@@ -1456,11 +1456,20 @@ async function ensurePrediccionesChannel(guild){
         { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
       ]
     }).catch(()=>null);
+    console.log(`✅ Canal predicciones creado: ${canal?.name}`);
   } else {
-    if(categoria && canal.parentId!==categoria.id) await canal.setParent(categoria.id).catch(()=>{});
+    // FIX CRITICO: si ya existe, repara permisos SIEMPRE
+    try{
+      if(categoria && canal.parentId!==categoria.id) await canal.setParent(categoria.id).catch(()=>{});
+      await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(()=>{});
+      await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, ManageMessages: true, ManageChannels: true }).catch(()=>{});
+      console.log(`✅ Canal predicciones existente reparado: ${canal.name}`);
+    }catch(e){ console.log('fix perms predicciones', e.message); }
   }
-  if(canal) prediccionesData.channelId = canal.id;
-  await savePredicciones();
+  if(canal){
+    prediccionesData.channelId = canal.id;
+    await savePredicciones();
+  }
   return canal;
 }
 function calcularStatsPredicciones(){
@@ -1548,11 +1557,26 @@ function buildPrediccionesEmbeds(guild){
 async function crearPanelPredicciones(guild){
   await guild.emojis.fetch().catch(()=>{});
   const canal = await ensurePrediccionesChannel(guild);
-  if(!canal) return null;
-  try{ const msgs=await canal.messages.fetch({limit:20}).catch(()=>null); if(msgs){ for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,200)); } } }catch{}
+  if(!canal){ console.log('❌ crearPanel: no hay canal'); return null; }
+  try{ 
+    const msgs=await canal.messages.fetch({limit:20}).catch(()=>null); 
+    if(msgs){ 
+      for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ 
+        await m.delete().catch(()=>{}); 
+        await new Promise(r=>setTimeout(r,200)); 
+      } 
+    } 
+  }catch(e){ console.log('crearPanel fetch', e.message); }
   const {embeds} = buildPrediccionesEmbeds(guild);
-  const msg = await canal.send({ embeds }).catch(()=>null);
-  if(msg){ prediccionesData.messageId=msg.id; prediccionesData.lastUpdate=Date.now(); await savePredicciones(); }
+  console.log(`🔮 Enviando panel predicciones a #${canal.name} con ${embeds.length} embeds`);
+  const msg = await canal.send({ embeds }).catch(e=>{ console.log('❌ send predicciones fallo:', e.message); return null; });
+  if(msg){ 
+    prediccionesData.messageId=msg.id; 
+    prediccionesData.channelId=canal.id;
+    prediccionesData.lastUpdate=Date.now(); 
+    await savePredicciones(); 
+    console.log(`✅ Panel predicciones creado: ${msg.id}`);
+  }
   return msg;
 }
 async function actualizarPanelPredicciones(guild){
@@ -3121,8 +3145,17 @@ client.on(Events.ClientReady, async () => {
   await crearPanelMinijuegos(guild).catch(()=>{});
   await crearPanelTops(guild).catch(()=>{});
   startMinijuegosScheduler();
-  await ensurePrediccionesChannel(guild).catch(()=>{});
-  startPrediccionesScheduler();
+  const canalPred = await ensurePrediccionesChannel(guild).catch(()=>null);
+  if(canalPred){
+    // FUERZA CREACIÓN SI NO HAY PANEL
+    if(!prediccionesData.messageId){
+      console.log('🔮 No hay panel predicciones, creándolo YA...');
+      await crearPanelPredicciones(guild).catch(e=>console.log('crearPanel fallo:', e.message));
+    }
+    startPrediccionesScheduler();
+  } else {
+    console.log('❌ No se pudo asegurar canal predicciones');
+  }
 });
 
 client.on(Events.GuildMemberAdd, async member => {
