@@ -691,7 +691,7 @@ async function ensureButterflyRole(guild){
   let role = findRole(guild, BUTTERFLY_ROLE_NAME);
   if(!role){
     try{
-      role = await guild.roles.create({ name: BUTTERFLY_ROLE_NAME, colors: { primaryColor: 0x8A2BE2 }, reason: 'Rol para evento Floración Mariposas :Mariposa:', mentionable: true });
+      role = await guild.roles.create({ name: BUTTERFLY_ROLE_NAME, color: 0x8A2BE2, reason: 'Rol para evento Floración Mariposas :Mariposa:', mentionable: true });
       console.log(`✅ Rol auto-creado: ${BUTTERFLY_ROLE_NAME}`);
     }catch(e){ console.log('Error creando rol mariposas', e.message); return null; }
   }
@@ -770,7 +770,7 @@ async function ensureMultimediaChannel(guild){
 async function ensureAdminAbuseRole(guild){
   let role = findRole(guild, ADMIN_ABUSE_ROLE_NAME);
   if(!role){
-    role = await guild.roles.create({ name: ADMIN_ABUSE_ROLE_NAME, colors: { primaryColor: 0xFFD700 }, reason: 'Rol para ping Admin Abuse sábados 9am', mentionable: true }).catch(()=>null);
+    role = await guild.roles.create({ name: ADMIN_ABUSE_ROLE_NAME, color: 0xFFD700, reason: 'Rol para ping Admin Abuse sábados 9am', mentionable: true }).catch(()=>null);
   }
   return role;
 }
@@ -1044,7 +1044,7 @@ async function handleBibliotecaMuseoInteraction(inter){
 async function ensureMinijuegosRole(guild){
   let role = findRole(guild, MINIJUEGOS_ROL_CAMPEON);
   if(!role){
-    role = await guild.roles.create({ name: MINIJUEGOS_ROL_CAMPEON, colors:{primaryColor:0xFFD700}, reason:'Campeon semanal minijuegos', mentionable:true }).catch(()=>null);
+    role = await guild.roles.create({ name: MINIJUEGOS_ROL_CAMPEON, color: 0xFFD700, reason:'Campeon semanal minijuegos', mentionable:true }).catch(()=>null);
   }
   return role;
 }
@@ -1479,15 +1479,23 @@ function buildPrediccionesEmbeds(guild){
 
   // OPCIÓN B + EMOJIS GRANDES
   const makeList = (list) => list.map(s=>{
-    const emoji = getEmoji(s.pet);
+    const emojiObj = getPetEmoji(guild, s.pet);
+    const emoji = emojiObj ? `${emojiObj}` : getEmoji(s.pet);
     const isNever = !s.lastTs || s.drought > 365*86400000;
     const droughtDays = isNever ? 999 : Math.floor(s.drought/86400000);
-    const pct = isNever ? 100 : Math.min(100, Math.floor((droughtDays/7)*100) + (s.count30d===0?20:0));
+    let pct;
+    if(isNever) pct = 100;
+    else {
+      const baseComun = Math.min(30, Math.floor(s.count30d / 4));
+      const bonusSequia = Math.min(70, Math.floor(droughtDays * 2.5));
+      pct = baseComun + bonusSequia + (s.count30d===0?25:0);
+      pct = Math.min(100, Math.max(pct, 10));
+    }
     const barStr = '█'.repeat(Math.floor(pct/10)) + '░'.repeat(10-Math.floor(pct/10));
     const catEm = getCategoriaEmoji(guild, s.categoria);
     const timeTxt = isNever ? 'nunca visto 🔥' : `${droughtDays}d sin salir`;
     const lastTxt = isNever ? '' : ` • Visto ${fmtR(s.lastTs)}`;
-    return `${emoji} **${s.pet}**\n> ${catEm} Huevo ${s.categoria} • ${timeTxt}${lastTxt} • **Ganas de salir:** \`${barStr}\` **${pct}%** • ${s.count30d}x en 30d`;
+    return `# ${emoji} ${s.pet}\n> ${catEm} Huevo ${s.categoria} • ${timeTxt}${lastTxt} • **Ganas:** \`${barStr}\` **${pct}%** • ${s.count30d}x en 30d`;
   }).join('\n\n').slice(0,1000) || '*Sin datos*';
 
   const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
@@ -1645,7 +1653,7 @@ async function ensureChambeadorRoles(guild){
   ];
   for(const r of rolesToCreate){
     if(!findRole(guild, r.name)){
-      await guild.roles.create({ name: r.name, colors: { primaryColor: r.color }, reason: r.reason, mentionable: false }).catch(()=>{});
+      await guild.roles.create({ name: r.name, color: r.color, reason: r.reason, mentionable: false }).catch(()=>{});
       await new Promise(res=>setTimeout(res, 300));
     }
   }
@@ -1772,7 +1780,7 @@ async function ensureDonadorRoles(guild){
   ];
   for(const r of rolesToCreate){
     if(!findRole(guild, r.name)){
-      await guild.roles.create({ name: r.name, colors: { primaryColor: r.color }, reason: r.reason, mentionable: false }).catch(()=>{});
+      await guild.roles.create({ name: r.name, color: r.color, reason: r.reason, mentionable: false }).catch(()=>{});
       await new Promise(res=>setTimeout(res, 300));
     }
   }
