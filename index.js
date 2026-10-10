@@ -106,7 +106,7 @@ const CONFIG = {
 };
 
 function findChannel(guild, nameList) {
-  const channels = guild.channels.cache.filter(c => c.isTextBased?.() && c.type!== ChannelType.DM);
+  const channels = guild.channels.cache.filter(c => typeof c.isTextBased === 'function' && c.isTextBased() && c.type !== ChannelType.GuildCategory && c.type !== ChannelType.GuildVoice && c.type!== ChannelType.DM);
   const lowerNames = nameList.map(n => n.toLowerCase());
   for (const name of lowerNames) {
     const exact = channels.find(c => c.name.toLowerCase() === name);
@@ -121,6 +121,7 @@ function findChannel(guild, nameList) {
 
 function findCategory(guild, nameList) {
   const cats = guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory);
+  if(!cats.size) return null;
   const lowerNames = nameList.map(n => n.toLowerCase());
   for (const name of lowerNames) {
     const exact = cats.find(c => c.name.toLowerCase() === name);
@@ -176,8 +177,9 @@ const client = new Client({
 });
 
 // --- PERSISTENCIA V6: MONGODB + FALLBACK ARCHIVOS ---
-const DATA_DIR = fs.existsSync('/data')? '/data' : path.join(__dirname, 'data');
+const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || (fs.existsSync('/data')? '/data' : path.join(__dirname, 'data'));
 if(!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+function cloneDefault(v){ return JSON.parse(JSON.stringify(v)); }
 const SORTEOS_PATH = path.join(DATA_DIR, 'sorteos.json');
 const SORTEOS_INVITES_PATH = path.join(DATA_DIR, 'sorteos_invites.json');
 const SORTEOS_CACHE_PATH = path.join(DATA_DIR, 'sorteos_cache.json');
@@ -194,12 +196,12 @@ function safeLoadJSON(filePath, defaultValue) {
   try {
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2));
-      return defaultValue;
+      return cloneDefault(defaultValue);
     }
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch (e) {
     console.log(`❌ Error leyendo ${filePath}: ${e.message}`);
-    return defaultValue;
+    return cloneDefault(defaultValue);
   }
 }
 
@@ -234,7 +236,13 @@ const saveFusionesActivas = async () => {
   const arr = [...fusionesActivas.values()];
   safeSaveJSON(FUSIONES_ACTIVAS_PATH, arr);
   if (useMongo && FusionActivaModel) {
-    try { await FusionActivaModel.deleteMany({}); if(arr.length) await FusionActivaModel.insertMany(arr); } catch(e){ console.log('Error fusiones activas Mongo', e.message); }
+    try {
+      for(const doc of arr){
+        await FusionActivaModel.findOneAndUpdate({ channelId: doc.channelId }, doc, { upsert: true });
+      }
+      const ids = arr.map(d=>d.channelId);
+      await FusionActivaModel.deleteMany({ channelId: { $nin: ids } });
+    } catch(e){ console.log('Error fusiones activas Mongo', e.message); }
   }
 };
 
@@ -1577,7 +1585,7 @@ function buildSorteoEmbed(guild, sorteo, top = []){
   .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / recién creadas (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F>\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n**🎁 ENTREGA:** Lunes 13 Oct - Se entrega en juego`)
   .setFooter({ text: `Sorteo Papoi • x2 Money Gamepass • Blindaje Activo • ${sorteosInvites.filter(i=>i.estado==='valida').length} válidas totales` })
   .setTimestamp();
-  if(sorteo.portadaLocal && fs.existsSync(sorteo.portadaLocal) &&!sorteo.isVideo) embed.setImage(`attachment://${path.basename(sorteo.portadaLocal)}`);
+  if(sorteo.portadaLocal &&!sorteo.isVideo) embed.setImage(`attachment://${path.basename(sorteo.portadaLocal)}`);
   else if(sorteo.portadaUrl &&!sorteo.isVideo) embed.setImage(sorteo.portadaUrl);
   if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
   return embed;
@@ -3584,10 +3592,12 @@ try{
       await saveSorteos();
     }
     if(usedCode){
-      const creador = inviteCodeToCreador.get(usedCode) || null;
+      const cached = inviteCache.get(usedCode);
+      const creador = cached?.inviterId || inviteCodeToCreador.get(usedCode) || null;
+      if(!creador) { console.log(`Invite ${usedCode} sin creador`); return; }
       const snapshot = sorteosData.activo.snapshot || [];
       const yaExistia = snapshot.includes(member.id);
-      const yaContadoAntes = sorteosInvites.some(i=> i.invitadoId === member.id);
+      const yaContadoAntes = sorteosInvites.some(i=> i.invitadoId === member.id && i.estado !== 'restada');
       let estado = 'pendiente';
       if(yaExistia) estado = 'invalida';
       else if(yaContadoAntes) estado = 'invalida';
@@ -3722,22 +3732,21 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
   );
   const tieneImagen = [...msg.attachments.values()].some(a => a.contentType?.startsWith('image/'));
   const tieneTexto = msg.content.trim().length > 0;
-  const noEsSoloImagen =!tieneImagen || tieneTexto;
 
-  if (noEsSoloImagen) {
+  if (!esActivoOMas) {
+    await msg.delete().catch(()=>{});
+    const w = await msg.channel.send({ content: `${msg.author} ❌ Necesitas **Papoi Activo (500 XP)**` }).catch(()=>{});
+    if(w) setTimeout(()=>w.delete().catch(()=>{}), 8000);
+    return;
+  }
+  if (!tieneImagen || tieneTexto) {
     await msg.delete().catch(()=>{});
     const w = await msg.channel.send({ content: `${msg.author} ❌ En ${msg.channel} **solo imágenes sin texto**.` }).catch(()=>{});
     if(w) setTimeout(()=>w.delete().catch(()=>{}), 6000);
     return;
   }
-    if (!esActivoOMas) {
-      await msg.delete().catch(()=>{});
-      const w = await msg.channel.send({ content: `${msg.author} ❌ Necesitas **Papoi Activo (500 XP)**` }).catch(()=>{});
-      if(w) setTimeout(()=>w.delete().catch(()=>{}), 8000);
-      return;
-    }
-    return; // deja que el slowmode de 10min haga su chamba
-  }
+  return;
+}
   // Fuera de multimedia
   if (msg.attachments.size > 0 && !isOwner(msg.author.id) && !isMod(member) && !esMultimedia) {
     await msg.delete().catch(()=>{});
