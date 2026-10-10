@@ -77,6 +77,8 @@ const CONFIG = {
     chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
     predicciones: ['predicciones-huevos', '🔮│predicciones', 'predicciones', 'predicciones-papoi'],
     carreras: ['carreras', '🏁│carreras', '🏁 | carreras', 'carreras-papoi', 'mario-kart'],
+    sorteos: ['sorteos', '🎁│sorteos', '🎁 | sorteos', 'sorteo-papoi', 'sorteo'],
+    sorteosPrivado: ['sorteo-test', 'test-sorteo', 'sorteo-privado'],
     adminAbuse: ['admin-abuse', '👑│admin-abuse', '⏰│admin-abuse', '💥│admin-abuse', 'admin-abuse-countdown'],
     apoyoInfo: ['como-apoyar', '📢│como-apoyar'],
     apoyoTienda: ['tienda-roblox', '🥚│tienda-roblox'],
@@ -104,7 +106,7 @@ const CONFIG = {
 };
 
 function findChannel(guild, nameList) {
-  const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText || c.type === ChannelType.GuildForum);
+  const channels = guild.channels.cache.filter(c => c.isTextBased?.() && c.type!== ChannelType.DM);
   const lowerNames = nameList.map(n => n.toLowerCase());
   for (const name of lowerNames) {
     const exact = channels.find(c => c.name.toLowerCase() === name);
@@ -148,7 +150,7 @@ async function logSancion(guild, { tipo, moderador, usuario, razon, duracion, ex
     const embed = new EmbedBuilder()
      .setColor(colores[tipo] || 0xFFD700)
      .setTitle(`${emojis[tipo] || '📝'} ${tipo} | ${usuario?.tag || usuario}`)
-     .setThumbnail(usuario?.displayAvatarURL? usuario.displayAvatarURL() : null)
+     .setThumbnail(usuario?.displayAvatarURL? usuario.displayAvatarURL({ extension: 'png', size: 256 }) : null)
      .addFields(
         { name: '👤 Usuario', value: `${usuario} (${usuario?.id || '?'})`, inline: true },
         { name: '👮 Moderador', value: `${moderador}`, inline: true },
@@ -164,7 +166,8 @@ async function logSancion(guild, { tipo, moderador, usuario, razon, duracion, ex
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds, 
-    GatewayIntentBits.GuildMembers, 
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildInvites,
     GatewayIntentBits.GuildMessages, 
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions
@@ -173,7 +176,16 @@ const client = new Client({
 });
 
 // --- PERSISTENCIA V6: MONGODB + FALLBACK ARCHIVOS ---
-const DATA_DIR = fs.existsSync('/data') ? '/data' : './';
+const DATA_DIR = fs.existsSync('/data')? '/data' : path.join(__dirname, 'data');
+if(!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const SORTEOS_PATH = path.join(DATA_DIR, 'sorteos.json');
+const SORTEOS_INVITES_PATH = path.join(DATA_DIR, 'sorteos_invites.json');
+const SORTEOS_CACHE_PATH = path.join(DATA_DIR, 'sorteos_cache.json');
+let sorteosData = safeLoadJSON(SORTEOS_PATH, { activo: null }); // {activo: {premio, inicio, fin, canalId, mensajeId, snapshot: [], portadaUrl, portadaLocal, isVideo}}
+let sorteosInvites = safeLoadJSON(SORTEOS_INVITES_PATH, []); // [{invitadorId, invitadoId, code, estado, joinedAt, activoGeneral}]
+let inviteCacheFile = safeLoadJSON(SORTEOS_CACHE_PATH, {}); // {code: uses}
+let inviteCache = new Map(); // RAM: code -> {uses, inviterIdCustom}
+let inviteCodeToCreador = new Map(); // code -> userId que pidió el link
 const XP_PATH = path.join(DATA_DIR, 'xp.json');
 const TIKTOK_PATH = path.join(DATA_DIR, 'tiktok.json');
 const ADMIN_ABUSE_PATH = path.join(DATA_DIR, 'admin_abuse.json');
@@ -211,6 +223,9 @@ let fusionesActivas = new Map(fusionesActivasRaw.map(o => [o.channelId, o]));
 let FusionModel = null;
 let FusionActivaModel = null;
 let RaceModel = null;
+let SorteoModel = null;
+let SorteoInviteModel = null;
+const SORTEO_ROLE_TEST = 'Sorteo Test';
 
 const saveFusiones = async () => {
   safeSaveJSON(FUSIONES_PATH, fusionesQueue);
@@ -407,7 +422,14 @@ async function initMongo() {
       console.log('📤 Migrando carreras a MongoDB...');
       await RaceModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, {...raceData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
     }
-
+        const sorteoSchema = new mongoose.Schema({ guildId: String, activo: Object, snapshot: [String] }, { strict: false });
+    SorteoModel = mongoose.model('Sorteo', sorteoSchema);
+    const sorteoInviteSchema = new mongoose.Schema({ guildId: String, invitadorId: String, invitadoId: String, code: String, estado: String, joinedAt: Number, activoGeneral: Boolean }, { strict: false });
+    SorteoInviteModel = mongoose.model('SorteoInvite', sorteoInviteSchema);
+    const sMongo = await SorteoModel.findOne({ guildId: process.env.GUILD_ID });
+    if(sMongo && sMongo.activo){ sorteosData = { activo: sMongo.activo }; sorteosData.activo.snapshot = sMongo.snapshot || sMongo.activo.snapshot || []; safeSaveJSON(SORTEOS_PATH, sorteosData); console.log(`✅ Sorteo cargado de Mongo`); }
+    const invitesMongo = await SorteoInviteModel.find({ guildId: process.env.GUILD_ID });
+    if(invitesMongo.length){ sorteosInvites = invitesMongo.map(i=>({invitadorId:i.invitadorId, invitadoId:i.invitadoId, code:i.code, estado:i.estado, joinedAt:i.joinedAt, activoGeneral:i.activoGeneral})); safeSaveJSON(SORTEOS_INVITES_PATH, sorteosInvites); }
     const chambeadorSchema = new mongoose.Schema({ userId: String, robloxUser: String, puntos: Number, baneado: Boolean, lastReport: Number, createdAt: Number }, { strict: false });
     ChambeadorModel = mongoose.model('Chambeador', chambeadorSchema);
     const chambeadoresMongo = await ChambeadorModel.find({});
@@ -481,8 +503,11 @@ const saveXP = async () => {
   safeSaveJSON(XP_PATH, xpData);
   if (useMongo && XpModel) {
     try {
-      const ops = Object.entries(xpData).map(([userId, xp])=>({ updateOne: { filter:{userId}, update:{xp}, upsert:true }}));
-      if(ops.length) await XpModel.bulkWrite(ops, { ordered:false });
+      const entries = Object.entries(xpData);
+      for(let i=0; i<entries.length; i+=500){
+        const chunk = entries.slice(i,i+500).map(([userId, xp])=>({ updateOne: { filter:{userId}, update:{xp}, upsert:true }}));
+        if(chunk.length) await XpModel.bulkWrite(chunk, { ordered:false });
+      }
     } catch (e) {
       console.log(`Error guardando XP en Mongo: ${e.message}`);
     }
@@ -512,6 +537,13 @@ setInterval(()=>{
   for(const [k,v] of commandCooldown.entries()) if(now-v> 3600000) commandCooldown.delete(k);
   for(const [k,v] of aiCooldown.entries()) if(now-v> 60000) aiCooldown.delete(k);
   for(const [k,v] of lastXP.entries()) if(now-v> 3600000) lastXP.delete(k);
+  for(const [k,v] of minijuegoActivo.entries()){
+    if(now - (v.readyAt||v.startTime||now) > 60000){
+      if(v.timeout) clearTimeout(v.timeout);
+      if(v.timeoutEscapa) clearTimeout(v.timeoutEscapa);
+      minijuegoActivo.delete(k);
+    }
+  }
 }, 15*60*1000);
 
 const NIVELES = [
@@ -621,13 +653,25 @@ const RACE_EMOJI = '🏁';
 const RACE_CHANNEL_NAME = '🏁│carreras';
 const RACE_DATA_PATH = path.join(DATA_DIR, 'carreras.json');
 let raceData = safeLoadJSON(RACE_DATA_PATH, { channelId: null, messageId: null, customImageUrl: null, customLocalPath: null, customIsVideo: false });
+const saveSorteos = async () => {
+  safeSaveJSON(SORTEOS_PATH, sorteosData);
+  safeSaveJSON(SORTEOS_INVITES_PATH, sorteosInvites);
+  safeSaveJSON(SORTEOS_CACHE_PATH, inviteCacheFile);
+  if(useMongo && SorteoModel){
+    await SorteoModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { activo: sorteosData.activo, snapshot: sorteosData.activo?.snapshot || [], guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
+  }
+  if(useMongo && SorteoInviteModel){
+    await SorteoInviteModel.deleteMany({ guildId: process.env.GUILD_ID }).catch(()=>{});
+    if(sorteosInvites.length){
+      await SorteoInviteModel.insertMany(sorteosInvites.map(i=>({...i, guildId: process.env.GUILD_ID}))).catch(()=>{});
+    }
+  }
+};
+function getSorteoActivo(){ return sorteosData.activo && Date.now() < sorteosData.activo.fin? sorteosData.activo : null; }
 const saveRaceData = async () => {
   safeSaveJSON(RACE_DATA_PATH, raceData);
   if(useMongo && RaceModel){
     await RaceModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, {...raceData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
-  }
-  if(useMongo && global.RaceModel){
-    await global.RaceModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, {...raceData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
   }
 };
 // --- V11: ADMIN ABUSE COUNTDOWN - SÁBADOS 9AM MX ---
@@ -778,9 +822,14 @@ function buildRaceEmbed(guild, target, attachFilename = null){
   )
  .setFooter({ text: `Papois Empire • ${RACE_EMOJI} Carreras cada 30 min` })
  .setTimestamp(target);
-  if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
-  if(attachFilename &&!raceData.customIsVideo){
-    embed.setImage(`attachment://${attachFilename}`);
+  const iconR = guild.iconURL({ extension: 'png', size: 128 });
+  if(iconR) embed.setThumbnail(iconR);
+  if(attachFilename){
+    if(attachFilename.startsWith('http')){
+      if(!raceData.customIsVideo) embed.setImage(attachFilename);
+    } else if(!raceData.customIsVideo){
+      embed.setImage(`attachment://${attachFilename}`);
+    }
   }
   return embed;
 }
@@ -825,7 +874,7 @@ async function fixPapoisAlIniciar(guild){
     if(!m.roles.cache.has(rolPapoi.id)){
       await m.roles.add(rolPapoi.id).catch(()=>{});
       fixed++;
-      await new Promise(r=>setTimeout(r, 350));
+      await new Promise(r=>setTimeout(r, 120));
     }
   }
   if(fixed>0) console.log(`✅ FIX PAPOI: ${fixed} usuarios sin rol arreglados`);
@@ -839,7 +888,7 @@ async function ensureFusionesChannel(guild){
 
   if(canal){
     try{
-      await canal.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(()=>{});
+      await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(()=>{});
       await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, ManageMessages: true, AttachFiles: true, ManageChannels: true }).catch(()=>{});
       if(modRole) await canal.permissionOverwrites.edit(modRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true }).catch(()=>{});
       if(mayorRole) await canal.permissionOverwrites.edit(mayorRole.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: true, ManageMessages: true, ManageChannels: true }).catch(()=>{});
@@ -896,8 +945,7 @@ function getNextSaturday9amMX(){
   const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 15, 0, 0, 0));
   const day = target.getUTCDay();
   let diff = (6 - day + 7) % 7;
-  // Solo brinca a la próxima semana DESPUÉS de 1 hora del evento, no al segundo 0
-  if(diff === 0 && target.getTime() + 3600000 <= now.getTime()) diff = 7;
+  if(diff === 0 && now.getTime() >= target.getTime() + 3600000) diff = 7;
   target.setUTCDate(target.getUTCDate() + diff);
   return target;
 }
@@ -936,7 +984,8 @@ const tabla = "**🇲🇽 México → 09:00 AM**\n**🇨🇴 Colombia → 10:00 
   if(attachFilename &&!adminAbuseData.customIsVideo){
     embed.setImage(`attachment://${attachFilename}`);
   }
-  if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
+  const iconA = guild.iconURL({ extension: 'png', size: 128 });
+  if(iconA) embed.setThumbnail(iconA);
   return embed;
 }
 async function ensureAdminAbuseChannel(guild){
@@ -1182,6 +1231,7 @@ async function ensureMinijuegosChannels(guild){
 function getRobaEmojis(guild, n=1){
   const all = [...guild.emojis.cache.values()].filter(e=>esDeRobaUnHuevo(e.name));
   const pool = all.length? all : [...guild.emojis.cache.values()];
+  if(!pool.length) return n===1? null : [];
   const res=[];
   for(let i=0;i<n;i++) res.push(pool[Math.floor(Math.random()*pool.length)]);
   return n===1? res[0] : res;
@@ -1271,25 +1321,30 @@ async function handleMinijuegosInteraction(inter){
 
   // --- ATRAPA ---
   if(inter.customId==='minijuego_atrapa'){
+    const prev = minijuegoActivo.get(userId);
+    if(prev?.timeout) clearTimeout(prev.timeout);
+    if(prev?.timeoutEscapa) clearTimeout(prev.timeoutEscapa);
     const delay = 2000 + Math.floor(Math.random()*4000);
     const correct = Math.floor(Math.random()*5);
     minijuegoActivo.set(userId, { tipo:'atrapa', readyAt: now+delay, startTime:0, correctIndex:correct, active:false });
         const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 ¡ATENTO!').setDescription(`El huevo dorado aparecerá en **${(delay/1000).toFixed(1)}s aprox** en 1 de los 5 botones random.\n\n⚠ Si clickeas antes o el botón falso = **-5 pts**\n> Anti-macro: posición random y tiempo random`);
     const row = new ActionRowBuilder().addComponents(
-    ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel('❓').setStyle(ButtonStyle.Secondary))
+   ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel('❓').setStyle(ButtonStyle.Secondary))
     );
     await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral });
-    setTimeout(async ()=>{
+    const toAtrapa = setTimeout(async ()=>{
       const state = minijuegoActivo.get(userId);
       if(!state || state.tipo!=='atrapa') return;
-      state.active=true; state.startTime=Date.now();
+            state.active=true; state.startTime=Date.now();
       const embed2 = new EmbedBuilder().setColor(0x57F287).setTitle('🥚 ¡AHORA! ¡ATRAPA!').setDescription(`¡CLICK AL DORADO! ¡RÁPIDO!`);
       const row2 = new ActionRowBuilder().addComponents(
-       ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel(i===state.correctIndex? '🥚' : '💨').setStyle(i===state.correctIndex? ButtonStyle.Success: ButtonStyle.Secondary))
+      ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel(i===state.correctIndex? '🥚' : '💨').setStyle(i===state.correctIndex? ButtonStyle.Success: ButtonStyle.Secondary))
       );
-      await inter.editReply({ embeds:[embed2], components:[row2] }).catch(()=>{});
-      setTimeout(()=>{ if(minijuegoActivo.get(userId)?.tipo==='atrapa' && minijuegoActivo.get(userId)?.active){ minijuegoActivo.delete(userId); inter.editReply({ content:'💨 Muy lento! El huevo escapó. -2 pts', embeds:[], components:[] }).catch(()=>{}); data.fails++; data.puntos=Math.max(0,data.puntos-2); saveMinijuegos(userId); } }, 3500);
+            await inter.editReply({ embeds: [embed2], components: [row2] }).catch(()=>{});
+      const toEscapa = setTimeout(()=>{ if(minijuegoActivo.get(userId)?.tipo==='atrapa' && minijuegoActivo.get(userId)?.active){ minijuegoActivo.delete(userId); inter.editReply({ content:'💨 Muy lento! El huevo escapó. -2 pts', embeds:[], components:[] }).catch(()=>{}); data.fails++; data.puntos=Math.max(0,data.puntos-2); saveMinijuegos(userId); } }, 3500);
+      const cur2 = minijuegoActivo.get(userId); if(cur2) cur2.timeoutEscapa = toEscapa;
     }, delay);
+    const cur = minijuegoActivo.get(userId); if(cur) cur.timeout = toAtrapa;
     return;
   }
   if(inter.customId.startsWith('minijuego_atrapa_click_')){
@@ -1299,10 +1354,14 @@ async function handleMinijuegosInteraction(inter){
       return inter.reply({ content:'❌ Juego expirado, inicia otro en 🎮│minijuegos', flags: MessageFlags.Ephemeral });
     }
     if(!state.active){
+      if(state.timeout) clearTimeout(state.timeout);
+      if(state.timeoutEscapa) clearTimeout(state.timeoutEscapa);
       minijuegoActivo.delete(userId);
       data.fails++; data.puntos=Math.max(0,data.puntos-5); data.weekly=Math.max(0,data.weekly-5); await saveMinijuegos(userId);
       return inter.update({ content:`⚠ ¡TRAMPOSO! Clickeaste antes. -5 pts (anti-macro)`, embeds:[], components:[] });
     }
+    if(state.timeout) clearTimeout(state.timeout);
+    if(state.timeoutEscapa) clearTimeout(state.timeoutEscapa);
     if(idx!==state.correctIndex){
       minijuegoActivo.delete(userId);
       data.fails++; data.puntos=Math.max(0,data.puntos-5); data.weekly=Math.max(0,data.weekly-5); await saveMinijuegos(userId);
@@ -1318,7 +1377,7 @@ async function handleMinijuegosInteraction(inter){
   // --- SLOT ---
   if(inter.customId==='minijuego_slot'){
     await guild.emojis.fetch().catch(()=>{});
-    const e1 = getRobaEmojis(guild); const e2 = getRobaEmojis(guild); const e3 = getRobaEmojis(guild);
+    const e1 = getRobaEmojis(guild) || '🥚'; const e2 = getRobaEmojis(guild) || '🥚'; const e3 = getRobaEmojis(guild) || '🥚';
     let pts=0, txt='';
     if(e1.id===e2.id && e2.id===e3.id){ pts=50; txt=`🎉 JACKPOT! 3x ${e1} +50 pts`; }
     else if(e1.id===e2.id || e2.id===e3.id || e1.id===e3.id){ pts=10; txt=`✨ 2 iguales! +10 pts`; }
@@ -1364,7 +1423,7 @@ const qIndex = Math.floor(Math.random()*3);
     setTimeout(async ()=>{
       const embed2 = new EmbedBuilder().setColor(0x5865F2).setTitle(`🧠 ¿Cuál iba en la posición ${qIndex+1}?`).setDescription(`Era: ${seq.map(()=> '❓').join(' ')}`);
       const row = new ActionRowBuilder().addComponents(...options.map((e,i)=> new ButtonBuilder().setCustomId(`minijuego_memoria_opt_${e.id}`).setLabel(e.name.slice(0,20)).setEmoji({id:e.id, name:e.name}).setStyle(ButtonStyle.Secondary)));
-      await inter.editReply({ embeds:[embed2], components:[row] }).catch(()=>{});
+    await inter.editReply({ embeds: [embed2], components: [row] }).catch(()=>{});
 
     }, 4000);
     return;
@@ -1385,6 +1444,9 @@ const qIndex = Math.floor(Math.random()*3);
 
   // --- BOMBA ---
   if(inter.customId==='minijuego_bomba'){
+    const prevB = minijuegoActivo.get(userId);
+    if(prevB?.timeout) clearTimeout(prevB.timeout);
+    if(prevB?.timeoutEscapa) clearTimeout(prevB.timeoutEscapa);
     const delay = 1500 + Math.floor(Math.random()*2000);
     minijuegoActivo.set(userId, { tipo:'bomba', readyAt: now+delay, active:false });
     const embed = new EmbedBuilder().setColor(0xED4245).setTitle('💣 ¡HUEVO BOMBA ACTIVADO!').setDescription(`Explotará en **${(delay/1000).toFixed(1)}s random**. ¡Desactívalo rápido!`);
@@ -1470,7 +1532,99 @@ async function handleBibliotecaInteraction(inter){
     }
   }catch(e){ console.log('Biblio inter', e.message); }
 }
-
+// ========== SORTEOS PAPOIS EMPIRE - X2 MONEY - BLINDAJE TOTAL ==========
+async function ensureSorteosChannel(guild, privado = true){
+  let canal = findChannel(guild, CONFIG.channels.sorteos);
+  if(privado){
+    // Canal de prueba solo para ti
+    canal = guild.channels.cache.find(c=> c.name === 'sorteo-test-privado') || null;
+    if(!canal){
+      canal = await guild.channels.create({
+        name: 'sorteo-test-privado',
+        type: ChannelType.GuildText,
+        topic: '🎁 TEST SORTEO X2 MONEY - SOLO OWNER - Luego se hace público',
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: process.env.OWNER_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles] },
+          { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.CreateInstantInvite] },
+        ]
+      }).catch(()=>null);
+    }
+  } else {
+    // Público - categoría comunidad papoi
+    let categoria = findCategory(guild, CONFIG.categories.comunidadPapoi);
+    if(!canal){
+      canal = await guild.channels.create({
+        name: '🎁│sorteos',
+        type: ChannelType.GuildText,
+        parent: categoria?.id || null,
+        topic: '🎁 SORTEOS PAPOIS EMPIRE - X2 Money - Invita y gana',
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+          { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles] },
+        ]
+      }).catch(()=>null);
+    }
+  }
+  if(canal && sorteosData.activo) { sorteosData.activo.canalId = canal.id; await saveSorteos(); }
+  return canal;
+}
+function buildSorteoEmbed(guild, sorteo, top = []){
+  const finUnix = Math.floor(sorteo.fin/1000);
+  const embed = new EmbedBuilder()
+  .setColor(0xFFD700)
+  .setTitle(`🎁 SORTEO GAMEPASS x2 DINERO - Roba un Huevo`)
+  .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / recién creadas (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F>\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n**🎁 ENTREGA:** Lunes 13 Oct - Se entrega en juego`)
+  .setFooter({ text: `Sorteo Papoi • x2 Money Gamepass • Blindaje Activo • ${sorteosInvites.filter(i=>i.estado==='valida').length} válidas totales` })
+  .setTimestamp();
+  if(sorteo.portadaLocal && fs.existsSync(sorteo.portadaLocal) &&!sorteo.isVideo) embed.setImage(`attachment://${path.basename(sorteo.portadaLocal)}`);
+  else if(sorteo.portadaUrl &&!sorteo.isVideo) embed.setImage(sorteo.portadaUrl);
+  if(guild.iconURL()) embed.setThumbnail(guild.iconURL());
+  return embed;
+}
+async function crearPanelSorteo(guild){
+  const sorteo = getSorteoActivo();
+  if(!sorteo) return null;
+  const canal = guild.channels.cache.get(sorteo.canalId) || await guild.channels.fetch(sorteo.canalId).catch(()=>null);
+  if(!canal) return null;
+  try{ const msgs = await canal.messages.fetch({limit:20}).catch(()=>null); if(msgs){ for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,300)); } } }catch{}
+  let payload = {};
+  let fileName = null;
+  if(sorteo.portadaLocal && fs.existsSync(sorteo.portadaLocal)){
+    fileName = path.basename(sorteo.portadaLocal);
+    payload.files = [{ attachment: sorteo.portadaLocal, name: fileName }];
+  }
+  const embed = buildSorteoEmbed(guild, sorteo);
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('sorteo_crear_link').setLabel('🔗 Crear mi Link Personal').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('sorteo_mis').setLabel('📊 Mis Invitaciones').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('sorteo_top').setLabel('🏆 Ver Top 10').setStyle(ButtonStyle.Secondary)
+  );
+  payload.embeds = [embed];
+  payload.components = [row1];
+  const msg = await canal.send(payload).catch(()=>null);
+  if(msg){ sorteosData.activo.mensajeId = msg.id; await saveSorteos(); }
+  return msg;
+}
+async function cargarInviteCache(guild){
+  try{
+    const invites = await guild.invites.fetch().catch(()=>null);
+    if(!invites) return;
+    inviteCache.clear();
+    for(const [code, inv] of invites){
+      let creador = inv.inviter?.id || inviteCodeToCreador.get(code) || null;
+      if(!creador){
+        const saved = sorteosInvites.find(i=>i.code===code);
+        if(saved) creador = saved.invitadorId;
+      }
+      if(creador) inviteCodeToCreador.set(code, creador);
+      inviteCache.set(code, { uses: inv.uses || 0, inviterId: creador });
+      inviteCacheFile[code] = inv.uses || 0;
+    }
+    await saveSorteos();
+    console.log(`✅ InviteCache cargado: ${inviteCache.size} invites | ${inviteCodeToCreador.size} creadores`);
+  }catch(e){ console.log('inviteCache error', e.message); }
+}
 async function crearPanelAdminAbuse(guild){
   const canal = await ensureAdminAbuseChannel(guild);
   if(!canal) return null;
@@ -1483,7 +1637,7 @@ async function crearPanelAdminAbuse(guild){
   }catch{}
   const target = getNextSaturday9amMX();
   const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
-  const source = localPath || adminAbuseData.customImageUrl;
+  const source = localPath || null;
   let fileName = null;
   let payload = {};
   if(source){
@@ -1524,18 +1678,20 @@ async function actualizarPanelAdminAbuse(guild){
     if(!msg) return crearPanelAdminAbuse(guild);
     const target = getNextSaturday9amMX();
     const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
-    const source = localPath || adminAbuseData.customImageUrl;
     let fileName = null;
-    if(source){
-      const ext = path.extname(source.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
+    let files = [];
+    if(localPath){
+      const ext = path.extname(localPath.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
       fileName = `admin_abuse_portada.${ext}`;
+      files = [{ attachment: localPath, name: fileName }];
     }
     const embed = buildAdminAbuseEmbed(guild, target, fileName);
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin_abuse_notify').setLabel('🔔 Avísame del Admin Abuse').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('admin_abuse_mi_hora').setLabel('🕒 Ver mi hora local').setStyle(ButtonStyle.Secondary)
     );
-    await msg.edit({ embeds: [embed], components: [row] }).catch(()=>{});
+    if(files.length) await msg.edit({ embeds: [embed], components: [row], files }).catch(()=>{});
+    else await msg.edit({ embeds: [embed], components: [row] }).catch(()=>{});
   }catch(e){ console.log('AdminAbuse update error', e.message); }
 }
 // ========== PREDICCIONES PAPOI - SOLO MORBO, VISUAL 1000% ==========
@@ -1778,6 +1934,7 @@ function checkAcierto(spawnReal){
   if(hit) prediccionesData.stats.hits++;
   prediccionesData.stats.history.push({ predicted: pred.top3, actual: spawnReal.pet, hit, ts: spawnReal.ts });
   if(prediccionesData.stats.history.length>100) prediccionesData.stats.history = prediccionesData.stats.history.slice(-100);
+  prediccionesData.lastPrediction = { ts: 0, top3: [] };
   savePredicciones();
   console.log(`🎯 Pred: [${pred.top3.join(', ')}] | Real: ${spawnReal.pet} | ${hit?'ACIERTO':'FALLO'} | Acc: ${(prediccionesData.stats.hits/prediccionesData.stats.total*100).toFixed(1)}%`);
 }
@@ -2319,7 +2476,8 @@ async function handleApoyoInteraction(inter){
       }
       if(inter.customId.startsWith('apoyo_confirm_')){
         if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo owner.', flags: MessageFlags.Ephemeral });
-        const userId = inter.customId.split('_')[2]; const puntos = parseInt(inter.customId.split('_')[3]||'0'); const tipo = inter.customId.split('_')[4]||'donacion';
+        const parts = inter.customId.split('_');
+        const userId = parts[2]; const puntos = parseInt(parts[3]||'0'); const tipo = parts.slice(4).join('_')||'donacion';
         if(!donadoresData.users[userId]) donadoresData.users[userId] = { puntos: 0, totalRobux: 0, totalEfectivo: 0, fakes: 0, baneado: false, createdAt: Date.now() };
         donadoresData.users[userId].puntos += puntos;
         if(tipo==='ropa' || tipo==='robux_directo') donadoresData.users[userId].totalRobux += puntos; else donadoresData.users[userId].totalEfectivo += puntos;
@@ -2501,7 +2659,7 @@ async function editarGuia(guild, threadId, { titulo, categoriaTag, descripcion, 
 
 function isMensajeFusionesEnGeneral(msg){
   if(!msg.guild) return false;
-  const name = msg.channel.name.toLowerCase();
+  const name = (msg.channel.name || '').toLowerCase();
   if(name.includes('fusiones') || name.includes('fusion-')) return false;
   // Quita acentos para que fusión = fusion
   let txt = msg.content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
@@ -2526,7 +2684,7 @@ function isMensajeFusionesEnGeneral(msg){
 }
 function isMensajeChambeadoresEnGeneral(msg){
   if(!msg.guild) return false;
-  const name = msg.channel.name.toLowerCase();
+  const name = (msg.channel.name || '').toLowerCase();
   if(name.includes('chambeador') || name.includes('reclutamiento') || name.includes('chambeadores-activos') || name.includes('chambeadores-logs')) return false;
   if(name.includes('fusiones') || name.includes('fusion-')) return false;
   let txt = msg.content.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
@@ -2575,7 +2733,8 @@ async function checkButterflyEvent(){
     const h = now.getUTCHours();
     if(m!== 14 && m!== 44) return;
     const eventMinute = m === 14? 15 : 45;
-    const key = `${h}:${eventMinute}`;
+    const dayKey = now.toISOString().slice(0,10);
+    const key = `${dayKey}-${h}:${eventMinute}`;
     if(lastButterflyPingKey === key) return;
     lastButterflyPingKey = key;
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
@@ -2595,7 +2754,8 @@ async function checkRaceEvent(){
     const h = now.getUTCHours();
     if(m!== 29 && m!== 59) return;
     const eventMinute = m === 29? 30 : 0;
-    const key = `${h}:${eventMinute}_race`;
+    const dayKeyRace = now.toISOString().slice(0,10);
+    const key = `${dayKeyRace}-${h}:${eventMinute}_race`;
     if(lastRacePingKey === key) return;
     lastRacePingKey = key;
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
@@ -2608,18 +2768,14 @@ async function checkRaceEvent(){
 
     let payload = {};
     let fileName = null;
-
-    // Usa archivo local si existe, si no el url
     const localPath = raceData.customLocalPath && fs.existsSync(raceData.customLocalPath)? raceData.customLocalPath : null;
-    const source = localPath || raceData.customImageUrl;
-
+    const source = localPath || raceData.customImageUrl || null;
     if(source){
       const ext = path.extname(source.split('?')[0]).replace('.','') || (raceData.customIsVideo? 'mp4' : 'png');
       fileName = `carrera_portada.${ext}`;
       payload.files = [{ attachment: source, name: fileName }];
     }
-
-    const embed = buildRaceEmbed(guild, target, fileName);
+    const embed = buildRaceEmbed(guild, target, fileName || raceData.customImageUrl);
     payload.content = role? `${role} ${RACE_EMOJI} **¡Carrera empieza en 1 minuto! Ve al portal!**` : `${RACE_EMOJI} **¡Carrera en 1 minuto!**`;
     payload.embeds = [embed];
 
@@ -2643,8 +2799,8 @@ function esRobloxUsernameValido(input){
   if(raw.includes(' ')) return { valid: false, reason: '❌ No pongas espacios ni frases. Solo tu username, ej: `Nico123`' };
   if(!/^[a-zA-Z0-9_]+$/.test(raw)) return { valid: false, reason: '❌ Solo letras, números y _. Sin emojis, sin frases.' };
   const lower = raw.toLowerCase();
-  const bloqueadas = ['necesito','nesecito','tengo','busco','quiero','vendo','cambio','divino','eterno','secreto','enchanted','royal','celestial','skeleton','pegasus','archangel','world','burner','los','las','yo'];
-  if(bloqueadas.some(p => lower.includes(p)) && raw.length > 8) return { valid: false, reason: '❌ Escribe SOLO tu username de Roblox, no qué necesitas.' };
+  const bloqueadas = ['necesito','nesecito','tengo','busco','quiero','vendo','cambio','divino','eterno','secreto','enchanted','royal','celestial','skeleton','pegasus','archangel','world','burner'];
+  if(bloqueadas.includes(lower)) return { valid: false, reason: '❌ Escribe SOLO tu username de Roblox, no qué necesitas.' };
   return { valid: true, value: raw };
 }
 
@@ -2655,8 +2811,8 @@ function esRobloxArrobaValido(input){
   if(raw.includes(' ')) return { valid: false, reason: '❌ No pongas espacios. Solo tu @, ej: `@Joss123` - es el @, no el display name.' };
   if(!/^[a-zA-Z0-9_]+$/.test(raw)) return { valid: false, reason: '❌ Solo letras, números y _. Es el @, no el display name.' };
   const lower = raw.toLowerCase();
-  const bloqueadas = ['necesito','nesecito','tengo','busco','quiero','vendo','cambio','divino','eterno','secreto','enchanted','royal','celestial','skeleton','pegasus','archangel','world','burner','los','las','yo','https','roblox.com'];
-  if(bloqueadas.some(p => lower.includes(p)) && raw.length > 8) return { valid: false, reason: '❌ Escribe SOLO tu @ de Roblox, no frases. Ej: `@Joss123`' };
+  const bloqueadas = ['necesito','nesecito','tengo','busco','quiero','vendo','cambio','divino','eterno','secreto','enchanted','royal','celestial','skeleton','pegasus','archangel','world','burner','https','roblox.com'];
+  if(bloqueadas.includes(lower) || lower.includes('https') || lower.includes('roblox.com')) return { valid: false, reason: '❌ Escribe SOLO tu @ de Roblox, no frases. Ej: `@Joss123`' };
   return { valid: true, value: raw };
 }
 
@@ -2725,7 +2881,12 @@ function limpiarDuplicadosFusiones(){
   }
   const eliminados = fusionesQueue.length - nuevaCola.length;
   fusionesQueue = nuevaCola.reverse();
-  if(eliminados>0) saveFusiones();
+  if(eliminados>0){
+    saveFusiones();
+    if(useMongo && FusionModel){
+      FusionModel.deleteMany({}).then(()=>{ if(fusionesQueue.length) FusionModel.insertMany(fusionesQueue).catch(()=>{}); }).catch(()=>{});
+    }
+  }
   return eliminados;
 }
 function checkCompatibilidad(fusionId, haveA, haveB){
@@ -2979,9 +3140,9 @@ function startFusionesScheduler(){
       }
 
       const now=Date.now();
-      const toRemove=fusionesQueue.filter(r=>now-r.createdAt> 2*60*60*1000);
+      const toRemove=fusionesQueue.filter(r=>now-r.createdAt> 24*60*60*1000);
       for(const r of toRemove){ if(canalFusiones&&r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{}); if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{}); }
-      if(toRemove.length){ fusionesQueue=fusionesQueue.filter(r=>now-r.createdAt<=2*60*60*1000); await saveFusiones(); console.log(`🧹 Limpieza 2h: ${toRemove.length} búsquedas viejas`); }
+      if(toRemove.length){ fusionesQueue=fusionesQueue.filter(r=>now-r.createdAt<=24*60*60*1000); await saveFusiones(); console.log(`🧹 Limpieza 24h: ${toRemove.length} búsquedas viejas`); }
     }catch(e){ console.log('Fusiones scheduler V6.6', e.message); }
   }, 30*1000);
 }
@@ -3330,13 +3491,19 @@ client.on(Events.ClientReady, async () => {
       { name: 'publicar-guia', description: 'Publica una guía con imagen en el foro', options: [{ name: 'titulo', description: 'Título de la guía', type: 3, required: true }, { name: 'categoria', description: 'Categoría', type: 3, required: true, choices: [{ name: '🟢 Principiantes', value: 'Principiantes' }, { name: '🥚 Huevos', value: 'Huevos' }, { name: '🔔 Notificaciones', value: 'Notificaciones' }, { name: '🔀 Fusiones', value: 'Fusiones' }, { name: '🦋 Mariposas', value: 'Mariposas' }, { name: '💼 Chambeadores', value: 'Chambeadores' }, { name: '💡 Trucos', value: 'Trucos' }] }, { name: 'descripcion', description: 'Texto paso a paso', type: 3, required: true }, { name: 'imagen', description: 'Imagen principal', type: 11, required: true }, { name: 'imagen2', description: 'Imagen extra opcional', type: 11, required: false }, { name: 'imagen3', description: 'Imagen extra opcional', type: 11, required: false }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'editar-guia', description: 'Edita una guía existente sin borrarla', options: [{ name: 'post', description: 'ID del post del foro (click derecho > copiar ID)', type: 3, required: true }, { name: 'titulo', description: 'Nuevo titulo (opcional)', type: 3, required: false }, { name: 'categoria', description: 'Nueva categoria (opcional)', type: 3, required: false, choices: [{ name: '🟢 Principiantes', value: 'Principiantes' }, { name: '🥚 Huevos', value: 'Huevos' }, { name: '🔔 Notificaciones', value: 'Notificaciones' }, { name: '🔀 Fusiones', value: 'Fusiones' }, { name: '🦋 Mariposas', value: 'Mariposas' }, { name: '💼 Chambeadores', value: 'Chambeadores' }, { name: '💡 Trucos', value: 'Trucos' }] }, { name: 'descripcion', description: 'Nuevo texto (opcional)', type: 3, required: false }, { name: 'imagen', description: 'Nueva imagen principal', type: 11, required: false }, { name: 'imagen2', description: 'Imagen extra', type: 11, required: false }, { name: 'imagen3', description: 'Imagen extra', type: 11, required: false }], default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'fix-canales-leyenda-booster', description: 'FIX: crea canales faltantes y limpia chat-leyendas', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-            { name: 'setup-admin-abuse', description: 'Crea canal y panel épico Admin Abuse sábados 9am MX', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-admin-abuse', description: 'Crea canal y panel épico Admin Abuse sábados 9am MX', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'admin-portada', description: 'Sube imagen/video portada semanal Admin Abuse (archivo directo)', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen o video (subido directo a Discord)', type: 11, required: true }] },
       { name: 'test-admin-abuse', description: 'Test ping Admin Abuse', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-biblioteca', description: 'Crea biblioteca de emojis ordenada en comunidad papoi', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-biblioteca', description: 'Actualiza biblioteca (cuando agregas emojis/stickers)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-minijuegos', description: 'Crea canales 🎮 minijuegos y 🏆 tops', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
-            { name: 'setup-predicciones', description: 'Crea canal 🔮 predicciones épico y escanea historial', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-predicciones', description: 'Crea canal 🔮 predicciones épico y escanea historial', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'sorteo-setup', description: 'Crea canal privado de sorteo solo para ti (test)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'sorteo-crear', description: 'Crea sorteo x2 Money - desde hoy hasta domingo 23:59', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'premio', description: 'Premio', type: 3, required: false }] },
+      { name: 'sorteo-portada', description: 'Sube imagen/video portada sorteo', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen del gamepass', type: 11, required: true }] },
+      { name: 'sorteo-publicar', description: 'Hace público el canal de sorteo', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'sorteo-top', description: 'Ver top 10 del sorteo' },
+      { name: 'sorteo-finalizar', description: 'Finaliza sorteo y muestra ganador', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-predicciones', description: 'Actualiza panel predicciones manualmente', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'scan-historial', description: 'Escanea TODO el historial de apariciones (tarda)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-minijuegos', description: 'Recrea paneles de minijuegos', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -3370,6 +3537,10 @@ client.on(Events.ClientReady, async () => {
   await crearPanelAdminAbuse(guild).catch(()=>{});
   startAdminAbuseScheduler();
   await ensureMinijuegosChannels(guild).catch(()=>{});
+    await cargarInviteCache(guild).catch(()=>{});
+  await ensureSorteosChannel(guild, true).catch(()=>{}); // privado solo para ti
+  // Reconstruir map creador desde invites guardados
+  sorteosInvites.forEach(i=>{ if(i.code) inviteCodeToCreador.set(i.code, i.invitadorId); });
   await crearPanelMinijuegos(guild).catch(()=>{});
   await crearPanelTops(guild).catch(()=>{});
   startMinijuegosScheduler();
@@ -3388,6 +3559,48 @@ client.on(Events.ClientReady, async () => {
 client.on(Events.GuildMemberAdd, async member => {
   try{
     const d = donadoresData.users[member.id];
+       // SORTEO - DETECTAR INVITE - FIX RACE
+try{
+  const sorteo = getSorteoActivo();
+  if(sorteo){
+    const guild = member.guild;
+    const newInvites = await guild.invites.fetch().catch(()=>null);
+    let usedCode = null;
+    let maxDiff = 0;
+    if(newInvites){
+      for(const [code, inv] of newInvites){
+        const cached = inviteCache.get(code);
+        const prevUses = cached? cached.uses : (inviteCacheFile[code] || 0);
+        const diff = (inv.uses || 0) - prevUses;
+        if(diff > 0 && diff >= maxDiff){
+          maxDiff = diff;
+          usedCode = code;
+        }
+      }
+      for(const [code, inv] of newInvites){
+        inviteCache.set(code, { uses: inv.uses||0, inviterId: inv.inviter?.id || inviteCodeToCreador.get(code) || null });
+        inviteCacheFile[code] = inv.uses||0;
+      }
+      await saveSorteos();
+    }
+    if(usedCode){
+      const creador = inviteCodeToCreador.get(usedCode) || null;
+      const snapshot = sorteosData.activo.snapshot || [];
+      const yaExistia = snapshot.includes(member.id);
+      const yaContadoAntes = sorteosInvites.some(i=> i.invitadoId === member.id);
+      let estado = 'pendiente';
+      if(yaExistia) estado = 'invalida';
+      else if(yaContadoAntes) estado = 'invalida';
+      else if(member.user.bot) estado = 'invalida';
+      else if(Date.now() - member.user.createdTimestamp < 7*24*60*60*1000) estado = 'invalida';
+      if(creador){
+        sorteosInvites.push({ invitadorId: creador, invitadoId: member.id, code: usedCode, estado, joinedAt: Date.now(), activoGeneral: false });
+        await saveSorteos();
+        console.log(`📥 Sorteo join: ${member.user.tag} por ${usedCode} creador ${creador} estado ${estado}`);
+      }
+    }
+  }
+}catch(e){ console.log('sorteo join', e.message); }
     if(d && !d.baneado && d.puntos>0){
       await actualizarRolDonador(member.guild, member, d.puntos);
     }
@@ -3438,9 +3651,19 @@ client.on(Events.GuildMemberAdd, async member => {
 });
 
 client.on(Events.GuildMemberRemove, async member => {
+  const userId = member.id;
+  const guild = member.guild;
   try{
-    const guild = member.guild;
-    const userId = member.id;
+    const sorteo = getSorteoActivo();
+    if(sorteo){
+      const inv = sorteosInvites.find(i=> i.invitadoId === userId && i.estado!== 'restada' && i.estado!== 'invalida');
+      if(inv){
+        inv.estado = 'restada';
+        await saveSorteos();
+      }
+    }
+  }catch(e){ console.log('sorteo leave', e.message); }
+  try{
     if(chambeadoresData[userId]){
       delete chambeadoresData[userId];
       if(ChambeadorModel) await ChambeadorModel.deleteOne({ userId }).catch(()=>{});
@@ -3492,20 +3715,21 @@ client.on(Events.MessageCreate, async msg => {
   if(!member) return;
   
   // --- FILTRO MULTIMEDIA FIX V6.8 - bloquea texto y replies sin imagen ---
-  const esMultimedia = msg.channel.name.toLowerCase().includes('multimedia');
-  if (esMultimedia && !isOwner(msg.author.id) && !isMod(member)) {
-    const esActivoOMas = member.roles.cache.some(r => 
-      ['papoi activo','papoi fiel','papoi veterano','papoi leyenda','papoi mayor','moderador'].includes(r.name.toLowerCase())
-    );
-    const soloTexto = msg.attachments.size === 0;
-    const noEsImagen = [...msg.attachments.values()].some(a => !a.contentType?.startsWith('image/'));
+  const esMultimedia = (msg.channel.name || '').toLowerCase().includes('multimedia');
+if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
+  const esActivoOMas = member.roles.cache.some(r =>
+    ['papoi activo','papoi fiel','papoi veterano','papoi leyenda','papoi mayor','moderador'].includes(r.name.toLowerCase())
+  );
+  const tieneImagen = [...msg.attachments.values()].some(a => a.contentType?.startsWith('image/'));
+  const tieneTexto = msg.content.trim().length > 0;
+  const noEsSoloImagen =!tieneImagen || tieneTexto;
 
-    if (soloTexto || noEsImagen) {
-      await msg.delete().catch(()=>{});
-      const w = await msg.channel.send({ content: `${msg.author} ❌ En ${msg.channel} **solo imágenes**, sin texto.` }).catch(()=>{});
-      if(w) setTimeout(()=>w.delete().catch(()=>{}), 6000);
-      return;
-    }
+  if (noEsSoloImagen) {
+    await msg.delete().catch(()=>{});
+    const w = await msg.channel.send({ content: `${msg.author} ❌ En ${msg.channel} **solo imágenes sin texto**.` }).catch(()=>{});
+    if(w) setTimeout(()=>w.delete().catch(()=>{}), 6000);
+    return;
+  }
     if (!esActivoOMas) {
       await msg.delete().catch(()=>{});
       const w = await msg.channel.send({ content: `${msg.author} ❌ Necesitas **Papoi Activo (500 XP)**` }).catch(()=>{});
@@ -3536,7 +3760,7 @@ client.on(Events.MessageCreate, async msg => {
 
         if(!isMod(member)){
     const contenido = msg.content.toLowerCase().replace(/\s+/g, '');
-    const tieneLink = /(https?:\/\/|www\.|discord\.gg|discord\.com\/invite|discordapp\.com\/invite|t\.me\/|discord\.io)/i.test(contenido);
+    const tieneLink = /(discord\.gg|discord\.com\/invite|discordapp\.com\/invite|t\.me\/|discord\.io)/i.test(contenido) &&!/(roblox\.com|tiktok\.com|ko-fi\.com)/i.test(contenido);
     if(tieneLink){
       try {
         await msg.delete();
@@ -3644,7 +3868,7 @@ client.on(Events.MessageCreate, async msg => {
   const quiereHablar = mencionaAlBot;
 
   if(groq && quiereHablar){
-    if(!esOwner && GROSIERIAS.some(w => textoLower.includes(w))){
+    if(!esOwner && GROSIERIAS.some(w => new RegExp(`\\b${w}\\b`, 'i').test(textoLower))){
       await msg.reply({ content: `${msg.author} sin groserías papoi 🙏 somos family friendly 💛` }).then(m=>setTimeout(()=>m.delete().catch(()=>{}),5000)).catch(()=>{});
       return;
     }
@@ -3667,7 +3891,7 @@ client.on(Events.MessageCreate, async msg => {
       const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').replace(/papoi/gi,'').trim().slice(0,500);
       if(!pregunta) return;
 
-      const modelos = ["llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct", "openai/gpt-oss-120b"];
+      const modelos = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "mixtral-8x7b-32768"];
       let chat = null;
 
       // Personalidad diferente si eres tú
@@ -3719,7 +3943,18 @@ client.on(Events.MessageCreate, async msg => {
       return;
     } catch(e){ console.log(`IA fail: ${e.message}`); }
   }
-  
+    // SORTEO - ACTIVO EN GENERAL
+  try{
+    const sorteo = getSorteoActivo();
+    if(sorteo && msg.channel.name.toLowerCase().includes('general')){
+      const pend = sorteosInvites.find(i=> i.invitadoId === msg.author.id && i.estado==='pendiente');
+      if(pend){
+        pend.activoGeneral = true;
+        pend.estado = 'valida';
+        await saveSorteos();
+      }
+    }
+  }catch{}
   const ahora = Date.now();
   const ultimo = lastXP.get(msg.author.id) || 0;
   if(ahora - ultimo > 90000){ // 90s en vez de 60s = menos spam
@@ -3855,6 +4090,53 @@ async function mostrarMenuConfiguracion(interaction){
 
 client.on(Events.InteractionCreate, async inter => {
   try {
+        if(inter.customId && inter.customId.startsWith('sorteo_')){
+      const guild = inter.guild;
+      const sorteo = getSorteoActivo();
+      if(!sorteo) return inter.reply({ content: '❌ No hay sorteo activo', flags: MessageFlags.Ephemeral });
+      if(inter.customId === 'sorteo_crear_link'){
+        await inter.deferReply({ flags: MessageFlags.Ephemeral });
+        const general = findChannel(guild, CONFIG.channels.general) || guild.channels.cache.find(c=>c.type===ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreateInstantInvite));
+        if(!general) return inter.editReply({ content: '❌ No encontré canal para crear invite' });
+        // Revisa si ya tiene uno
+        let existingCode = null;
+        for(const [code, creatorId] of inviteCodeToCreador.entries()){
+          if(creatorId === inter.user.id){
+            const inv = inviteCache.get(code);
+            if(inv) { existingCode = code; break; }
+          }
+        }
+        let code = existingCode;
+        let inviteUrl = null;
+        if(!code){
+          try{
+            const inv = await general.createInvite({ maxAge: 0, maxUses: 0, unique: true, reason: `Sorteo X2 - ${inter.user.tag}` }).catch(()=>null);
+            if(inv){ code = inv.code; inviteUrl = inv.url; inviteCache.set(code, { uses: inv.uses||0, inviterId: client.user.id }); inviteCodeToCreador.set(code, inter.user.id); inviteCacheFile[code] = 0; await saveSorteos(); }
+          }catch(e){ return inter.editReply({ content: `❌ Error creando invite: ${e.message} - Dame permiso Crear Invitación en #${general.name}` }); }
+        } else {
+          inviteUrl = `https://discord.gg/${code}`;
+        }
+        return inter.editReply({ content: `✅ **Tu link personal:** ${inviteUrl}\n\`discord.gg/${code}\`\n\n**Reglas para que cuente:**\n✅ Que entre + se quede + hable 1 mensaje en #general\n\nTe resta si se sale. No cuenta si ya estaba o es fake (pero no te baneo).` });
+      }
+      if(inter.customId === 'sorteo_mis'){
+        const mias = sorteosInvites.filter(i=> i.invitadorId === inter.user.id);
+        const validas = mias.filter(i=> i.estado==='valida').length;
+        const pendientes = mias.filter(i=> i.estado==='pendiente').length;
+        const restadas = mias.filter(i=> i.estado==='restada').length;
+        const invalidas = mias.filter(i=> i.estado==='invalida').length;
+        const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('📊 Mis Invitaciones').setDescription(`**Válidas:** ${validas}\n**Pendientes (falta que hable en #general):** ${pendientes}\n**Restadas (se salió):** ${restadas}\n**No contaron (fake/ya estaba/inactivo):** ${invalidas}\n\n> Solo cuentan los que siguen dentro y hablaron 1 vez en #general`).setTimestamp();
+        return inter.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      }
+      if(inter.customId === 'sorteo_top'){
+        const conteo = {};
+        sorteosInvites.filter(i=> i.estado==='valida').forEach(i=>{ conteo[i.invitadorId] = (conteo[i.invitadorId]||0)+1; });
+        const top = Object.entries(conteo).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        let txt = top.length? top.map(([id,c],i)=> `**${i+1}.** <@${id}> - **${c}** válidas`).join('\n') : '*Aún nadie con válidas*';
+        const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 Top 10 Sorteo X2 Money').setDescription(txt).setFooter({ text: `Fin: Domingo 23:59 MX` }).setTimestamp();
+        return inter.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      }
+      return;
+    }
     if((inter.customId && inter.customId.startsWith('chambeador_')) || (inter.isModalSubmit() && inter.customId.startsWith('modal_chambeador_'))){
       await handleChambeadoresInteraction(inter);
       return;
@@ -4077,6 +4359,90 @@ client.on(Events.InteractionCreate, async inter => {
           await crearPanelPredicciones(inter.guild);
           return inter.editReply({ content: `✅ Predicciones creado: ${ch} - ${nuevos} spawns nuevos detectados - Se actualiza solo cada 10 min 🔮` });
         }
+                if(inter.commandName === 'sorteo-setup'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const ch = await ensureSorteosChannel(inter.guild, true);
+          return inter.editReply({ content: `✅ Canal privado creado: ${ch} - Solo tú lo ves. Ahí haré las pruebas.` });
+        }
+        if(inter.commandName === 'sorteo-crear'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const premio = inter.options.getString('premio') || 'Gamepass x2 Dinero - Roba un Huevo';
+          const inicio = Date.now();
+          const fin = new Date(); fin.setDate(fin.getDate() + ((7 - fin.getDay()) % 7 || 7)); fin.setHours(23,59,59,999);
+          // snapshot de miembros actuales
+          await inter.guild.members.fetch().catch(()=>{});
+          const snapshot = [...inter.guild.members.cache.keys()];
+          sorteosData.activo = { premio, inicio, fin: fin.getTime(), canalId: null, mensajeId: null, snapshot, portadaUrl: null, portadaLocal: null, isVideo: false };
+          sorteosInvites = [];
+          await saveSorteos();
+          const canal = await ensureSorteosChannel(inter.guild, true);
+          sorteosData.activo.canalId = canal.id;
+          await saveSorteos();
+          await crearPanelSorteo(inter.guild);
+          return inter.editReply({ content: `✅ Sorteo creado: ${premio}\nInicio: ahora\nFin: Domingo ${fin.toLocaleDateString('es-MX')} 23:59 MX\nCanal: ${canal} (privado solo tú)\n\nAhora usa /sorteo-portada para subir la imagen x2.` });
+        }
+        if(inter.commandName === 'sorteo-portada'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const archivo = inter.options.getAttachment('archivo');
+          if(!archivo) return inter.editReply({ content: '❌ Sube archivo' });
+          const isVideo = archivo.contentType?.startsWith('video/');
+          const ext = archivo.name.split('.').pop() || (isVideo?'mp4':'png');
+          const localPath = path.join(DATA_DIR, `sorteo_portada.${ext}`);
+          try{ const res = await axios.get(archivo.url, { responseType: 'arraybuffer', maxContentLength: 25*1024*1024, timeout: 15000 }); if(res.data.length > 25*1024*1024) throw new Error('Archivo >25MB'); fs.writeFileSync(localPath, res.data); }catch(e){ return inter.editReply({ content: `❌ ${e.message}` }); }
+          if(!sorteosData.activo) sorteosData.activo = { premio: 'x2 Money', inicio: Date.now(), fin: Date.now()+7*24*60*60*1000, snapshot: [] };
+          sorteosData.activo.portadaUrl = archivo.url;
+          sorteosData.activo.portadaLocal = localPath;
+          sorteosData.activo.isVideo = isVideo;
+          await saveSorteos();
+          await crearPanelSorteo(inter.guild);
+          return inter.editReply({ content: `✅ Portada ${isVideo?'VIDEO':'IMAGEN'} guardada: ${localPath}` });
+        }
+        if(inter.commandName === 'sorteo-publicar'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          const viejo = inter.guild.channels.cache.find(c=> c.name==='sorteo-test-privado');
+          const nuevo = await ensureSorteosChannel(inter.guild, false);
+          if(viejo && nuevo){
+            sorteosData.activo.canalId = nuevo.id;
+            await saveSorteos();
+            await crearPanelSorteo(inter.guild);
+            return inter.editReply({ content: `✅ Ahora es público en ${nuevo} - El privado ${viejo} lo puedes borrar cuando quieras.` });
+          }
+          return inter.editReply({ content: `✅ Canal público: ${nuevo}` });
+        }
+        if(inter.commandName === 'sorteo-top'){
+          const conteo = {}; sorteosInvites.filter(i=> i.estado==='valida').forEach(i=>{ conteo[i.invitadorId]=(conteo[i.invitadorId]||0)+1; });
+          const top = Object.entries(conteo).sort((a,b)=>b[1]-a[1]).slice(0,10);
+          return inter.reply({ content: top.length? top.map(([id,c],i)=> `${i+1}. <@${id}> ${c}`).join('\n') : 'Sin válidas', flags: MessageFlags.Ephemeral });
+        }
+        if(inter.commandName === 'sorteo-finalizar'){
+  await inter.deferReply({ flags: MessageFlags.Ephemeral });
+  const conteo = {}; sorteosInvites.filter(i=> i.estado==='valida').forEach(i=>{ conteo[i.invitadorId]=(conteo[i.invitadorId]||0)+1; });
+  const top = Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
+  if(!top.length) return inter.editReply({ content: '❌ Nadie con válidas' });
+  const ganadorId = top[0][0];
+  const ganadorCount = top[0][1];
+  // borra invites de sorteo
+  try{
+    const invites = await inter.guild.invites.fetch().catch(()=>null);
+    if(invites){
+      for(const code of inviteCodeToCreador.keys()){
+        const inv = invites.get(code);
+        if(inv) await inv.delete('Fin sorteo').catch(()=>{});
+      }
+    }
+  }catch{}
+  const canalId = sorteosData.activo?.canalId;
+  sorteosData.activo = null;
+  sorteosInvites = [];
+  inviteCodeToCreador.clear();
+  inviteCache.clear();
+  inviteCacheFile = {};
+  await saveSorteos();
+  const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 SORTEO FINALIZADO').setDescription(`Ganador: <@${ganadorId}> con **${ganadorCount}** válidas`).setTimestamp();
+  const canal = inter.guild.channels.cache.get(canalId) || findChannel(inter.guild, CONFIG.channels.sorteos) || inter.channel;
+  await canal.send({ embeds: [embed] }).catch(()=>{});
+  return inter.editReply({ content: `✅ Finalizado. Ganador <@${ganadorId}> - ${ganadorCount} válidas - Invites borrados` });
+}
         if(inter.commandName === 'actualizar-predicciones'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           await escanearHistorialApariciones(inter.guild, false);
