@@ -227,7 +227,11 @@ let adminAbuseData = safeLoadJSON(ADMIN_ABUSE_PATH, { channelId: null, messageId
 const PREDICCIONES_CHANNEL_NAME = '🔮│predicciones-huevos';
 const PREDICCIONES_PATH = path.join(DATA_DIR, 'predicciones.json');
 const SPAWNS_PATH = path.join(DATA_DIR, 'spawns.json');
-let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageId: null, lastScanId: null, lastUpdate: 0 });
+let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageIds: [], messageId: null, lastScanId: null, lastUpdate: 0 });
+// migración si viene del formato viejo
+if(prediccionesData.messageId && !prediccionesData.messageIds?.length){
+  prediccionesData.messageIds = [prediccionesData.messageId];
+}
 let spawnLogs = safeLoadJSON(SPAWNS_PATH, []); // {pet, categoria, ts, messageId}
 let SpawnModel = null;
 const savePredicciones = async () => { safeSaveJSON(PREDICCIONES_PATH, prediccionesData); };
@@ -975,7 +979,7 @@ function buildMuseoEmbeds(state){
         const url = item.url || `https://cdn.discordapp.net/stickers/${item.id}.png?size=1024`;
         embeds.push(new EmbedBuilder().setColor(0x2ECC71).setTitle(`📌 ${item.name}`).setDescription(`\`ID: ${item.id}\``).setImage(url));
       } else {
-        const url = item.url; // misma técnica que tienda - url grande
+        const url = item.imageURL ? item.imageURL() : item.url; // misma técnica que tienda - url grande
         embeds.push(new EmbedBuilder().setColor(headerColor).setTitle(`${item} :${item.name}:`).setDescription(`\`:${item.name}:\`\nID: \`${item.id}\` • ${item.animated?'Animado':'Estático'}`).setImage(url).setFooter({ text: `:${item.name}:` }));
       }
     }
@@ -1169,11 +1173,11 @@ async function handleMinijuegosInteraction(inter){
     const delay = 2000 + Math.floor(Math.random()*4000);
     const correct = Math.floor(Math.random()*5);
     minijuegoActivo.set(userId, { tipo:'atrapa', readyAt: now+delay, startTime:0, correctIndex:correct, active:false });
-    const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 ¡ATENTO!').setDescription(`El huevo dorado aparecerá en **${(delay/1000).toFixed(1)}s aprox** en 1 de los 5 botones random.\n\n⚠ Si clickeas antes o el botón falso = **-5 pts**\n> Anti-macro: posición random y tiempo random`);
+        const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 ¡ATENTO!').setDescription(`El huevo dorado aparecerá en **${(delay/1000).toFixed(1)}s aprox** en 1 de los 5 botones random.\n\n⚠ Si clickeas antes o el botón falso = **-5 pts**\n> Anti-macro: posición random y tiempo random`);
     const row = new ActionRowBuilder().addComponents(
-     ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel(i===correct? '❓' : '❓').setStyle(ButtonStyle.Secondary))
+    ...[0,1,2,3,4].map(i=> new ButtonBuilder().setCustomId(`minijuego_atrapa_click_${i}`).setLabel('❓').setStyle(ButtonStyle.Secondary))
     );
-    const msg = await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral, fetchReply:true });
+    await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral });
     setTimeout(async ()=>{
       const state = minijuegoActivo.get(userId);
       if(!state || state.tipo!=='atrapa') return;
@@ -1499,40 +1503,45 @@ function calcGanasPapoi(s){
 }
 function buildPrediccionesEmbeds(guild){
   const stats = calcularStatsPredicciones();
-  const getEmoji = (pet) => { const e=getPetEmoji(guild, pet); return e ? `${e}` : '🥚'; };
-  
-  const header = new EmbedBuilder().setColor(0xFFD700).setTitle('🔮 PREDICCIONES PAPOI • SOLO MORBO 🎲').setDescription(
-    `⚠ 100% RNG - Solo diversión\n📊 ${spawnLogs.length} spawns • Actualiza 10m • Fuente: #apariciones-en-vivo`
-  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • No oficial • No predice futuro'}).setTimestamp();
+  const getEmoji = (pet) => { const e=getPetEmoji(guild, pet); return e? `${e}` : '🥚'; };
+  const getCatEmoji = (cat) => getCategoriaEmoji(guild, cat);
+  const getBar = (pct) => { const f = Math.floor(pct/10); return '█'.repeat(f) + '░'.repeat(10-f); };
+  const getColorBar = (pct) => { if(pct>=85) return '🟥'; if(pct>=65) return '🟧'; if(pct>=45) return '🟨'; if(pct>=20) return '🟩'; return '🟦'; };
 
-  const makeList = (list, max=850) => {
-    if(!list.length) return '*Sin datos*';
-    let out = '';
-    for(const s of list){
+  const canalFuente = findChannel(guild, CONFIG.channels.aparicionesEnVivo);
+  const header = new EmbedBuilder().setColor(0xFFD700)
+   .setTitle('🔮 PREDICCIONES PAPOI • 1000% VISUAL • SOLO MORBO 🎲')
+   .setDescription(
+      `**⚠ 100% RNG - No predice futuro - Solo diversión**\n\n`+
+      `📊 **${spawnLogs.length}** spawns registrados\n`+
+      `⏱ Actualiza cada **10 min** • Fuente: ${canalFuente? `<#${canalFuente.id}>` : '#apariciones-en-vivo'}\n\n`+
+      `> Cada % son **ganas papoi**: mientras más tiempo sin salir, más ganas de que toque.`
+    ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Sistema no oficial • RNG puro'}).setTimestamp();
+
+  const makeBonita = (list) => {
+    if(!list.length) return '*Sin datos aún - escaneando historial...*';
+    return list.map(s=>{
       const emoji = getEmoji(s.pet);
       const pct = calcGanasPapoi(s);
-      let bar = pct>=85?'🟥':pct>=65?'🟧':pct>=45?'🟨':pct<20?'🟦':'🟩';
-      bar = bar.repeat(Math.max(1, Math.min(5, Math.floor(pct/20)+1)));
+      const bar = getBar(pct);
+      const cbar = getColorBar(pct);
       const dH = Math.floor(s.drought/3600000);
-      let timeTxt = !s.lastTs ? 'nunca' : dH<1 ? `${Math.floor(s.drought/60000)}m` : dH<24 ? `${dH}h` : `${Math.floor(dH/24)}d`;
-      const line = `${emoji} **${s.pet}** • ${timeTxt} • ${bar} ${pct}% • ${s.count30d}x`;
-      if((out + '\n' + line).length > max) break;
-      out += (out ? '\n' : '') + line;
-    }
-    return out || '*Sin datos*';
+      let timeTxt =!s.lastTs? '`nunca visto`' : dH<1? `\`${Math.floor(s.drought/60000)}m\`` : dH<24? `\`${dH}h\`` : `\`${Math.floor(dH/24)}d ${dH%24}h\``;
+      return `${emoji} **${s.pet}** ${getCatEmoji(s.categoria)}\n${cbar} \`${bar}\` **${pct}%** • Últ: ${timeTxt} • **${s.count30d}x**/30d`;
+    }).join('\n\n');
   };
 
-  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,5);
-  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,6);
-  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,8);
-  const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,5);
-  const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,4);
+  const divinos = stats.filter(s=>s.categoria==='Divino').sort((a,b)=>b.drought-a.drought).slice(0,6);
+  const eternos = stats.filter(s=>s.categoria==='Eterno').sort((a,b)=>b.drought-a.drought).slice(0,11);
+  const secretos = stats.filter(s=>s.categoria==='Secreto').sort((a,b)=>b.drought-a.drought).slice(0,15);
+  const calientes = [...stats].sort((a,b)=>b.drought-a.drought).slice(0,6);
+  const frios = [...stats].filter(s=>s.lastTs).sort((a,b)=>a.drought-b.drought).slice(0,5);
 
-  const embedCal = new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES').setDescription(makeList(calientes, 750));
-  const embedDiv = new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS`).setDescription(makeList(divinos, 750));
-  const embedEte = new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS`).setDescription(makeList(eternos, 850));
-  const embedSec = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🍀 SECRETOS`).setDescription(makeList(secretos, 850));
-  const embedFrio = new EmbedBuilder().setColor(0x57F287).setTitle('❄ FRÍOS').setDescription(makeList(frios, 650));
+  const embedCal = new EmbedBuilder().setColor(0xED4245).setTitle('🔥 CALIENTES - Más tiempo sin salir').setDescription(makeBonita(calientes));
+  const embedDiv = new EmbedBuilder().setColor(0xFFD700).setTitle(`💎 DIVINOS - ${divinos.length}/6`).setDescription(makeBonita(divinos));
+  const embedEte = new EmbedBuilder().setColor(0x3498DB).setTitle(`🚀 ETERNOS - ${eternos.length}/11`).setDescription(makeBonita(eternos));
+  const embedSec = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🍀 SECRETOS - ${secretos.length}/15`).setDescription(makeBonita(secretos));
+  const embedFrio = new EmbedBuilder().setColor(0x57F287).setTitle('❄ FRÍOS - Salieron hace poquito').setDescription(makeBonita(frios));
 
   return { embeds: [header, embedCal, embedDiv, embedEte, embedSec, embedFrio] };
 }
@@ -1540,41 +1549,57 @@ async function crearPanelPredicciones(guild){
   await guild.emojis.fetch().catch(()=>{});
   const canal = await ensurePrediccionesChannel(guild);
   if(!canal){ console.log('❌ crearPanel: no hay canal'); return null; }
-  try{ 
-    const msgs=await canal.messages.fetch({limit:20}).catch(()=>null); 
-    if(msgs){ 
-      for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ 
-        await m.delete().catch(()=>{}); 
-        await new Promise(r=>setTimeout(r,200)); 
-      } 
-    } 
+  try{
+    const msgs=await canal.messages.fetch({limit:50}).catch(()=>null);
+    if(msgs){
+      for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){
+        await m.delete().catch(()=>{});
+        await new Promise(r=>setTimeout(r,250));
+      }
+    }
   }catch(e){ console.log('crearPanel fetch', e.message); }
   const {embeds} = buildPrediccionesEmbeds(guild);
-  console.log(`🔮 Enviando panel predicciones a #${canal.name} con ${embeds.length} embeds`);
-  const msg = await canal.send({ embeds }).catch(e=>{ console.log('❌ send predicciones fallo:', e.message); return null; });
-  if(msg){ 
-    prediccionesData.messageId=msg.id; 
-    prediccionesData.channelId=canal.id;
-    prediccionesData.lastUpdate=Date.now(); 
-    await savePredicciones(); 
-    console.log(`✅ Panel predicciones creado: ${msg.id}`);
+  console.log(`🔮 Enviando panel BONITO en ${embeds.length} mensajes a #${canal.name}`);
+  const sentIds = [];
+  for(let i=0;i<embeds.length;i++){
+    const msg = await canal.send({ embeds: [embeds[i]] }).catch(e=>{ console.log('❌ send predicciones fallo:', e.message); return null; });
+    if(msg) sentIds.push(msg.id);
+    await new Promise(r=>setTimeout(r,400));
   }
-  return msg;
+  prediccionesData.messageIds = sentIds;
+  prediccionesData.messageId = null;
+  prediccionesData.channelId=canal.id;
+  prediccionesData.lastUpdate=Date.now();
+  await savePredicciones();
+  console.log(`✅ Panel predicciones bonito creado: ${sentIds.length} mensajes`);
+  return sentIds;
 }
 async function actualizarPanelPredicciones(guild){
   await guild.emojis.fetch().catch(()=>{});
-
   try{
     const canalId = prediccionesData.channelId || findChannel(guild, CONFIG.channels.predicciones)?.id;
     if(!canalId) return;
     const canal = guild.channels.cache.get(canalId) || await guild.channels.fetch(canalId).catch(()=>null);
     if(!canal) return;
-    let msg = null;
-    if(prediccionesData.messageId) msg = await canal.messages.fetch(prediccionesData.messageId).catch(()=>null);
-    if(!msg){ const msgs=await canal.messages.fetch({limit:10}).catch(()=>null); msg=msgs?.find(m=>m.author.id===client.user.id) || null; }
     const {embeds} = buildPrediccionesEmbeds(guild);
-    if(msg) await msg.edit({embeds}).catch(()=>{}); else await crearPanelPredicciones(guild);
-    prediccionesData.lastUpdate=Date.now(); await savePredicciones();
+
+    // si no coincide el número de mensajes, recrea todo bonito
+    if(!prediccionesData.messageIds || prediccionesData.messageIds.length!== embeds.length){
+      return await crearPanelPredicciones(guild);
+    }
+
+    for(let i=0;i<embeds.length;i++){
+      const msgId = prediccionesData.messageIds[i];
+      const msg = await canal.messages.fetch(msgId).catch(()=>null);
+      if(msg){
+        await msg.edit({embeds: [embeds[i]]}).catch(()=>{});
+      } else {
+        return await crearPanelPredicciones(guild);
+      }
+      await new Promise(r=>setTimeout(r,300));
+    }
+    prediccionesData.lastUpdate=Date.now();
+    await savePredicciones();
   }catch(e){ console.log('predicciones update', e.message); }
 }
 async function escanearHistorialApariciones(guild, full=false){
@@ -3129,8 +3154,7 @@ client.on(Events.ClientReady, async () => {
   startMinijuegosScheduler();
   const canalPred = await ensurePrediccionesChannel(guild).catch(()=>null);
   if(canalPred){
-    // FUERZA CREACIÓN SI NO HAY PANEL
-    if(!prediccionesData.messageId){
+    if(!prediccionesData.messageIds?.length && !prediccionesData.messageId){
       console.log('🔮 No hay panel predicciones, creándolo YA...');
       await crearPanelPredicciones(guild).catch(e=>console.log('crearPanel fallo:', e.message));
     }
