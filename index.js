@@ -1943,7 +1943,7 @@ function buildPrediccionesEmbeds(guild){
   const nextUnix = Math.floor((Date.now() + nextMin*60000)/1000);
   const header = new EmbedBuilder().setColor(0xFFD700)
  .setTitle('🔮 PREDICCIONES PAPOI • AUTO-LEARNING V3')
- .setDescription(`**🎯 Acertividad del Bot de ElCris: ${acc}% (${hits}/${total})**\n> Top 3 vs real • Random sería ~9.3%\n📊 **${spawnLogs.length}** spawns • Total 30d: ${total30d}\n⏱ Próximo spawn <t:${nextUnix}:R> • Actualizo en :01,:06,:11...`)
+ .setDescription(`**🎯 Acertividad del Bot de ElCris: ${acc}% (${hits}/${total})**\n> Top 3 vs real • Random sería ~9.3%\n📊 **${spawnLogs.length}** spawns • Total 30d: ${total30d}\n⏱ Próximo spawn <t:${nextUnix}:R> •`)
  if(guild.iconURL()) header.setThumbnail(guild.iconURL());
   header.setTimestamp();
   return {
