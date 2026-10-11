@@ -3907,8 +3907,9 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
       const cd = checkCooldown(msg.author.id, 'divino_info', 45);
       if(cd===0){
         const canalPings = findChannel(msg.guild, CONFIG.channels.pingRoles);
+        const canalPred = findChannel(msg.guild, CONFIG.channels.predicciones);
         msg.channel.send({
-          content: `${msg.author} 👑 Ey papoi, los **Divinos (y todos los huevos) son 100% aleatorios** 🎲\n\n> ❌ **No hay horarios, no hay predicciones, ningún tiktoker, famoso o famosa sabe cuando salen.** Si alguien te dice que sabe, te está mintiendo.\n> ✅ Puede tocar **1 divino al día**, lo máximo que ha tocado hasta hoy son **4 divinos en 1 día**, y ha pasado **días enteros con 0 divinos**.\n> 🍀 Es pura suerte.\n\n💛 Activa tus notis en ${canalPings ? `<#${canalPings.id}>` : '#🔗│ping-roles'} para que te suene al instante cuando salga uno y no te lo pierdas.`
+          content: `${msg.author} 👑 Ey papoi, los **spawns son 100% aleatorios** 🎲 nadie sabe la hora exacta, es pura suerte.\n\n> Pero ElCris hizo un sistema de predicciones en ${canalPred ? `<#${canalPred.id}>` : '#🔮│predicciones'} checalo, **no es oficial pero algunas veces acierta** 😅\n> ✅ Puede tocar **1 divino al día**, el record son **4 divinos en 1 día** y hay días con **0 divinos**.\n\n💛 Activa tus notis en ${canalPings ? `<#${canalPings.id}>` : '#🔗│ping-roles'} para que te suene al instante.`
         }).then(m=>setTimeout(()=>m.delete().catch(()=>{}), 30000)).catch(()=>{});
       }
     }
