@@ -261,7 +261,12 @@ if(!prediccionesData.stats) prediccionesData.stats = { total: 0, hits: 0, histor
 if(!prediccionesData.lastPrediction) prediccionesData.lastPrediction = { ts: 0, top3: [] };
 let spawnLogs = safeLoadJSON(SPAWNS_PATH, []); // {pet, categoria, ts, messageId}
 let SpawnModel = null;
-const savePredicciones = async () => { safeSaveJSON(PREDICCIONES_PATH, prediccionesData); };
+const savePredicciones = async () => { 
+  safeSaveJSON(PREDICCIONES_PATH, prediccionesData);
+  if(useMongo && global.PrediccionStatsModel){
+    await global.PrediccionStatsModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { guildId: process.env.GUILD_ID, total: prediccionesData.stats.total, hits: prediccionesData.stats.hits, history: prediccionesData.stats.history.slice(-100), lastPrediction: prediccionesData.lastPrediction }, { upsert: true }).catch(()=>{});
+  }
+};
 const saveSpawns = async () => {
   safeSaveJSON(SPAWNS_PATH, spawnLogs.slice(-5000));
   if(useMongo && SpawnModel){
@@ -482,6 +487,16 @@ async function initMongo() {
     global.BibliotecaModel = BibliotecaModel;
         const spawnSchema = new mongoose.Schema({ pet: String, categoria: String, ts: Number, messageId: String }, { strict: false });
     SpawnModel = mongoose.model('Spawn', spawnSchema);
+    const prediccionStatsSchema = new mongoose.Schema({ guildId: String, total: Number, hits: Number, history: Array, lastPrediction: Object }, { strict: false });
+    const PrediccionStatsModel = mongoose.model('PrediccionStats', prediccionStatsSchema);
+    global.PrediccionStatsModel = PrediccionStatsModel;
+    const predMongo = await PrediccionStatsModel.findOne({ guildId: process.env.GUILD_ID }).catch(()=>null);
+    if(predMongo){
+      prediccionesData.stats = { total: predMongo.total||0, hits: predMongo.hits||0, history: predMongo.history||[] };
+      if(predMongo.lastPrediction) prediccionesData.lastPrediction = predMongo.lastPrediction;
+      console.log(`✅ Predicciones stats cargadas de Mongo: ${predMongo.hits}/${predMongo.total}`);
+      safeSaveJSON(PREDICCIONES_PATH, prediccionesData);
+    }
     const spawnsMongo = await SpawnModel.find({}).sort({ts:-1}).limit(5000);
     if(spawnsMongo.length>0){ spawnLogs = spawnsMongo.map(s=>({pet:s.pet, categoria:s.categoria, ts:s.ts, messageId:s.messageId})).reverse(); safeSaveJSON(SPAWNS_PATH, spawnLogs); console.log(`✅ ${spawnsMongo.length} spawns cargados`); }
     else if(spawnLogs.length>0){ await SpawnModel.insertMany(spawnLogs.slice(-2000)).catch(()=>{}); }
@@ -1844,8 +1859,56 @@ function calcGanasPapoi(s){
   const total30d = spawnLogs.filter(l=>Date.now()-l.ts < 30*24*60*60*1000).length || 1;
   return calcGanasPapoiV2(s, total30d);
 }
+function calcularStatsMaestroV4(){
+  const now = Date.now();
+  const map = new Map();
+  for(const pet of ALL_PETS){
+    const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet));
+    map.set(pet, {pet, categoria:cat, times:[], lastTs:0, firstTs:now, count30d:0, count3d:0, gaps:[], mean:0, std:0, drought:0, lambdaH:0, hourBuckets:new Array(24).fill(0), weibullK:1});
+  }
+  for(const log of spawnLogs){
+    const d = map.get(log.pet); if(!d) continue;
+    d.times.push(log.ts);
+    if(log.ts > d.lastTs) d.lastTs = log.ts;
+    if(log.ts < d.firstTs) d.firstTs = log.ts;
+    if(now - log.ts < 30*24*60*60*1000) d.count30d++;
+    if(now - log.ts < 3*24*60*60*1000) d.count3d++;
+    d.hourBuckets[new Date(log.ts).getUTCHours()]++;
+  }
+  for(const v of map.values()){
+    v.times.sort((a,b)=>a-b);
+    for(let i=1;i<v.times.length;i++) v.gaps.push(v.times[i]-v.times[i-1]);
+    if(v.gaps.length){
+      const m = v.gaps.reduce((a,b)=>a+b,0)/v.gaps.length;
+      const variance = v.gaps.reduce((a,b)=>a+(b-m)**2,0)/v.gaps.length;
+      v.mean=m; v.std=Math.sqrt(variance)||m*0.5;
+      const ratio=v.std/v.mean; v.weibullK = ratio<0.3?3.0:ratio<0.7?1.5:1.0;
+    }
+    v.drought=v.lastTs?now-v.lastTs:999*24*60*60*1000;
+    v.lambdaH=(v.count30d+0.5)/720;
+  }
+  return [...map.values()];
+}
+function calcWeibullOverdue(s){
+  if(!s.lastTs) return 0.95;
+  if(!s.mean || s.gaps.length<3){ const expH=(30*24)/(s.count30d||1); const r=(s.drought/3600000)/expH; return 1-Math.exp(-r*1.2); }
+  return 1-Math.exp(-Math.pow(s.drought/s.mean, s.weibullK));
+}
+function calcGanasMaestroV4(s, total30d){
+  if(!s.lastTs) return 95;
+  const base = total30d? s.count30d/total30d : 0; const baseNorm=Math.min(base*4,0.5);
+  const weib = calcWeibullOverdue(s);
+  const r3=(s.count3d||0.1)/72; const r30=(s.count30d||0.1)/720; let mom=r3/r30; mom=Math.max(0.5,Math.min(2,mom)); const momNorm=(mom-0.5)/1.5;
+  const nowH=new Date().getUTCHours(); const avg=s.hourBuckets.reduce((a,b)=>a+b,0)/24||1; const fH=s.hourBuckets[nowH]/avg; const fHClamp=Math.max(0.7,Math.min(1.5,fH));
+  let final=weib*0.70+baseNorm*0.20+momNorm*0.10; final=final*fHClamp; final=1/(1+Math.exp(-(final-0.5)*4));
+  return Math.round(Math.max(3,Math.min(98,final*100)));
+}
+function calcularStatsPrediccionesV2(){ return calcularStatsMaestroV4(); }
+function calcularStatsPredicciones(){ return calcularStatsMaestroV4(); }
+function calcGanasPapoiV2(s,t){ return calcGanasMaestroV4(s,t); }
+function calcGanasPapoi(s){ const total=spawnLogs.filter(l=>Date.now()-l.ts<30*24*60*60*1000).length||1; return calcGanasMaestroV4(s,total); }
 function buildPrediccionesEmbeds(guild){
-  const stats = calcularStatsPrediccionesV2();
+  const stats = calcularStatsMaestroV4();
   const total30d = stats.reduce((a,b)=>a+b.count30d,0) || 1;
   const getEmoji = (pet) => { const e=getPetEmoji(guild, pet); return e? `${e}` : '🥚'; };
   const getBar = (pct) => { const f = Math.floor(pct/10); return '█'.repeat(f) + '░'.repeat(10-f); };
@@ -1853,13 +1916,18 @@ function buildPrediccionesEmbeds(guild){
   const formatEntry = (s) => {
     const emoji = getEmoji(s.pet);
     const catEmoji = getCategoriaEmoji(guild, s.categoria);
-    const pct = calcGanasPapoiV2(s, total30d);
+    const pct = calcGanasMaestroV4(s, total30d);
     const bar = getBar(pct);
     const cbar = getColorBar(pct);
     const dH = Math.floor(s.drought/3600000);
     let timeTxt =!s.lastTs? '`nunca`' : dH<1? `\`${Math.floor(s.drought/60000)}m\`` : dH<24? `\`${dH}h\`` : `\`${Math.floor(dH/24)}d\``;
     const basePct = ((s.count30d/total30d)*100).toFixed(1);
-    return `### ${emoji} ${s.pet} ${catEmoji}\n${cbar} \`${bar}\` **${pct}%** • Últ: ${timeTxt} • ${basePct}% base • **${s.count30d}x**/30d`;
+    const rateDia = (s.lambdaH*24).toFixed(1);
+    const horas85 = -Math.log(0.15) / (s.lambdaH||0.001);
+    const ventTxt = horas85<24? `${Math.round(horas85)}h` : `${(horas85/24).toFixed(1)}d`;
+    const mom = (s.count3d/72)/((s.count30d||0.1)/720); const momTxt = mom>1.5? ' 📈' : mom<0.7? ' 📉' : '';
+    // BONITO: emoji grande + probabilidad + barra en salto + stats compactos
+    return `### ${emoji} ${s.pet} ${catEmoji}${momTxt}\n${cbar} \`${bar}\` **${pct}%** prob. salir\n> Últ: ${timeTxt} • **${s.count30d}x**/30d • ${basePct}% base • ${rateDia}/día • 85%: ${ventTxt}`;
   };
   const makeSafe = (list) => {
     if(!list.length) return '*Sin datos aún*';
