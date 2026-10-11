@@ -1861,10 +1861,11 @@ function calcGanasPapoi(s){
 }
 function calcularStatsMaestroV4(){
   const now = Date.now();
+  const RONDA_MIN = 5; // <-- cada cuánto hay una ronda en tu juego, cambialo si es 3, 7, 10
   const map = new Map();
   for(const pet of ALL_PETS){
     const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet));
-    map.set(pet, {pet, categoria:cat, times:[], lastTs:0, firstTs:now, count30d:0, count3d:0, gaps:[], mean:0, std:0, drought:0, lambdaH:0, hourBuckets:new Array(24).fill(0), weibullK:1});
+    map.set(pet, {pet, categoria:cat, times:[], lastTs:0, firstTs:now, count30d:0, count3d:0, gaps:[], mean:0, std:0, drought:0, lambdaH:0, hourBuckets:new Array(24).fill(0), weibullK:1, rondasVacias:0});
   }
   for(const log of spawnLogs){
     const d = map.get(log.pet); if(!d) continue;
@@ -1886,6 +1887,10 @@ function calcularStatsMaestroV4(){
     }
     v.drought=v.lastTs?now-v.lastTs:999*24*60*60*1000;
     v.lambdaH=(v.count30d+0.5)/720;
+    // Rondas vacías = rondas totales esperadas - rondas donde sí salió ESTE pet
+    const totalRondasEsperadas = Math.floor(((now - v.firstTs)/3600000) * (60 / RONDA_MIN));
+    v.rondasVacias = Math.max(0, totalRondasEsperadas - v.times.length);
+    v.totalRondas = totalRondasEsperadas;
   }
   return [...map.values()];
 }
@@ -1911,13 +1916,22 @@ function buildPrediccionesEmbeds(guild){
   const stats = calcularStatsMaestroV4();
   const total30d = stats.reduce((a,b)=>a+b.count30d,0) || 1;
   const getEmoji = (pet) => { const e=getPetEmoji(guild, pet); return e? `${e}` : '🥚'; };
-  const getBar = (pct) => { const f = Math.floor(pct/10); return '█'.repeat(f) + '░'.repeat(10-f); };
+  const getBar = (pct, categoria) => { 
+    const f = Math.floor(pct/10); 
+    const empty = 10-f;
+    // Color por rareza
+    let fillEmoji = '⬛';
+    if(categoria==='Divino') fillEmoji='🟨';
+    else if(categoria==='Eterno') fillEmoji='🟪';
+    else if(categoria==='Secreto') fillEmoji='⬛';
+    return fillEmoji.repeat(f) + '⬜'.repeat(empty);
+  };
   const getColorBar = (pct) => { if(pct>=85) return '🟥'; if(pct>=65) return '🟧'; if(pct>=45) return '🟨'; if(pct>=20) return '🟩'; return '🟦'; };
   const formatEntry = (s) => {
     const emoji = getEmoji(s.pet);
     const catEmoji = getCategoriaEmoji(guild, s.categoria);
     const pct = calcGanasMaestroV4(s, total30d);
-    const bar = getBar(pct);
+    const bar = getBar(pct, s.categoria);
     const cbar = getColorBar(pct);
     const dH = Math.floor(s.drought/3600000);
     let timeTxt =!s.lastTs? '`nunca`' : dH<1? `\`${Math.floor(s.drought/60000)}m\`` : dH<24? `\`${dH}h\`` : `\`${Math.floor(dH/24)}d\``;
@@ -1926,8 +1940,9 @@ function buildPrediccionesEmbeds(guild){
     const horas85 = -Math.log(0.15) / (s.lambdaH||0.001);
     const ventTxt = horas85<24? `${Math.round(horas85)}h` : `${(horas85/24).toFixed(1)}d`;
     const mom = (s.count3d/72)/((s.count30d||0.1)/720); const momTxt = mom>1.5? ' 📈' : mom<0.7? ' 📉' : '';
-    // BONITO: emoji grande + probabilidad + barra en salto + stats compactos
-    return `### ${emoji} ${s.pet} ${catEmoji}${momTxt}\n${cbar} \`${bar}\` **${pct}%** prob. salir\n> Últ: ${timeTxt} • **${s.count30d}x**/30d • ${basePct}% base • ${rateDia}/día • 85%: ${ventTxt}`;
+    const pctRonda = s.totalRondas? ((s.count30d/s.totalRondas)*100).toFixed(2) : basePct;
+    // BONITO + RONDAS VACÍAS: ahora sí cuenta las que no sale nada
+    return `### ${emoji} ${s.pet} ${catEmoji}${momTxt}\n${cbar} \`${bar}\` **${pct}%** prob. salir\n> Últ: ${timeTxt} • **${s.count30d}x**/30d (${s.rondasVacias} vacías) • ${pctRonda}% por ronda • ${rateDia}/día • 85%: ${ventTxt}`;
   };
   const makeSafe = (list) => {
     if(!list.length) return '*Sin datos aún*';
