@@ -1788,6 +1788,61 @@ function parsePetFromText(text){
   for(const pet of ALL_PETS){ if(t.includes(pet.toLowerCase())){ const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet)); return {pet, categoria: cat}; } }
   return null;
 }
+async function ensureMusicaChannel(guild){
+  try{
+    const categoria = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.includes('VOZ PAPOI'));
+    let canal = guild.channels.cache.find(c => c.type === ChannelType.GuildVoice && c.name.includes('Música')) || guild.channels.cache.find(c => c.type === ChannelType.GuildVoice && c.name.toLowerCase().includes('musica'));
+    
+    if(!canal){
+      canal = await guild.channels.create({
+        name: '🎵┃Música',
+        type: ChannelType.GuildVoice,
+        parent: categoria?.id || null,
+        topic: '🎵 Solo para escuchar música - No hablar'
+      }).catch(()=>null);
+    } else if(categoria && canal.parentId !== categoria.id){
+      await canal.setParent(categoria.id).catch(()=>{});
+    }
+
+    if(!canal) return null;
+
+    // Permisos candado: todos entran, nadie habla
+    await canal.permissionOverwrites.edit(guild.roles.everyone.id, {
+      ViewChannel: true,
+      Connect: true,
+      Speak: false,
+      Stream: false,
+      UseVAD: false,
+      SendMessages: false,
+      UseEmbeddedActivities: false,
+      UseSoundboard: false,
+      UseExternalSounds: false
+    }).catch(()=>{});
+
+    // Bot puede hablar
+    await canal.permissionOverwrites.edit(client.user.id, {
+      ViewChannel: true,
+      Connect: true,
+      Speak: true,
+      Stream: true,
+      UseVAD: true,
+      SendMessages: true,
+      MuteMembers: true,
+      DeafenMembers: true,
+      MoveMembers: true
+    }).catch(()=>{});
+
+    // Moderadores y Papoi Mayor sí pueden hablar si quieren moderar
+    const modRole = findRole(guild, 'moderador');
+    const mayorRole = findRole(guild, 'papoi mayor');
+    if(modRole) await canal.permissionOverwrites.edit(modRole.id, { ViewChannel: true, Connect: true, Speak: true, MuteMembers: true, MoveMembers: true }).catch(()=>{});
+    if(mayorRole) await canal.permissionOverwrites.edit(mayorRole.id, { ViewChannel: true, Connect: true, Speak: true, MuteMembers: true, MoveMembers: true }).catch(()=>{});
+
+    console.log(`✅ Canal música arreglado: ${canal.name}`);
+    return canal;
+  }catch(e){ console.log('fix musica error', e.message); return null; }
+}
+
 async function ensurePrediccionesChannel(guild){
   let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
   let canal = findChannel(guild, CONFIG.channels.predicciones);
@@ -3661,6 +3716,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'sorteo-finalizar', description: 'Finaliza sorteo y muestra ganador', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-predicciones', description: 'Actualiza panel predicciones manualmente', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'scan-historial', description: 'Escanea TODO el historial de apariciones (tarda)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'fix-musica', description: 'FIX: Arregla canal 🎵┃Música solo escucha, sin hablar', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-minijuegos', description: 'Recrea paneles de minijuegos', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'tops-minijuegos', description: 'Ver tu top de minijuegos', options: [] },
     ]});
@@ -4543,7 +4599,14 @@ client.on(Events.InteractionCreate, async inter => {
           const boost = await getBoostInfo(inter.guild);
           return inter.editReply({ content: ch? `✅ Biblioteca actualizada en ${ch} - ${inter.guild.emojis.cache.size}/${boost.current.emojis} - Boosts: ${boost.count} Nivel ${boost.tier}` : '❌ No pude crear canal' });
         }
-                        if(inter.commandName === 'setup-predicciones'){
+                        if(inter.commandName === 'fix-musica'){
+          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+          if(!isOwner(inter.user.id) && !isMod(inter.member)) return inter.editReply({ content: '❌ Solo mods' });
+          const ch = await ensureMusicaChannel(inter.guild);
+          if(!ch) return inter.editReply({ content: '❌ No encontré/creé el canal de música' });
+          return inter.editReply({ content: `✅ Canal arreglado: ${ch} en ${ch.parent?.name || 'sin categoría'}\n> @everyone: ✅ Conectar / ❌ Hablar / ❌ Stream / ❌ Mensajes\n> Bot y Mods: ✅ Pueden hablar y mutear\n\nYa todos pueden entrar pero nadie puede prender micro ni cámara, solo escuchar música 🎵` });
+        }
+        if(inter.commandName === 'setup-predicciones'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
           const ch = await ensurePrediccionesChannel(inter.guild);
