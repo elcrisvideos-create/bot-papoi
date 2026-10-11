@@ -1577,12 +1577,46 @@ async function ensureSorteosChannel(guild, privado = true){
   if(canal && sorteosData.activo) { sorteosData.activo.canalId = canal.id; await saveSorteos(); }
   return canal;
 }
+function buildSorteoTopEmbed(guild){
+  const conteo = {};
+  sorteosInvites.filter(i=> i.estado==='valida').forEach(i=>{ conteo[i.invitadorId]=(conteo[i.invitadorId]||0)+1; });
+  const top = Object.entries(conteo).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  let txt = '';
+  if(!top.length) txt = '*Aún nadie con válidas - ¡sé el primero! 🥇*';
+  else txt = top.map(([id,c],i)=>{
+    const med = i===0?'🥇':i===1?'🥈':i===2?'🥉':`**${i+1}.**`;
+    return `${med} <@${id}> - **${c}** válida${c!==1?'s':''}`;
+  }).join('\n');
+  const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 TOP 10 SORTEO x2 MONEY - EN VIVO').setDescription(txt)
+ .addFields({name:'📊 Válidas totales', value:`${sorteosInvites.filter(i=>i.estado==='valida').length}`, inline:true},{name:'⏰ Fin', value:`Domingo 23:59 MX`, inline:true})
+ .setFooter({text:`Se actualiza cada 10 min • Solo cuentan válidas`}).setTimestamp();
+  return embed;
+}
+async function actualizarTopSorteo(guild){
+  try{
+    const sorteo = getSorteoActivo(); if(!sorteo) return;
+    const canal = guild.channels.cache.get(sorteo.canalId) || await guild.channels.fetch(sorteo.canalId).catch(()=>null); if(!canal) return;
+    const embed = buildSorteoTopEmbed(guild);
+    let msg = null;
+    if(sorteo.topMessageId) msg = await canal.messages.fetch(sorteo.topMessageId).catch(()=>null);
+    if(msg){ await msg.edit({ embeds:[embed] }).catch(()=>{}); }
+    else { const sent = await canal.send({ embeds:[embed] }).catch(()=>null); if(sent){ sorteosData.activo.topMessageId = sent.id; await saveSorteos(); } }
+  }catch(e){ console.log('actualizarTopSorteo', e.message); }
+}
+function startSorteoTopScheduler(){
+  console.log('🏆 Scheduler Top Sorteo cada 10 min iniciado');
+  setInterval(async ()=>{
+    const guild = client.guilds.cache.get(process.env.GUILD_ID); if(!guild) return;
+    if(!getSorteoActivo()) return;
+    await actualizarTopSorteo(guild).catch(()=>{});
+  }, 10*60*1000);
+}
 function buildSorteoEmbed(guild, sorteo, top = []){
   const finUnix = Math.floor(sorteo.fin/1000);
   const embed = new EmbedBuilder()
   .setColor(0xFFD700)
   .setTitle(`🎁 SORTEO GAMEPASS x2 DINERO - Roba un Huevo`)
-  .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / recién creadas (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F>\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n**🎁 ENTREGA:** Lunes 13 Oct - Se entrega en juego`)
+  .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n✅ Cuenta con mínimo 3 días de creada\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / con menos de 3 días de creada (mínimo 3 días) (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F>\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n**🎁 ENTREGA:** Lunes 13 Oct - Se entrega en juego`)
   .setFooter({ text: `Sorteo Papoi • x2 Money Gamepass • Blindaje Activo • ${sorteosInvites.filter(i=>i.estado==='valida').length} válidas totales` })
   .setTimestamp();
   if(sorteo.portadaLocal &&!sorteo.isVideo) embed.setImage(`attachment://${path.basename(sorteo.portadaLocal)}`);
@@ -1612,6 +1646,7 @@ async function crearPanelSorteo(guild){
   payload.components = [row1];
   const msg = await canal.send(payload).catch(()=>null);
   if(msg){ sorteosData.activo.mensajeId = msg.id; await saveSorteos(); }
+  await actualizarTopSorteo(guild).catch(()=>{});
   return msg;
 }
 async function cargarInviteCache(guild){
@@ -3547,6 +3582,7 @@ client.on(Events.ClientReady, async () => {
   await ensureMinijuegosChannels(guild).catch(()=>{});
     await cargarInviteCache(guild).catch(()=>{});
   await ensureSorteosChannel(guild, true).catch(()=>{}); // privado solo para ti
+  startSorteoTopScheduler();
   // Reconstruir map creador desde invites guardados
   sorteosInvites.forEach(i=>{ if(i.code) inviteCodeToCreador.set(i.code, i.invitadorId); });
   await crearPanelMinijuegos(guild).catch(()=>{});
@@ -3602,10 +3638,11 @@ try{
       if(yaExistia) estado = 'invalida';
       else if(yaContadoAntes) estado = 'invalida';
       else if(member.user.bot) estado = 'invalida';
-      else if(Date.now() - member.user.createdTimestamp < 7*24*60*60*1000) estado = 'invalida';
+      else if(Date.now() - member.user.createdTimestamp < 3*24*60*60*1000) estado = 'invalida';
       if(creador){
         sorteosInvites.push({ invitadorId: creador, invitadoId: member.id, code: usedCode, estado, joinedAt: Date.now(), activoGeneral: false });
         await saveSorteos();
+        if(estado==='valida' || estado==='pendiente') await actualizarTopSorteo(guild).catch(()=>{});
         console.log(`📥 Sorteo join: ${member.user.tag} por ${usedCode} creador ${creador} estado ${estado}`);
       }
     }
@@ -3670,6 +3707,7 @@ client.on(Events.GuildMemberRemove, async member => {
       if(inv){
         inv.estado = 'restada';
         await saveSorteos();
+        await actualizarTopSorteo(guild).catch(()=>{});
       }
     }
   }catch(e){ console.log('sorteo leave', e.message); }
@@ -4105,27 +4143,50 @@ client.on(Events.InteractionCreate, async inter => {
       if(!sorteo) return inter.reply({ content: '❌ No hay sorteo activo', flags: MessageFlags.Ephemeral });
       if(inter.customId === 'sorteo_crear_link'){
         await inter.deferReply({ flags: MessageFlags.Ephemeral });
-        const general = findChannel(guild, CONFIG.channels.general) || guild.channels.cache.find(c=>c.type===ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreateInstantInvite));
+        const general = findChannel(guild, CONFIG.channels.general) || guild.channels.cache.find(c=>c.type===ChannelType.GuildText && c.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.CreateInstantInvite));
         if(!general) return inter.editReply({ content: '❌ No encontré canal para crear invite' });
-        // Revisa si ya tiene uno
-        let existingCode = null;
-        for(const [code, creatorId] of inviteCodeToCreador.entries()){
-          if(creatorId === inter.user.id){
-            const inv = inviteCache.get(code);
-            if(inv) { existingCode = code; break; }
+
+        const liveInvites = await guild.invites.fetch().catch(()=>null);
+        if(liveInvites){
+          for(const [code, inv] of liveInvites){
+            inviteCache.set(code, { uses: inv.uses||0, inviterId: inv.inviter?.id || inviteCodeToCreador.get(code) || null });
+            inviteCacheFile[code] = inv.uses||0;
+            if(inv.inviter?.id) inviteCodeToCreador.set(code, inv.inviter.id);
           }
         }
-        let code = existingCode;
-        let inviteUrl = null;
-        if(!code){
-          try{
-            const inv = await general.createInvite({ maxAge: 0, maxUses: 0, unique: true, reason: `Sorteo X2 - ${inter.user.tag}` }).catch(()=>null);
-            if(inv){ code = inv.code; inviteUrl = inv.url; inviteCache.set(code, { uses: inv.uses||0, inviterId: client.user.id }); inviteCodeToCreador.set(code, inter.user.id); inviteCacheFile[code] = 0; await saveSorteos(); }
-          }catch(e){ return inter.editReply({ content: `❌ Error creando invite: ${e.message} - Dame permiso Crear Invitación en #${general.name}` }); }
-        } else {
-          inviteUrl = `https://discord.gg/${code}`;
+
+        let existingCode = null;
+        let existingInvite = null;
+        if(liveInvites){
+          for(const [code, inv] of liveInvites){
+            const creator = inviteCodeToCreador.get(code) || inv.inviter?.id;
+            if(creator === inter.user.id){ existingCode = code; existingInvite = inv; break; }
+          }
         }
-        return inter.editReply({ content: `✅ **Tu link personal:** ${inviteUrl}\n\`discord.gg/${code}\`\n\n**Reglas para que cuente:**\n✅ Que entre + se quede + hable 1 mensaje en #general\n\nTe resta si se sale. No cuenta si ya estaba o es fake (pero no te baneo).` });
+        if(!existingCode){
+          for(const [code, creatorId] of [...inviteCodeToCreador.entries()]){
+            if(creatorId === inter.user.id){
+              if(liveInvites?.has(code)){ existingCode = code; existingInvite = liveInvites.get(code); break; }
+              else { inviteCodeToCreador.delete(code); inviteCache.delete(code); delete inviteCacheFile[code]; }
+            }
+          }
+        }
+
+        if(existingCode && existingInvite){
+          const inviteUrl = `https://discord.gg/${existingCode}`;
+          await saveSorteos();
+          return inter.editReply({ content: `✅ **Ya tenías link, aquí está (sigue vivo):** ${inviteUrl}\n\`discord.gg/${existingCode}\`\n\n> Si lo perdiste, este es el mismo. No se crean 2 links por persona.` });
+        } else {
+          try{
+            const inv = await general.createInvite({ maxAge: 0, maxUses: 0, unique: true, reason: `Sorteo X2 - ${inter.user.tag}` });
+            inviteCache.set(inv.code, { uses: inv.uses||0, inviterId: inter.user.id });
+            inviteCodeToCreador.set(inv.code, inter.user.id);
+            inviteCacheFile[inv.code] = 0;
+            await saveSorteos();
+            await actualizarTopSorteo(guild).catch(()=>{});
+            return inter.editReply({ content: `✅ **Tu link personal NUEVO:** ${inv.url}\n\`discord.gg/${inv.code}\`\n\n✅ Que entre + se quede + hable 1 mensaje en #general\n✅ Cuenta +3 días de creada` });
+          }catch(e){ return inter.editReply({ content: `❌ Error creando invite: ${e.message}` }); }
+        }
       }
       if(inter.customId === 'sorteo_mis'){
         const mias = sorteosInvites.filter(i=> i.invitadorId === inter.user.id);
