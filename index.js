@@ -4052,7 +4052,7 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
       const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').replace(/papoi/gi,'').trim().slice(0,500);
       if(!pregunta) return;
 
-      const modelos = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "mixtral-8x7b-32768"];
+      const modelos = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama3-8b-8192"];
       let chat = null;
 
       // Personalidad diferente si eres tú
@@ -4094,7 +4094,11 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
           break;
         }catch(e){ console.log(`Modelo ${m} fail: ${e.message.slice(0,100)}`); continue; }
       }
-      if(!chat) throw new Error("Ningun modelo disponible");
+      if(!chat) {
+        console.log("IA fail: Ningun modelo disponible, avisa al usuario");
+        await msg.reply({ content: `😵‍💫 Se me bugueó la IA un momento papoi, intenta de nuevo en 10s`, allowedMentions: { parse: [] } }).catch(()=>{});
+        return;
+      }
       const respuesta = chat.choices[0]?.message?.content || "W papoi me quedé en blanco jaja";
       let finalRespuesta = respuesta
        .replace(/@everyone/gi, '@\u200Beveryone')
