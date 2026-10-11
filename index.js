@@ -1579,7 +1579,7 @@ async function ensureSorteosChannel(guild, privado = true){
 }
 function buildSorteoTopEmbed(guild){
   const conteo = {};
-  sorteosInvites.filter(i=> i.estado==='valida').forEach(i=>{ conteo[i.invitadorId]=(conteo[i.invitadorId]||0)+1; });
+  sorteosInvites.filter(i=> i.estado==='valida' && i.invitadorId!== client.user.id).forEach(i=>{ conteo[i.invitadorId]=(conteo[i.invitadorId]||0)+1; });
   const top = Object.entries(conteo).sort((a,b)=>b[1]-a[1]).slice(0,10);
   let txt = '';
   if(!top.length) txt = '*Aún nadie con válidas - ¡sé el primero! 🥇*';
@@ -1677,13 +1677,15 @@ async function cargarInviteCache(guild){
     if(!invites) return;
     inviteCache.clear();
     for(const [code, inv] of invites){
-      let creador = inv.inviter?.id || inviteCodeToCreador.get(code) || null;
-      if(!creador){
-        const saved = sorteosInvites.find(i=>i.code===code);
-        if(saved) creador = saved.invitadorId;
+      // FIX: Prioriza nuestro mapa, ignora al bot
+      let creador = inviteCodeToCreador.get(code) || sorteosInvites.find(i=>i.code===code)?.invitadorId || null;
+      if(!creador && inv.inviter?.id && inv.inviter.id!== client.user.id){
+        creador = inv.inviter.id;
       }
-      if(creador) inviteCodeToCreador.set(code, creador);
-      inviteCache.set(code, { uses: inv.uses || 0, inviterId: creador });
+      if(creador && creador!== client.user.id) inviteCodeToCreador.set(code, creador);
+      if(creador && creador!== client.user.id){
+        inviteCache.set(code, { uses: inv.uses || 0, inviterId: creador });
+      }
       inviteCacheFile[code] = inv.uses || 0;
     }
     await saveSorteos();
@@ -4172,9 +4174,13 @@ client.on(Events.InteractionCreate, async inter => {
         const liveInvites = await guild.invites.fetch().catch(()=>null);
         if(liveInvites){
           for(const [code, inv] of liveInvites){
-            inviteCache.set(code, { uses: inv.uses||0, inviterId: inv.inviter?.id || inviteCodeToCreador.get(code) || null });
+            const savedCreator = inviteCodeToCreador.get(code);
+            const finalCreator = savedCreator || (inv.inviter?.id!== client.user.id? inv.inviter?.id : null);
+            if(finalCreator && finalCreator!== client.user.id){
+              inviteCache.set(code, { uses: inv.uses||0, inviterId: finalCreator });
+              inviteCodeToCreador.set(code, finalCreator);
+            }
             inviteCacheFile[code] = inv.uses||0;
-            if(inv.inviter?.id) inviteCodeToCreador.set(code, inv.inviter.id);
           }
         }
 
