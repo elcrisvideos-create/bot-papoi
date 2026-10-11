@@ -1004,8 +1004,12 @@ const tabla = "**🇲🇽 México → 09:00 AM**\n**🇨🇴 Colombia → 10:00 
   )
  .setFooter({ text: `Papois Empire • Sábados 9AM MX • Auto` })
  .setTimestamp(target);
-  if(attachFilename &&!adminAbuseData.customIsVideo){
-    embed.setImage(`attachment://${attachFilename}`);
+  if(attachFilename){
+    if(attachFilename.startsWith('http')){
+      if(!adminAbuseData.customIsVideo) embed.setImage(attachFilename);
+    } else if(!adminAbuseData.customIsVideo){
+      embed.setImage(`attachment://${attachFilename}`);
+    }
   }
   const iconA = guild.iconURL({ extension: 'png', size: 128 });
   if(iconA) embed.setThumbnail(iconA);
@@ -1719,7 +1723,7 @@ async function crearPanelAdminAbuse(guild){
   }catch{}
   const target = getNextSaturday9amMX();
   const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
-  const source = localPath || null;
+  const source = localPath || adminAbuseData.customImageUrl || null;
   let fileName = null;
   let payload = {};
   if(source){
@@ -1760,12 +1764,13 @@ async function actualizarPanelAdminAbuse(guild){
     if(!msg) return crearPanelAdminAbuse(guild);
     const target = getNextSaturday9amMX();
     const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
+    const source = localPath || adminAbuseData.customImageUrl || null;
     let fileName = null;
     let files = [];
-    if(localPath){
-      const ext = path.extname(localPath.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
+    if(source){
+      const ext = path.extname(source.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
       fileName = `admin_abuse_portada.${ext}`;
-      files = [{ attachment: localPath, name: fileName }];
+      files = [{ attachment: source, name: fileName }];
     }
     const embed = buildAdminAbuseEmbed(guild, target, fileName);
     const row = new ActionRowBuilder().addComponents(
