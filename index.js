@@ -1587,9 +1587,9 @@ function buildSorteoTopEmbed(guild){
     const med = i===0?'🥇':i===1?'🥈':i===2?'🥉':`**${i+1}.**`;
     return `${med} <@${id}> - **${c}** válida${c!==1?'s':''}`;
   }).join('\n');
-  const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 TOP 10 SORTEO x2 MONEY - EN VIVO').setDescription(txt)
- .addFields({name:'📊 Válidas totales', value:`${sorteosInvites.filter(i=>i.estado==='valida').length}`, inline:true},{name:'⏰ Fin', value:`Domingo 23:59 MX`, inline:true})
- .setFooter({text:`Se actualiza cada 10 min • Solo cuentan válidas`}).setTimestamp();
+  const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 TOP 10 SORTEO x2 MONEY - SOLO TOP 1 GANA').setDescription(txt)
+ .addFields({name:'📊 Válidas totales', value:`${sorteosInvites.filter(i=>i.estado==='valida').length}`, inline:true},{name:'⏰ Fin', value:`Dom 18 Oct 23:59 Playa`, inline:true},{name:'👑 Premio', value:`Solo el #1 gana el x2`, inline:true})
+ .setFooter({text:`Se actualiza cada 10 min • SOLO TOP 1 gana el gamepass`}).setTimestamp();
   return embed;
 }
 async function actualizarTopSorteo(guild){
@@ -1623,7 +1623,7 @@ function startSorteoAutoFinalizer(){
       const top = Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
       let desc = '❌ Nadie con válidas - Sorteo cerrado automáticamente.';
       let ganadorId = null;
-      if(top.length){ ganadorId = top[0][0]; desc = `Ganador: <@${ganadorId}> con **${top[0][1]}** válidas\n\nSe cerró automáticamente el **Domingo 18 Oct 23:59 Hora Playa del Carmen**`; }
+      if(top.length){ ganadorId = top[0][0]; desc = `🏆 **¡SORTEO TERMINADO!**\n\n👑 Ganador (TOP 1): <@${ganadorId}> con **${top[0][1]}** válidas\nSe lleva el **${sorteosData.activo?.premio || 'x2 Money'}**\n\n> Solo el TOP 1 gana el gamepass\n\nSe cerró automáticamente el **Domingo 18 Oct 23:59 Hora Playa del Carmen**`; }
       const canalId = sorteosData.activo?.canalId;
       const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 SORTEO FINALIZADO AUTOMÁTICAMENTE').setDescription(desc).setTimestamp();
       const canal = guild.channels.cache.get(canalId) || findChannel(guild, CONFIG.channels.sorteos) || guild.channels.cache.find(c=>c.name.includes('sorteos'));
@@ -1637,9 +1637,9 @@ function buildSorteoEmbed(guild, sorteo, top = []){
   const finUnix = Math.floor(sorteo.fin/1000);
   const embed = new EmbedBuilder()
   .setColor(0xFFD700)
-  .setTitle(`🎁 SORTEO GAMEPASS x2 DINERO - Roba un Huevo`)
-  .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n✅ Cuenta con mínimo 3 días de creada\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / con menos de 3 días de creada (mínimo 3 días) (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F> (desde que se publicó)\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n> ⏰ Hora límite: **Domingo 18 de Octubre 23:59** hora Playa del Carmen (America/Cancun)\n**🎁 ENTREGA:** Lunes 19 Oct - Se entrega en juego`)
-  .setFooter({ text: `Sorteo Papoi • x2 Money Gamepass • Blindaje Activo • ${sorteosInvites.filter(i=>i.estado==='valida').length} válidas totales` })
+  .setTitle(`🎁 SORTEO GAMEPASS x2 DINERO - SOLO TOP 1 GANA`)
+  .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n**👑 GANADOR:** ¡SOLO EL TOP 1 SE LLEVA EL GAMEPASS!\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n✅ Cuenta con mínimo 3 días de creada\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / con menos de 3 días de creada (mínimo 3 días) (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F> (desde que se publicó)\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n> ⏰ Hora límite: **Domingo 18 de Octubre 23:59** hora Playa del Carmen (America/Cancun)\n**🎁 ENTREGA:** Lunes 19 Oct - Solo TOP 1 gana`)
+  .setFooter({ text: `Sorteo Papoi • SOLO TOP 1 GANA x2 • ${sorteosInvites.filter(i=>i.estado==='valida').length} válidas totales` })
   .setTimestamp();
   if(sorteo.portadaLocal &&!sorteo.isVideo) embed.setImage(`attachment://${path.basename(sorteo.portadaLocal)}`);
   else if(sorteo.portadaUrl &&!sorteo.isVideo) embed.setImage(sorteo.portadaUrl);
