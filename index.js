@@ -1611,12 +1611,34 @@ function startSorteoTopScheduler(){
     await actualizarTopSorteo(guild).catch(()=>{});
   }, 10*60*1000);
 }
+function startSorteoAutoFinalizer(){
+  console.log('⏰ Auto-finalizador Sorteo activo - Dom 18 Oct 23:59 Playa del Carmen');
+  setInterval(async ()=>{
+    try{
+      if(!sorteosData.activo) return;
+      if(Date.now() < sorteosData.activo.fin) return; // aún no es 18 Oct 23:59 Playa (04:59 UTC 19 Oct)
+      const guild = client.guilds.cache.get(process.env.GUILD_ID); if(!guild) return;
+      console.log('🏁 FIN SORTEO 18 Oct 23:59 Playa - cerrando automático...');
+      const conteo = {}; sorteosInvites.filter(i=> i.estado==='valida').forEach(i=>{ conteo[i.invitadorId]=(conteo[i.invitadorId]||0)+1; });
+      const top = Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
+      let desc = '❌ Nadie con válidas - Sorteo cerrado automáticamente.';
+      let ganadorId = null;
+      if(top.length){ ganadorId = top[0][0]; desc = `Ganador: <@${ganadorId}> con **${top[0][1]}** válidas\n\nSe cerró automáticamente el **Domingo 18 Oct 23:59 Hora Playa del Carmen**`; }
+      const canalId = sorteosData.activo?.canalId;
+      const embed = new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 SORTEO FINALIZADO AUTOMÁTICAMENTE').setDescription(desc).setTimestamp();
+      const canal = guild.channels.cache.get(canalId) || findChannel(guild, CONFIG.channels.sorteos) || guild.channels.cache.find(c=>c.name.includes('sorteos'));
+      if(canal) await canal.send({ embeds:[embed], content: ganadorId?`🎉 <@${ganadorId}>`:`@everyone` }).catch(()=>{});
+      try{ const invites = await guild.invites.fetch().catch(()=>null); if(invites){ for(const code of inviteCodeToCreador.keys()){ const inv = invites.get(code); if(inv) await inv.delete('Fin sorteo auto 18 Oct').catch(()=>{}); } } }catch{}
+      sorteosData.activo = null; sorteosInvites = []; inviteCodeToCreador.clear(); inviteCache.clear(); inviteCacheFile = {}; await saveSorteos();
+    }catch(e){ console.log('autoFinalizer', e.message); }
+  }, 60*1000);
+}
 function buildSorteoEmbed(guild, sorteo, top = []){
   const finUnix = Math.floor(sorteo.fin/1000);
   const embed = new EmbedBuilder()
   .setColor(0xFFD700)
   .setTitle(`🎁 SORTEO GAMEPASS x2 DINERO - Roba un Huevo`)
-  .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n✅ Cuenta con mínimo 3 días de creada\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / con menos de 3 días de creada (mínimo 3 días) (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F>\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n**🎁 ENTREGA:** Lunes 13 Oct - Se entrega en juego`)
+  .setDescription(`**🏆 PREMIO:** ${sorteo.premio}\n\n**📜 ¿Cómo cuenta tu invitación?**\n✅ Invitar - Usa tu link personal\n✅ Permanecer - Que se quede en el server\n✅ Activo en #general - Debe mandar al menos 1 mensaje\n✅ Cuenta con mínimo 3 días de creada\n\n**Te resta -1 si:**\n❌ Entran y se salen del server\n❌ Entran y no son activos en general\n\n**No cuenta si:**\n⛔ Ya estaban en el server y se salen para que les cuente\n⛔ No son activos en general\n⛔ Cuentas fake / con menos de 3 días de creada (mínimo 3 días) (no cuentan, no descalifica)\n\n**📅 INICIO:** <t:${Math.floor(sorteo.inicio/1000)}:F> (desde que se publicó)\n**⏰ FIN:** <t:${finUnix}:F> - <t:${finUnix}:R>\n> ⏰ Hora límite: **Domingo 18 de Octubre 23:59** hora Playa del Carmen (America/Cancun)\n**🎁 ENTREGA:** Lunes 19 Oct - Se entrega en juego`)
   .setFooter({ text: `Sorteo Papoi • x2 Money Gamepass • Blindaje Activo • ${sorteosInvites.filter(i=>i.estado==='valida').length} válidas totales` })
   .setTimestamp();
   if(sorteo.portadaLocal &&!sorteo.isVideo) embed.setImage(`attachment://${path.basename(sorteo.portadaLocal)}`);
@@ -3581,8 +3603,9 @@ client.on(Events.ClientReady, async () => {
   startAdminAbuseScheduler();
   await ensureMinijuegosChannels(guild).catch(()=>{});
     await cargarInviteCache(guild).catch(()=>{});
-  await ensureSorteosChannel(guild, true).catch(()=>{}); // privado solo para ti
+  await ensureSorteosChannel(guild, false).catch(()=>{}); // ahora siempre público
   startSorteoTopScheduler();
+  startSorteoAutoFinalizer();
   // Reconstruir map creador desde invites guardados
   sorteosInvites.forEach(i=>{ if(i.code) inviteCodeToCreador.set(i.code, i.invitadorId); });
   await crearPanelMinijuegos(guild).catch(()=>{});
@@ -4438,18 +4461,21 @@ client.on(Events.InteractionCreate, async inter => {
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           const premio = inter.options.getString('premio') || 'Gamepass x2 Dinero - Roba un Huevo';
           const inicio = Date.now();
-          const fin = new Date(); fin.setDate(fin.getDate() + ((7 - fin.getDay()) % 7 || 7)); fin.setHours(23,59,59,999);
+          // FIX: Fecha fija Domingo 18 Octubre 2026 23:59:59 America/Cancun (Playa del Carmen UTC-5)
+          // 19 Oct 04:59:59 UTC = 18 Oct 23:59:59 Cancun
+          const fin = new Date(Date.UTC(2026, 9, 19, 4, 59, 59, 999));
           // snapshot de miembros actuales
           await inter.guild.members.fetch().catch(()=>{});
           const snapshot = [...inter.guild.members.cache.keys()];
           sorteosData.activo = { premio, inicio, fin: fin.getTime(), canalId: null, mensajeId: null, snapshot, portadaUrl: null, portadaLocal: null, isVideo: false };
           sorteosInvites = [];
           await saveSorteos();
-          const canal = await ensureSorteosChannel(inter.guild, true);
+                    const canal = await ensureSorteosChannel(inter.guild, false);
           sorteosData.activo.canalId = canal.id;
+          sorteosData.activo.inicio = Date.now(); // Inicia desde que lo creas/publicas
           await saveSorteos();
           await crearPanelSorteo(inter.guild);
-          return inter.editReply({ content: `✅ Sorteo creado: ${premio}\nInicio: ahora\nFin: Domingo ${fin.toLocaleDateString('es-MX')} 23:59 MX\nCanal: ${canal} (privado solo tú)\n\nAhora usa /sorteo-portada para subir la imagen x2.` });
+          return inter.editReply({ content: `✅ Sorteo PUBLICADO: ${premio}\nInicio: ahora\nFin: Domingo 18 de Octubre 2026 23:59 Hora Playa del Carmen\nCanal: ${canal} (ya es público)\n\nAhora usa /sorteo-portada para subir la imagen x2.` });
         }
         if(inter.commandName === 'sorteo-portada'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
@@ -4473,9 +4499,10 @@ client.on(Events.InteractionCreate, async inter => {
           const nuevo = await ensureSorteosChannel(inter.guild, false);
           if(viejo && nuevo){
             sorteosData.activo.canalId = nuevo.id;
+            sorteosData.activo.inicio = Date.now(); // FIX: Inicia desde el momento que lo publicas
             await saveSorteos();
             await crearPanelSorteo(inter.guild);
-            return inter.editReply({ content: `✅ Ahora es público en ${nuevo} - El privado ${viejo} lo puedes borrar cuando quieras.` });
+            return inter.editReply({ content: `✅ Ahora es público en ${nuevo} - El privado ${viejo} lo puedes borrar cuando quieras.\n📅 Inicio: Ahora | Fin: Dom 18 Oct 23:59 Hora Playa del Carmen` });
           }
           return inter.editReply({ content: `✅ Canal público: ${nuevo}` });
         }
