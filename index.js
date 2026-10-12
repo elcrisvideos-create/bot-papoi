@@ -264,7 +264,7 @@ async function ensureDivinoBombaRoles(guild){
   }
 }
 const saveSpawnsEpicos = () => safeSaveJSON(SPAWNS_EPICOS_PATH, spawnsEpicosData);
-const SPAWNS_EPICOS_TEST_NAME = '🥚┃spawns-épicos-test';
+const SPAWNS_EPICOS_TEST_NAME = '🚨┃Spawns en vivo';
 let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageIds: [], messageId: null, lastScanId: null, lastUpdate: 0, stats: { total: 0, hits: 0, history: [] }, lastPrediction: { ts: 0, top3: [] } });
 // migración si viene del formato viejo
 if(prediccionesData.messageId &&!prediccionesData.messageIds?.length){
