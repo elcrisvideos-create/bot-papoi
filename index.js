@@ -1816,9 +1816,9 @@ function parseSenZSpawn(msg){
     const embed = msg.embeds[0];
     if(!embed) return null;
     const desc = embed.description || '';
-    const egg = desc.match(/Egg:\s*(.+)/i)?.[1]?.trim();
-    const loc = desc.match(/Location:\s*(.+)/i)?.[1]?.trim();
-    const speed = desc.match(/Recommended Speed:\s*(.+)/i)?.[1]?.trim() || '???';
+    const egg = cleanText(desc.match(/Egg:\s*(.+)/i)?.[1]);
+    const loc = cleanText(desc.match(/Location:\s*(.+)/i)?.[1]);
+    const speed = cleanText(desc.match(/Recommended Speed:\s*(.+)/i)?.[1]) || '???';
     const spawned = desc.match(/Spawned:\s*(.+)/i)?.[1]?.trim() || '';
     if(!egg) return null;
     const parsed = parsePetFromText(egg);
@@ -1827,26 +1827,29 @@ function parseSenZSpawn(msg){
   }catch{ return null; }
 }
 function getColorByCategoria(cat){
-  if(cat==='Divino') return 0xFFD700;
-  if(cat==='Eterno') return 0x9B59B6;
-  return 0x2ECC71;
+  if(cat==='Divino') return 0xFFD700; // dorado
+  if(cat==='Eterno') return 0x95A5A6; // plata
+  return 0x0F0F0F; // Secreto = negro épico
 }
+function cleanText(t){ return (t||'').replace(/[*_`~]/g,'').replace(/\s+/g,' ').trim(); }
 function buildEpicSpawnEmbed(guild, data){
   const color = getColorByCategoria(data.categoria);
   const catRoleName = CATEGORY_ROLES[data.categoria];
-  const petEmoji = getPetEmoji(guild, data.pet);
+  const petEmojiObj = getPetEmoji(guild, data.pet); // emoji custom pequeño para título
+  const petEmojiUrl = (()=>{ try{ const name = PET_EMOJI_MAP[data.pet]; const e = guild.emojis.cache.find(x=>x.name.toLowerCase()===name.toLowerCase()); return e? e.url : null; }catch{ return null; } })();
   const catEmoji = getCategoriaEmoji(guild, data.categoria);
+  const tituloEmoji = petEmojiObj ? `${petEmojiObj}` : '🥚';
   const embed = new EmbedBuilder()
    .setColor(color)
-   .setTitle(`💥 ¡${data.pet.toUpperCase()} APARECIÓ!`)
-   .setDescription(`${catEmoji} **${data.categoria.toUpperCase()}** • ${petEmoji} **${data.pet}**`)
+   .setTitle(`${tituloEmoji} ¡${data.pet.toUpperCase()} APARECIÓ!`)
+   .setDescription(`${catEmoji} **${data.categoria}** • **${data.pet}**`)
    .addFields(
-      { name: '📍 Lugar', value: `\`${data.location}\``, inline: true },
-      { name: '⚡ Vel. Recomendada', value: `\`${data.speed}\``, inline: true },
+      { name: '📍 Lugar', value: `${data.location}`, inline: true },
+      { name: '⚡ Vel. Recomendada', value: `${data.speed}`, inline: true },
       { name: '⏰ Salió', value: `<t:${Math.floor(data.ts/1000)}:R> • <t:${Math.floor(data.ts/1000)}:t>`, inline: false }
     )
-   .setThumbnail(guild.iconURL({ dynamic:true }) || null)
-   .setFooter({ text: `Papois Empire • Plantilla Universal • ${data.categoria} • Latencia <0.3s ⚡` })
+   .setThumbnail(petEmojiUrl || guild.iconURL({ dynamic:true }) || null)
+   .setFooter({ text: `Papois Empire • ${data.categoria} • hoy a las ${new Date(data.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',timeZone:'America/Cancun'})}` })
    .setTimestamp(new Date(data.ts));
   const roleCat = findRole(guild, catRoleName);
   const rolePet = findRole(guild, data.pet);
