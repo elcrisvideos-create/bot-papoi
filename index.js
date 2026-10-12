@@ -1483,35 +1483,63 @@ const qIndex = Math.floor(Math.random()*3);
     }
   }
 
-  // --- BOMBA ---
+  // --- BOMBA NUCLEAR PAPOI V2 ÉPICA ---
   if(inter.customId==='minijuego_bomba'){
     const prevB = minijuegoActivo.get(userId);
     if(prevB?.timeout) clearTimeout(prevB.timeout);
     if(prevB?.timeoutEscapa) clearTimeout(prevB.timeoutEscapa);
-    const delay = 1500 + Math.floor(Math.random()*2000);
-    minijuegoActivo.set(userId, { tipo:'bomba', readyAt: now+delay, active:false });
-    const embed = new EmbedBuilder().setColor(0xED4245).setTitle('💣 ¡HUEVO BOMBA ACTIVADO!').setDescription(`Explotará en **${(delay/1000).toFixed(1)}s random**. ¡Desactívalo rápido!`);
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_bomba_click').setLabel('💣 DESACTIVAR').setStyle(ButtonStyle.Danger));
+    await guild.emojis.fetch().catch(()=>{});
+    const cables = ['🔴','🔵','🟡','🟢'].sort(()=>Math.random()-0.5);
+    const correct = Math.floor(Math.random()*4);
+    const pistas = [`Corta el ${cables[correct]} - es el único que NO está en Volcán`,`El cable ${cables[correct]} es el que sobra`,`¡${cables[correct]} es el seguro! Los otros 3 explotan`];
+    minijuegoActivo.set(userId, { tipo:'bomba', stage:1, cables, correct, start:Date.now() });
+    const embed = new EmbedBuilder().setColor(0xED4245).setTitle('💣 FASE 1/3 - CORTA EL CABLE').setDescription(`**${pistas[Math.floor(Math.random()*pistas.length)]}**\n\n${cables.map((c,i)=>`${c} Cable ${i+1}`).join(' | ')}\n\n> Tienes 8s o explota`);
+    const row = new ActionRowBuilder().addComponents(...cables.map((c,i)=> new ButtonBuilder().setCustomId(`minijuego_bomba_cable_${i}`).setLabel(`${c} Cable ${i+1}`).setStyle(i===correct?ButtonStyle.Success:ButtonStyle.Danger).setStyle(ButtonStyle.Secondary)));
     await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral });
-    const to = setTimeout(async ()=>{
-      const st = minijuegoActivo.get(userId);
-      if(st && st.tipo==='bomba'){
-        minijuegoActivo.delete(userId);
-        data.fails++; data.puntos=Math.max(0,data.puntos-3); await saveMinijuegos(userId);
-        inter.editReply({ content:'💥 ¡BOOM! Explotó -3 pts', embeds:[], components:[] }).catch(()=>{});
-      }
-    }, delay);
-    minijuegoActivo.get(userId).timeout = to;
-    return;
+    const to = setTimeout(async()=>{ const st=minijuegoActivo.get(userId); if(st?.stage===1){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); data.weekly=Math.max(0,data.weekly-10); await saveMinijuegos(userId); inter.editReply({ content:'💥 ¡BOOM! No cortaste a tiempo -10 pts', embeds:[], components:[] }).catch(()=>{}); } }, 8000);
+    minijuegoActivo.get(userId).timeout=to; return;
   }
-  if(inter.customId==='minijuego_bomba_click'){
-    const st = minijuegoActivo.get(userId);
-    if(!st || st.tipo!=='bomba') return inter.reply({ content:'❌ Ya explotó', flags: MessageFlags.Ephemeral });
-    clearTimeout(st.timeout);
-    minijuegoActivo.delete(userId);
-    const pts = 30;
-    data.puntos+=pts; data.weekly+=pts; data.bomba+=pts; await saveMinijuegos(userId);
-    return inter.update({ content:`✅ ¡Salvado! +${pts} pts bomba desactivada`, embeds:[], components:[] });
+  if(inter.customId.startsWith('minijuego_bomba_cable_')){
+    const st = minijuegoActivo.get(userId); if(!st || st.stage!==1) return inter.reply({ content:'❌ Bomba ya explotó', flags: MessageFlags.Ephemeral });
+    const idx = parseInt(inter.customId.split('_').pop()); clearTimeout(st.timeout);
+    if(idx!==st.correct){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); data.weekly=Math.max(0,data.weekly-10); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡CORTE MAL! Era el Cable ${st.correct+1} ${st.cables[st.correct]} -10 pts`, embeds:[], components:[] }); }
+    // FASE 2 - MEMORIA
+    await guild.emojis.fetch().catch(()=>{}); const seq=[getRobaEmojis(guild),getRobaEmojis(guild)]; const qPos=Math.floor(Math.random()*4); const correctEmoji=seq[qPos];
+    st.stage=2; st.seq=seq; st.qPos=qPos; st.correctId=correctEmoji.id;
+    const embed2 = new EmbedBuilder().setColor(0xF1C40F).setTitle('💣 FASE 2/3 - MEMORIZA 3s').setDescription(seq.map(e=>`${e}`).join(' ') + `\n\n¡Memoriza! Pregunta en 3s...`).setFooter({text:`Pos ${qPos+1}`});
+    await inter.update({ embeds:, components:[] });
+    setTimeout(async()=>{
+      const cur=minijuegoActivo.get(userId); if(!cur || cur.stage!==2) return;
+      const fakes=[getRobaEmojis(guild),getRobaEmojis(guild)].filter(e=>e.id!==cur.correctId); const opts=[correctEmoji,...fakes].sort(()=>Math.random()-0.5);
+      const embedQ = new EmbedBuilder().setColor(0x9B59B6).setTitle(`🧠 ¿Cuál iba en pos ${qPos+1}?`).setDescription(`¡RÁPIDO! 6s`);
+      const rowQ = new ActionRowBuilder().addComponents(...opts.map(e=> new ButtonBuilder().setCustomId(`minijuego_bomba_mem_${e.id}`).setLabel('?').setEmoji(e.id?{id:e.id}:undefined).setStyle(ButtonStyle.Secondary)));
+      await inter.editReply({ embeds:[embedQ], components:[rowQ] }).catch(()=>{});
+      const to2=setTimeout(async()=>{ const s=minijuegoActivo.get(userId); if(s?.stage===2){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); await saveMinijuegos(userId); inter.editReply({ content:'💥 ¡BOOM! No recordaste -10 pts', embeds:[], components:[] }).catch(()=>{}); } },6000); cur.timeout=to2;
+    },3000); return;
+  }
+  if(inter.customId.startsWith('minijuego_bomba_mem_')){
+    const st=minijuegoActivo.get(userId); if(!st || st.stage!==2) return inter.reply({ content:'❌ Expiró', flags: MessageFlags.Ephemeral });
+    const chosen=inter.customId.split('_').pop(); clearTimeout(st.timeout);
+    if(chosen!==st.correctId){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡FALLASTE! Era ${st.seq.find(e=>e.id===st.correctId)} -10 pts`, embeds:[], components:[] }); }
+    // FASE 3 - QTE FINAL
+    st.stage=3; const delay=1000+Math.floor(Math.random()*2500);
+    const embed3=new EmbedBuilder().setColor(0x57F287).setTitle('💣 FASE 3/3 - ¡AHORA!').setDescription(`Espera... cuando veas **¡AHORA!** dale al botón en <0.8s\n\nPreparando detonador...`);
+    await inter.update({ embeds:, components:[] });
+    const to3=setTimeout(async()=>{
+      const cur=minijuegoActivo.get(userId); if(!cur || cur.stage!==3) return;
+      cur.active=true; cur.start=Date.now();
+      const embedGo=new EmbedBuilder().setColor(0x00FF00).setTitle('💥 ¡¡AHORA!! ¡¡AHORA!!').setDescription(`¡CLICK!`);
+      const rowGo=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_bomba_final').setLabel('💣 DESACTIVAR YA!').setStyle(ButtonStyle.Success));
+      await inter.editReply({ embeds:[embedGo], components:[rowGo] }).catch(()=>{});
+      const toBoom=setTimeout(async()=>{ const s=minijuegoActivo.get(userId); if(s?.stage===3 && s?.active){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-15); await saveMinijuegos(userId); inter.editReply({ content:'💥 ¡MUY LENTO! Explotó -15 pts', embeds:[], components:[] }).catch(()=>{}); } },900); cur.timeout=toBoom;
+    },delay); st.timeout=to3; return;
+  }
+  if(inter.customId==='minijuego_bomba_final'){
+    const st=minijuegoActivo.get(userId); if(!st || st.stage!==3 ||!st.active) return inter.reply({ content:'❌ Demasiado pronto o ya explotó', flags: MessageFlags.Ephemeral });
+    clearTimeout(st.timeout); const react=Date.now()-st.start; minijuegoActivo.delete(userId);
+    if(react>800){ data.fails++; data.puntos=Math.max(0,data.puntos-15); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡Tarde! ${react}ms -15 pts`, embeds:[], components:[] }); }
+    const pts=Math.max(20, 60-Math.floor(react/10)); data.puntos+=pts; data.weekly+=pts; data.bomba+=pts; await saveMinijuegos(userId);
+    return inter.update({ content:`✅ ¡BOMBA DESACTIVADA EN ${react}ms! +${pts} pts ÉPICO`, embeds:[], components:[] });
   }
 }
 function startMinijuegosScheduler(){
