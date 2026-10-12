@@ -1827,9 +1827,9 @@ function parseSenZSpawn(msg){
   }catch{ return null; }
 }
 function getColorByCategoria(cat){
-  if(cat==='Divino') return 0xFFD700; // dorado
-  if(cat==='Eterno') return 0x95A5A6; // plata
-  return 0x0F0F0F; // Secreto = negro épico
+  if(cat==='Divino') return 0xFFD700; // divinos = oro
+  if(cat==='Eterno') return 0x9B59B6; // eternos = morado
+  return 0x000000; // secretos = negro/plata épico
 }
 function cleanText(t){ return (t||'').replace(/[*_`~]/g,'').replace(/\s+/g,' ').trim(); }
 function buildEpicSpawnEmbed(guild, data){
@@ -1842,15 +1842,14 @@ function buildEpicSpawnEmbed(guild, data){
   const embed = new EmbedBuilder()
    .setColor(color)
    .setTitle(`${tituloEmoji} ¡${data.pet.toUpperCase()} APARECIÓ!`)
-   .setDescription(`${catEmoji} **${data.categoria}** • **${data.pet}**`)
+   .setDescription(`${catEmoji} **${data.categoria.toUpperCase()}**`)
    .addFields(
       { name: '📍 Lugar', value: `${data.location}`, inline: true },
       { name: '⚡ Vel. Recomendada', value: `${data.speed}`, inline: true },
       { name: '⏰ Salió', value: `<t:${Math.floor(data.ts/1000)}:R> • <t:${Math.floor(data.ts/1000)}:t>`, inline: false }
     )
-   .setThumbnail(petEmojiUrl || guild.iconURL({ dynamic:true }) || null)
-   .setFooter({ text: `Papois Empire • ${data.categoria} • hoy a las ${new Date(data.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',timeZone:'America/Cancun'})}` })
-   .setTimestamp(new Date(data.ts));
+   .setThumbnail(petEmojiUrl || null)
+   .setFooter({ text: `Papois Empire • ${data.categoria}` });
   const roleCat = findRole(guild, catRoleName);
   const rolePet = findRole(guild, data.pet);
   let content = '';
