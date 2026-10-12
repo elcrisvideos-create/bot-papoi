@@ -1824,11 +1824,11 @@ function parseSenZSpawn(msg){
   try{
     const embed = msg.embeds[0];
     if(!embed) return null;
-    const desc = embed.description || '';
-    const egg = cleanText(desc.match(/Egg:\s*(.+)/i)?.[1]);
-    const loc = cleanText(desc.match(/Location:\s*(.+)/i)?.[1]);
-    const speed = cleanText(desc.match(/Recommended Speed:\s*(.+)/i)?.[1]) || '???';
-    const spawned = desc.match(/Spawned:\s*(.+)/i)?.[1]?.trim() || '';
+    const full = `${embed.title||''} ${embed.description||''} ${(embed.fields||[]).map(f=>`${f.name} ${f.value}`).join(' ')}`;
+    const egg = cleanText(full.match(/Egg:\s*(.+)/i)?.[1] || full.match(/🥚\s*([A-Za-z ]+)/)?.[1] || embed.title || '');
+    const loc = cleanText(full.match(/Location:\s*(.+)/i)?.[1] || full.match(/📍\s*(.+)/i)?.[1]);
+    const speed = cleanText(full.match(/Recommended Speed:\s*(.+)/i)?.[1] || full.match(/Speed:\s*(.+)/i)?.[1]) || '???';
+    const spawned = full.match(/Spawned:\s*(.+)/i)?.[1]?.trim() || '';
     if(!egg) return null;
     const parsed = parsePetFromText(egg);
     if(!parsed) return null;
@@ -4019,7 +4019,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 client.on(Events.MessageCreate, async msg => {
   // --- REPLICADOR ÉPICO TEST (ANTES del filtro bot) ---
   if(msg.guild && msg.author.bot){
-    const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || msg.channel.id === '1554960611497086998' || msg.channel.name.toLowerCase().includes('huevo-secreto');
+    const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || ['1554960611497086998','1554960608686903417','1559086915205074944'].includes(msg.channel.id) || msg.channel.name.toLowerCase().includes('huevo-secreto') || msg.channel.name.toLowerCase().includes('spawns');
     if(esApariciones && msg.embeds.length){
       const parsed = parseSenZSpawn(msg);
       if(parsed){
