@@ -252,6 +252,10 @@ let adminAbuseData = safeLoadJSON(ADMIN_ABUSE_PATH, { channelId: null, messageId
 const PREDICCIONES_CHANNEL_NAME = '🔮│predicciones-huevos';
 const PREDICCIONES_PATH = path.join(DATA_DIR, 'predicciones.json');
 const SPAWNS_PATH = path.join(DATA_DIR, 'spawns.json');
+const SPAWNS_EPICOS_PATH = path.join(DATA_DIR, 'spawns_epicos.json');
+let spawnsEpicosData = safeLoadJSON(SPAWNS_EPICOS_PATH, { videoUrl: 'https://www.tiktok.com/@elcrisvideos', gameUrl: 'https://www.roblox.com/games/109983668079237/Steal-an-Egg', canalTestId: null });
+const saveSpawnsEpicos = () => safeSaveJSON(SPAWNS_EPICOS_PATH, spawnsEpicosData);
+const SPAWNS_EPICOS_TEST_NAME = '🥚┃spawns-épicos-test';
 let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageIds: [], messageId: null, lastScanId: null, lastUpdate: 0, stats: { total: 0, hits: 0, history: [] }, lastPrediction: { ts: 0, top3: [] } });
 // migración si viene del formato viejo
 if(prediccionesData.messageId &&!prediccionesData.messageIds?.length){
@@ -1782,6 +1786,77 @@ async function actualizarPanelAdminAbuse(guild){
   }catch(e){ console.log('AdminAbuse update error', e.message); }
 }
 // ========== PREDICCIONES PAPOI - SOLO MORBO, VISUAL 1000% ==========
+// ========== SPAWNS ÉPICOS V1 - PLANTILLA UNIVERSAL + TEST PRIVADO ==========
+async function ensureSpawnsEpicosTestChannel(guild){
+  let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
+  let canal = guild.channels.cache.get(spawnsEpicosData.canalTestId) || findChannel(guild, ['spawns-épicos-test','spawns-epicos-test']);
+  const ownerId = process.env.OWNER_ID;
+  if(!canal){
+    canal = await guild.channels.create({
+      name: SPAWNS_EPICOS_TEST_NAME,
+      type: ChannelType.GuildText,
+      parent: categoria?.id || null,
+      topic: '🧪 TEST privado - replicas épicas de SenZ - solo owner y bot',
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.MentionEveryone] },
+       ...(ownerId? [{ id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : [])
+      ]
+    }).catch(()=>null);
+  } else {
+    await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false }).catch(()=>{});
+    await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, EmbedLinks: true, MentionEveryone: true }).catch(()=>{});
+    if(ownerId) await canal.permissionOverwrites.edit(ownerId, { ViewChannel: true, ReadMessageHistory: true }).catch(()=>{});
+  }
+  if(canal){ spawnsEpicosData.canalTestId = canal.id; saveSpawnsEpicos(); }
+  return canal;
+}
+function parseSenZSpawn(msg){
+  try{
+    const embed = msg.embeds[0];
+    if(!embed) return null;
+    const desc = embed.description || '';
+    const egg = desc.match(/Egg:\s*(.+)/i)?.[1]?.trim();
+    const loc = desc.match(/Location:\s*(.+)/i)?.[1]?.trim();
+    const speed = desc.match(/Recommended Speed:\s*(.+)/i)?.[1]?.trim() || '???';
+    const spawned = desc.match(/Spawned:\s*(.+)/i)?.[1]?.trim() || '';
+    if(!egg) return null;
+    const parsed = parsePetFromText(egg);
+    if(!parsed) return null;
+    return { pet: parsed.pet, categoria: parsed.categoria, location: loc || '???', speed, spawnedRaw: spawned, ts: msg.createdTimestamp, joinUrl: spawnsEpicosData.gameUrl };
+  }catch{ return null; }
+}
+function getColorByCategoria(cat){
+  if(cat==='Divino') return 0xFFD700;
+  if(cat==='Eterno') return 0x9B59B6;
+  return 0x2ECC71;
+}
+function buildEpicSpawnEmbed(guild, data){
+  const color = getColorByCategoria(data.categoria);
+  const catRoleName = CATEGORY_ROLES[data.categoria];
+  const petEmoji = getPetEmoji(guild, data.pet);
+  const catEmoji = getCategoriaEmoji(guild, data.categoria);
+  const embed = new EmbedBuilder()
+   .setColor(color)
+   .setTitle(`💥 ¡${data.pet.toUpperCase()} APARECIÓ!`)
+   .setDescription(`${catEmoji} **${data.categoria.toUpperCase()}** • ${petEmoji} **${data.pet}**`)
+   .addFields(
+      { name: '📍 Lugar', value: `\`${data.location}\``, inline: true },
+      { name: '⚡ Vel. Recomendada', value: `\`${data.speed}\``, inline: true },
+      { name: '⏰ Salió', value: `<t:${Math.floor(data.ts/1000)}:R> • <t:${Math.floor(data.ts/1000)}:t>`, inline: false }
+    )
+   .setThumbnail(guild.iconURL({ dynamic:true }) || null)
+   .setFooter({ text: `Papois Empire • Plantilla Universal • ${data.categoria} • Latencia <0.3s ⚡` })
+   .setTimestamp(new Date(data.ts));
+  const roleCat = findRole(guild, catRoleName);
+  const rolePet = findRole(guild, data.pet);
+  let content = '';
+  if(roleCat) content += `${roleCat} `;
+  if(rolePet) content += `${rolePet}`;
+  if(!content) content = `${catRoleName} ${data.pet}`;
+  return { content: content.trim(), embed };
+}
+
 function parsePetFromText(text){
   if(!text) return null;
   const t = text.toLowerCase();
@@ -3708,6 +3783,9 @@ client.on(Events.ClientReady, async () => {
       { name: 'actualizar-biblioteca', description: 'Actualiza biblioteca (cuando agregas emojis/stickers)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-minijuegos', description: 'Crea canales 🎮 minijuegos y 🏆 tops', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-predicciones', description: 'Crea canal 🔮 predicciones épico y escanea historial', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-spawns-epicos-test', description: 'TEST: Crea canal privado spawns épicos (pruebas)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'set-video-spawn', description: 'Cambia link del botón Dale Like (TikTok)', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }] },
+      { name: 'ver-spawns-epicos', description: 'Ver config spawns épicos', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'sorteo-setup', description: 'Crea canal privado de sorteo solo para ti (test)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'sorteo-crear', description: 'Crea sorteo x2 Money - desde hoy hasta domingo 23:59', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'premio', description: 'Premio', type: 3, required: false }] },
       { name: 'sorteo-portada', description: 'Sube imagen/video portada sorteo', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen del gamepass', type: 11, required: true }] },
@@ -3927,6 +4005,33 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 });
 
 client.on(Events.MessageCreate, async msg => {
+  // --- REPLICADOR ÉPICO TEST (ANTES del filtro bot) ---
+  if(msg.guild && msg.author.bot){
+    const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || msg.channel.id === '1554960611497086998' || msg.channel.name.toLowerCase().includes('huevo-secreto');
+    if(esApariciones && msg.embeds.length){
+      const parsed = parseSenZSpawn(msg);
+      if(parsed){
+        try{
+          const guild = msg.guild;
+          const canalTest = guild.channels.cache.get(spawnsEpicosData.canalTestId) || await ensureSpawnsEpicosTestChannel(guild);
+          if(!canalTest) return;
+          const { content, embed } = buildEpicSpawnEmbed(guild, parsed);
+          const sorteosCanal = findChannel(guild, CONFIG.channels.sorteos);
+          const pingCanal = findChannel(guild, CONFIG.channels.pingRoles);
+          const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('🎮 Entrar al Juego').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.gameUrl),
+            new ButtonBuilder().setLabel('🎁 Sorteo Activo').setStyle(ButtonStyle.Link).setURL(sorteosCanal? `https://discord.com/channels/${guild.id}/${sorteosCanal.id}` : 'https://discord.com/channels/@me')
+          );
+          const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('❤️ Dale Like a este Video').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.videoUrl),
+            new ButtonBuilder().setLabel('🔔 Activa Notificaciones').setStyle(ButtonStyle.Link).setURL(pingCanal? `https://discord.com/channels/${guild.id}/${pingCanal.id}` : 'https://discord.com/channels/@me')
+          );
+          await canalTest.send({ content, embeds: [embed], components: [row1, row2], allowedMentions: { parse: ['roles'] } }).catch(()=>{});
+        }catch(e){ console.log('replica epica error', e.message); }
+      }
+    }
+    return;
+  }
   if(!msg.guild || msg.author.bot) return;
   const member = msg.member;
   if(!member) return;
@@ -4606,7 +4711,25 @@ client.on(Events.InteractionCreate, async inter => {
           if(!ch) return inter.editReply({ content: '❌ No encontré/creé el canal de música' });
           return inter.editReply({ content: `✅ Canal arreglado: ${ch} en ${ch.parent?.name || 'sin categoría'}\n> @everyone: ✅ Conectar / ❌ Hablar / ❌ Stream / ❌ Mensajes\n> Bot y Mods: ✅ Pueden hablar y mutear\n\nYa todos pueden entrar pero nadie puede prender micro ni cámara, solo escuchar música 🎵` });
         }
-        if(inter.commandName === 'setup-predicciones'){
+                                if(inter.commandName === 'setup-spawns-epicos-test'){
+                          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+                          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+                          const ch = await ensureSpawnsEpicosTestChannel(inter.guild);
+                          return inter.editReply({ content: ch? `✅ Canal TEST privado creado: ${ch} - Solo tú y bot lo ven. Ya estoy replicando spawns épicos ahí en <0.3s` : '❌ No pude crear canal' });
+                        }
+                        if(inter.commandName === 'set-video-spawn'){
+                          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+                          const url = inter.options.getString('url');
+                          if(!url.startsWith('http')) return inter.editReply({ content: '❌ Pon un link válido https://' });
+                          spawnsEpicosData.videoUrl = url;
+                          saveSpawnsEpicos();
+                          return inter.editReply({ content: `✅ Link del botón "Dale Like" actualizado:\n${url}\n\nAhora todos los spawns épicos llevarán a ese video.` });
+                        }
+                        if(inter.commandName === 'ver-spawns-epicos'){
+                          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+                          return inter.editReply({ content: `**Config Spawns Épicos:**\n🎥 Video: ${spawnsEpicosData.videoUrl}\n🎮 Juego: ${spawnsEpicosData.gameUrl}\n🧪 Canal Test: ${spawnsEpicosData.canalTestId? `<#${spawnsEpicosData.canalTestId}>` : 'no creado'}` });
+                        }
+                        if(inter.commandName === 'setup-predicciones'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
           const ch = await ensurePrediccionesChannel(inter.guild);
