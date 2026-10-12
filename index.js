@@ -1797,27 +1797,14 @@ async function actualizarPanelAdminAbuse(guild){
 // ========== PREDICCIONES PAPOI - SOLO MORBO, VISUAL 1000% ==========
 // ========== SPAWNS ÉPICOS V1 - PLANTILLA UNIVERSAL + TEST PRIVADO ==========
 async function ensureSpawnsEpicosTestChannel(guild){
-  let categoria = findCategory(guild, CONFIG.categories.robaHuevo);
-  let canal = guild.channels.cache.get(spawnsEpicosData.canalTestId) || findChannel(guild, ['spawns-épicos-test','spawns-epicos-test']);
-  const ownerId = process.env.OWNER_ID;
+  const FIXED_ID = '1559278241062191104';
+  let canal = guild.channels.cache.get(FIXED_ID) || await guild.channels.fetch(FIXED_ID).catch(()=>null) || guild.channels.cache.get(spawnsEpicosData.canalTestId);
   if(!canal){
-    canal = await guild.channels.create({
-      name: SPAWNS_EPICOS_TEST_NAME,
-      type: ChannelType.GuildText,
-      parent: categoria?.id || null,
-      topic: '🧪 TEST privado - replicas épicas de SenZ - solo owner y bot',
-      permissionOverwrites: [
-        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-        { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.MentionEveryone] },
-       ...(ownerId? [{ id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : [])
-      ]
-    }).catch(()=>null);
-  } else {
-    await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false }).catch(()=>{});
-    await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, EmbedLinks: true, MentionEveryone: true }).catch(()=>{});
-    if(ownerId) await canal.permissionOverwrites.edit(ownerId, { ViewChannel: true, ReadMessageHistory: true }).catch(()=>{});
+    console.log('❌ Canal fijo 1559278241062191104 no encontrado, no creo otro para evitar duplicados');
+    return null;
   }
-  if(canal){ spawnsEpicosData.canalTestId = canal.id; saveSpawnsEpicos(); }
+  spawnsEpicosData.canalTestId = FIXED_ID;
+  saveSpawnsEpicos();
   return canal;
 }
 function parseSenZSpawn(msg){
