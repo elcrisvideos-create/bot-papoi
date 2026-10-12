@@ -1507,7 +1507,7 @@ const qIndex = Math.floor(Math.random()*3);
     await guild.emojis.fetch().catch(()=>{}); const seq=[getRobaEmojis(guild),getRobaEmojis(guild)]; const qPos=Math.floor(Math.random()*4); const correctEmoji=seq[qPos];
     st.stage=2; st.seq=seq; st.qPos=qPos; st.correctId=correctEmoji.id;
     const embed2 = new EmbedBuilder().setColor(0xF1C40F).setTitle('💣 FASE 2/3 - MEMORIZA 3s').setDescription(seq.map(e=>`${e}`).join(' ') + `\n\n¡Memoriza! Pregunta en 3s...`).setFooter({text:`Pos ${qPos+1}`});
-    await inter.update({ embeds:, components:[] });
+await inter.update({ embeds:[embed2], components:[] });
     setTimeout(async()=>{
       const cur=minijuegoActivo.get(userId); if(!cur || cur.stage!==2) return;
       const fakes=[getRobaEmojis(guild),getRobaEmojis(guild)].filter(e=>e.id!==cur.correctId); const opts=[correctEmoji,...fakes].sort(()=>Math.random()-0.5);
@@ -1523,8 +1523,8 @@ const qIndex = Math.floor(Math.random()*3);
     if(chosen!==st.correctId){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡FALLASTE! Era ${st.seq.find(e=>e.id===st.correctId)} -10 pts`, embeds:[], components:[] }); }
     // FASE 3 - QTE FINAL
     st.stage=3; const delay=1000+Math.floor(Math.random()*2500);
-    const embed3=new EmbedBuilder().setColor(0x57F287).setTitle('💣 FASE 3/3 - ¡AHORA!').setDescription(`Espera... cuando veas **¡AHORA!** dale al botón en <0.8s\n\nPreparando detonador...`);
-    await inter.update({ embeds:, components:[] });
+        const embed3=new EmbedBuilder().setColor(0x57F287).setTitle('💣 FASE 3/3 - ¡AHORA!').setDescription(`Espera... cuando veas **¡AHORA!** dale al botón en <0.8s\n\nPreparando detonador...`);
+await inter.update({ embeds:[embed3], components:[] });
     const to3=setTimeout(async()=>{
       const cur=minijuegoActivo.get(userId); if(!cur || cur.stage!==3) return;
       cur.active=true; cur.start=Date.now();
