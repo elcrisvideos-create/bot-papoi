@@ -253,7 +253,16 @@ const PREDICCIONES_CHANNEL_NAME = '🔮│predicciones-huevos';
 const PREDICCIONES_PATH = path.join(DATA_DIR, 'predicciones.json');
 const SPAWNS_PATH = path.join(DATA_DIR, 'spawns.json');
 const SPAWNS_EPICOS_PATH = path.join(DATA_DIR, 'spawns_epicos.json');
-let spawnsEpicosData = safeLoadJSON(SPAWNS_EPICOS_PATH, { videoUrl: 'https://www.tiktok.com/@elcrisvideos', gameUrl: 'https://www.roblox.com/games/109983668079237/Steal-an-Egg', canalTestId: null });
+let spawnsEpicosData = safeLoadJSON(SPAWNS_EPICOS_PATH, { videoUrl: 'https://www.tiktok.com/@elcrisvideos', gameUrl: 'https://www.roblox.com/games/start?placeId=107778070777162&gameId=451e1b19-a399-42e2-989a-fcb283d2165f', canalTestId: null });
+const DIVINO_BOMBA_SUFFIX = '🚨';
+const getBombaRoleName = (pet) => `${pet} ${DIVINO_BOMBA_SUFFIX}`;
+async function ensureDivinoBombaRoles(guild){
+  for(const pet of PETS.Divino){
+    const name = getBombaRoleName(pet);
+    let role = findRole(guild, name);
+    if(!role){ try{ role = await guild.roles.create({ name, color: 0xFF0000, reason: 'Rol BOMBA divino' }); }catch{} }
+  }
+}
 const saveSpawnsEpicos = () => safeSaveJSON(SPAWNS_EPICOS_PATH, spawnsEpicosData);
 const SPAWNS_EPICOS_TEST_NAME = '🥚┃spawns-épicos-test';
 let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageIds: [], messageId: null, lastScanId: null, lastUpdate: 0, stats: { total: 0, hits: 0, history: [] }, lastPrediction: { ts: 0, top3: [] } });
@@ -3788,6 +3797,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'setup-spawns-epicos-test', description: 'TEST: Crea canal privado spawns épicos (pruebas)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'set-video-spawn', description: 'Cambia link del botón Dale Like (TikTok)', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'url', description: 'Link del video TikTok', type: 3, required: true }] },
       { name: 'ver-spawns-epicos', description: 'Ver config spawns épicos', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'test-alerta-extrema', description: 'TEST doble ping divino en canal test', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'pet', description: 'Divino a testear (Kitsune, etc)', type: 3, required: true, choices: [{ name: 'Kitsune', value: 'Kitsune' }, { name: 'Royal Skywhale', value: 'Royal Skywhale' }, { name: 'ArchAngel', value: 'ArchAngel' }, { name: 'Divine Dragon', value: 'Divine Dragon' }, { name: 'Pure Jellyfish', value: 'Pure Jellyfish' }, { name: 'Gargoyle', value: 'Gargoyle' }] }, { name: 'lugar', description: 'Lugar fake', type: 3, required: false }] },
       { name: 'sorteo-setup', description: 'Crea canal privado de sorteo solo para ti (test)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'sorteo-crear', description: 'Crea sorteo x2 Money - desde hoy hasta domingo 23:59', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'premio', description: 'Premio', type: 3, required: false }] },
       { name: 'sorteo-portada', description: 'Sube imagen/video portada sorteo', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'archivo', description: 'Imagen del gamepass', type: 11, required: true }] },
@@ -4021,14 +4031,30 @@ client.on(Events.MessageCreate, async msg => {
           const sorteosCanal = findChannel(guild, CONFIG.channels.sorteos);
           const pingCanal = findChannel(guild, CONFIG.channels.pingRoles);
           const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setLabel('🎮 Entrar al Juego').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.gameUrl),
-            new ButtonBuilder().setLabel('🎁 Sorteo Activo').setStyle(ButtonStyle.Link).setURL(sorteosCanal? `https://discord.com/channels/${guild.id}/${sorteosCanal.id}` : 'https://discord.com/channels/@me')
+            new ButtonBuilder().setLabel('🎮 Jugar').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.gameUrl),
+            new ButtonBuilder().setLabel('🎁 Sorteo').setStyle(ButtonStyle.Link).setURL(sorteosCanal? `https://discord.com/channels/${guild.id}/${sorteosCanal.id}` : 'https://discord.com/channels/@me')
           );
           const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setLabel('❤️ Dale Like a este Video').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.videoUrl),
-            new ButtonBuilder().setLabel('🔔 Activa Notificaciones').setStyle(ButtonStyle.Link).setURL(pingCanal? `https://discord.com/channels/${guild.id}/${pingCanal.id}` : 'https://discord.com/channels/@me')
+            new ButtonBuilder().setLabel('❤️ TikTok').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.videoUrl),
+            new ButtonBuilder().setLabel('🔔 Notis').setStyle(ButtonStyle.Link).setURL(pingCanal? `https://discord.com/channels/${guild.id}/${pingCanal.id}` : 'https://discord.com/channels/@me')
           );
-          await canalTest.send({ content, embeds: [embed], components: [row1, row2], allowedMentions: { parse: ['roles'] } }).catch(()=>{});
+          // Contenido normal + bomba si es divino
+          let extraBombaContent = '';
+          let bombaRole = null;
+          if(parsed.categoria === 'Divino'){
+            bombaRole = findRole(guild, getBombaRoleName(parsed.pet)) || findRole(guild, `${parsed.pet} ${DIVINO_BOMBA_SUFFIX}`);
+            if(bombaRole) extraBombaContent = ` ${bombaRole}`;
+          }
+          await canalTest.send({ content: `${content}${extraBombaContent}`, embeds: [embed], components: [row1, row2], allowedMentions: { parse: ['roles'] } }).catch(()=>{});
+          // MULTIPING BOMBA - 2do mensaje 1.5s después solo si es divino y tiene gente con bomba
+          if(bombaRole && parsed.categoria === 'Divino'){
+            setTimeout(async()=>{
+              try{
+                const bombaEmbed = new EmbedBuilder().setColor(0xFF0000).setTitle(`💥💥 ${parsed.pet.toUpperCase()} SIGUE AHÍ - CORRE 💥💥`).setDescription(`**¡BOMBA DIVINA!** ${bombaRole} tu pet soñado sigue vivo\n\n📍 **${parsed.location}**\n⚡ **${parsed.speed}**\n\n**¡ENTRA YA!**`).setTimestamp();
+                await canalTest.send({ content: `${bombaRole} 💥💥💥`, embeds: [bombaEmbed], allowedMentions: { parse: ['roles'] } }).catch(()=>{});
+              }catch{}
+            }, 1500);
+          }
         }catch(e){ console.log('replica epica error', e.message); }
       }
     }
@@ -4407,13 +4433,25 @@ async function mostrarMenuConfiguracion(interaction){
       { label: 'Carreras Mario Kart - cada 30 min', value: RACE_ROLE_NAME, description: 'Te avisa 1 min antes :00 y :30', emoji: '🏁', default: hasRace }
     ]);
   };
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo\n• Marca ${BUTTERFLY_EMOJI} para el evento de mariposas\n\n**${BUTTERFLY_EMOJI} Floración Mariposas:**\nEvento global cada 30 min\nTe avisamos 1 min antes\n\n*El bot guarda en cuanto seleccionas.*`);
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo de una categoría\n\n**${BUTTERFLY_EMOJI} Mariposas:** :15 y :45 - te avisamos 1 min antes\n**${RACE_EMOJI} Carreras:** :00 y :30 - te avisamos 1 min antes\n**🚨 Alerta Extrema:** Marca tu divino fav (ej: Kitsune) y te llegan 2 notis seguidas cuando salga, doble vibración\n\n*El bot guarda en cuanto seleccionas.*`);
+  const buildBombaSelect = () => {
+    const options = [];
+    for(const pet of PETS.Divino){
+      const roleName = getBombaRoleName(pet);
+      const has = hasRole(roleName);
+      const custom = getPetEmoji(guild, pet);
+      const emojiVal = custom? { id: custom.id, name: custom.name } : '💥';
+      options.push({ label: `${pet} - ALERTA EXTREMA`, value: roleName, description: `Multiping cuando salga ${pet}`, emoji: emojiVal, default: has });
+    }
+    return new StringSelectMenuBuilder().setCustomId('select_BOMBA').setPlaceholder(options.filter(o=>o.default).length? `🚨 EXTREMA: ${options.filter(o=>o.default).length} activos` : '🚨 Activa ALERTA EXTREMA Divinos').setMinValues(0).setMaxValues(options.length).addOptions(options);
+  };
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
   const row2 = new ActionRowBuilder().addComponents(buildSelect('Eterno'));
   const row3 = new ActionRowBuilder().addComponents(buildSelect('Divino'));
-  const row4 = new ActionRowBuilder().addComponents(buildEventosSelect());
+  const row4 = new ActionRowBuilder().addComponents(buildBombaSelect());
+  const row4b = new ActionRowBuilder().addComponents(buildEventosSelect());
   const row5 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Ver Mis Pings').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('btn_cerrar').setLabel('Cerrar').setStyle(ButtonStyle.Danger));
-  return { embeds: [embed], components: [row1, row2, row3, row4, row5], flags: MessageFlags.Ephemeral };
+  return { embeds: [embed], components: [row1, row2, row3, row4, row4b, row5], flags: MessageFlags.Ephemeral };
 }
 
 client.on(Events.InteractionCreate, async inter => {
@@ -4565,6 +4603,28 @@ client.on(Events.InteractionCreate, async inter => {
     }
         if(inter.isStringSelectMenu() && inter.customId.startsWith('select_')){
       const categoria = inter.customId.split('_')[1];
+      if(categoria === 'BOMBA'){
+        await inter.deferReply({ flags: MessageFlags.Ephemeral });
+        const member = await inter.guild.members.fetch(inter.user.id);
+        const guild = inter.guild;
+        const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
+        const selected = inter.values;
+        let agregados=[], quitados=[];
+        for(const pet of PETS.Divino){
+          const roleName = getBombaRoleName(pet);
+          const newHas = selected.includes(roleName);
+          const oldHas = hasRole(roleName);
+          let role = findRole(guild, roleName) || await guild.roles.create({ name: roleName, color: 0xFF0000 }).catch(()=>null);
+          if(newHas &&!oldHas){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(roleName); } }
+          else if(!newHas && oldHas){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(roleName); } }
+        }
+        let msg = `**💥 BOMBA Divina actualizado:**\n`;
+        if(agregados.length) msg += `✅ Ahora te REVIENTA el cel cuando: **${agregados.join(', ')}**\n`;
+        if(quitados.length) msg += `❌ Ya no: **${quitados.join(', ')}**\n`;
+        if(!agregados.length &&!quitados.length) msg += `Sin cambios.`;
+        const updatedMenu = await mostrarMenuConfiguracion(inter);
+        await inter.editReply({ content: msg,...updatedMenu }); return;
+      }
       if(categoria === 'Eventos'){
         await inter.deferReply({ flags: MessageFlags.Ephemeral });
         const member = await inter.guild.members.fetch(inter.user.id);
@@ -4730,6 +4790,43 @@ client.on(Events.InteractionCreate, async inter => {
                         if(inter.commandName === 'ver-spawns-epicos'){
                           await inter.deferReply({ flags: MessageFlags.Ephemeral });
                           return inter.editReply({ content: `**Config Spawns Épicos:**\n🎥 Video: ${spawnsEpicosData.videoUrl}\n🎮 Juego: ${spawnsEpicosData.gameUrl}\n🧪 Canal Test: ${spawnsEpicosData.canalTestId? `<#${spawnsEpicosData.canalTestId}>` : 'no creado'}` });
+                        }
+                        if(inter.commandName === 'test-alerta-extrema'){
+                          await inter.deferReply({ flags: MessageFlags.Ephemeral });
+                          if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner' });
+                          const pet = inter.options.getString('pet');
+                          const lugar = inter.options.getString('lugar') || 'Demons';
+                          const guild = inter.guild;
+                          const categoria = Object.keys(PETS).find(c=>PETS[c].includes(pet)) || 'Divino';
+                          const fakeData = { pet, categoria, location: lugar, speed: '20B', ts: Date.now() };
+                          const canalTest = guild.channels.cache.get(spawnsEpicosData.canalTestId) || await ensureSpawnsEpicosTestChannel(guild);
+                          if(!canalTest) return inter.editReply({ content: '❌ No hay canal test, corre /setup-spawns-epicos-test' });
+                          const { content, embed } = buildEpicSpawnEmbed(guild, fakeData);
+                          const sorteosCanal = findChannel(guild, CONFIG.channels.sorteos);
+                          const pingCanal = findChannel(guild, CONFIG.channels.pingRoles);
+                          const row1 = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setLabel('🎮 Jugar').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.gameUrl),
+                            new ButtonBuilder().setLabel('🎁 Sorteo').setStyle(ButtonStyle.Link).setURL(sorteosCanal? `https://discord.com/channels/${guild.id}/${sorteosCanal.id}` : 'https://discord.com/channels/@me')
+                          );
+                          const row2 = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setLabel('❤️ TikTok').setStyle(ButtonStyle.Link).setURL(spawnsEpicosData.videoUrl),
+                            new ButtonBuilder().setLabel('🔔 Notis').setStyle(ButtonStyle.Link).setURL(pingCanal? `https://discord.com/channels/${guild.id}/${pingCanal.id}` : 'https://discord.com/channels/@me')
+                          );
+                          let bombaRole = findRole(guild, getBombaRoleName(pet));
+                          let extra = bombaRole? ` ${bombaRole}` : '';
+                          await canalTest.send({ content: `${content}${extra}`, embeds: [embed], components: [row1, row2], allowedMentions: { parse: ['roles'] } });
+                          if(bombaRole){
+                            setTimeout(async()=>{
+                              try{
+                                const bombaEmbed = new EmbedBuilder().setColor(0xFF0000).setTitle(`💥💥 ${pet.toUpperCase()} SIGUE AHÍ - CORRE 💥💥`).setDescription(`**¡ALERTA EXTREMA!** ${bombaRole} tu pet sigue vivo\n\n📍 **${lugar}**\n⚡ **20B**\n\n**¡ENTRA YA!**`).setTimestamp();
+                                await canalTest.send({ content: `${bombaRole} 💥💥💥`, embeds: [bombaEmbed], allowedMentions: { parse: ['roles'] } });
+                              }catch{}
+                            }, 1500);
+                            await inter.editReply({ content: `✅ Test doble ping enviado a ${canalTest}\nPet: **${pet}** con rol **${bombaRole.name}**\n\n1er mensaje ahora + 2do en 1.5s. Revisa si te llegan 2 notificaciones.` });
+                          } else {
+                            await inter.editReply({ content: `✅ Test enviado a ${canalTest} pero NO tienes rol ${getBombaRoleName(pet)}. Crea el rol primero: activa ${pet} en el menú 🚨` });
+                          }
+                          return;
                         }
                         if(inter.commandName === 'setup-predicciones'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
