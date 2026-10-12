@@ -1807,18 +1807,24 @@ async function ensureSpawnsEpicosTestChannel(guild){
   saveSpawnsEpicos();
   return canal;
 }
+const _ultimoSpawnEnviado = new Map();
 function parseSenZSpawn(msg){
   try{
     const embed = msg.embeds[0];
     if(!embed) return null;
-    const full = `${embed.title||''} ${embed.description||''} ${(embed.fields||[]).map(f=>`${f.name} ${f.value}`).join(' ')}`;
-    const egg = cleanText(full.match(/Egg:\s*(.+)/i)?.[1] || full.match(/🥚\s*([A-Za-z ]+)/)?.[1] || embed.title || '');
-    const loc = cleanText(full.match(/Location:\s*(.+)/i)?.[1] || full.match(/📍\s*(.+)/i)?.[1]);
-    const speed = cleanText(full.match(/Recommended Speed:\s*(.+)/i)?.[1] || full.match(/Speed:\s*(.+)/i)?.[1]) || '???';
-    const spawned = full.match(/Spawned:\s*(.+)/i)?.[1]?.trim() || '';
+    const desc = embed.description || '';
+    const egg = cleanText((desc.match(/Egg:\s*([^\n\r]+)/i)?.[1] || '').split('Location')[0]);
+    const loc = cleanText((desc.match(/Location:\s*([^\n\r]+)/i)?.[1] || '').split('Spawned')[0]);
+    const speed = cleanText((desc.match(/Recommended Speed:\s*([^\n\r]+)/i)?.[1] || desc.match(/Speed:\s*([^\n\r]+)/i)?.[1] || '').split('Join')[0]) || '???';
+    const spawned = (desc.match(/Spawned:\s*([^\n\r]+)/i)?.[1] || '').trim();
     if(!egg) return null;
     const parsed = parsePetFromText(egg);
     if(!parsed) return null;
+    // Anti-spam: mismo pet en mismo lugar en 90s no se reenvía
+    const key = `${parsed.pet}-${loc}`;
+    const now = Date.now();
+    if(_ultimoSpawnEnviado.has(key) && now - _ultimoSpawnEnviado.get(key) < 90000) return null;
+    _ultimoSpawnEnviado.set(key, now);
     return { pet: parsed.pet, categoria: parsed.categoria, location: loc || '???', speed, spawnedRaw: spawned, ts: msg.createdTimestamp, joinUrl: spawnsEpicosData.gameUrl };
   }catch{ return null; }
 }
@@ -2827,10 +2833,17 @@ async function handleApoyoInteraction(inter){
           const parts = val.split('_'); const puntos = parseInt(parts[2]||'0'); const id = parts[1];
           const tiendaItem = DONADOR_TIENDA.find(t=>t.id===id);
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
-          const categoria = findCategory(guild, CONFIG.categories.apoyar) || guild.channels.cache.filter(c=>c.type===ChannelType.GuildCategory).first();
-          const ownerId = process.env.OWNER_ID;
-          const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: categoria?.id || null, topic: `Ticket donación ${inter.user.id} - ropa ${id} - ${puntos} pts`, permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }, { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }] }).catch(()=>null);
-          if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket.' });
+          let categoria = findCategory(guild, CONFIG.categories.apoyar);
+          const ownerId = process.env.OWNER_ID || guild.ownerId;
+          const parentId = categoria && categoria.children.cache.size < 50 ? categoria.id : null;
+          const overwrites = [
+            { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
+            { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] },
+          ];
+          if(ownerId) overwrites.push({ id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+          const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: parentId, topic: `Ticket donación ${inter.user.id} - ropa ${id} - ${puntos} pts`, permissionOverwrites: overwrites }).catch(e=>{ console.log('Error crear ticket ropa:', e.message); return null; });
+          if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket - revisa que tenga permiso Gestionar Canales y que la categoría no esté llena.' });
           const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle('🥚 Ticket Ropa - Verificación').setDescription(`**Usuario:** <@${inter.user.id}> (${inter.user.id})\n**Tipo:** Ropa comunidad\n**Item:** ${tiendaItem? tiendaItem.name : id} - ${puntos} pts\n**Link:** ${tiendaItem? tiendaItem.url : 'No registrado'}\n\n**Instrucciones para el usuario:** Sube aquí tu captura de compra donde se vea tu nombre de Roblox.\n\n**Para Owner:** Verifica en https://www.roblox.com/groups/782782955/store > Sales`).setTimestamp();
           const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_ropa`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏️ Modificar cantidad').setStyle(ButtonStyle.Secondary));
           await ticket.send({ content: `<@${ownerId}> nuevo ticket ropa`, embeds: [embed], components: [rowOwner] }).catch(()=>{});
@@ -2844,12 +2857,19 @@ async function handleApoyoInteraction(inter){
         const cantidadRaw = inter.fields.getTextInputValue('cantidad')?.trim() || '0';
         const puntosMatch = cantidadRaw.match(/(\d+)/); let puntos = puntosMatch? parseInt(puntosMatch[1]) : 0;
         if(inter.customId === 'modal_apoyo_efectivo'){ const lower = cantidadRaw.toLowerCase(); if(lower.includes('usd') || (lower.includes('$') &&!lower.includes('mxn'))) puntos = puntos * 60; else if(lower.includes('mxn')) puntos = puntos * 3; }
-        const categoria = findCategory(guild, CONFIG.categories.apoyar) || guild.channels.cache.filter(c=>c.type===ChannelType.GuildCategory).first();
-        const ownerId = process.env.OWNER_ID;
+        let categoria = findCategory(guild, CONFIG.categories.apoyar);
+        const ownerId = process.env.OWNER_ID || guild.ownerId;
+        const parentId = categoria && categoria.children.cache.size < 50 ? categoria.id : null;
         const tipo = inter.customId.includes('robux')? 'robux_directo' : inter.customId.includes('efectivo')? 'efectivo' : 'ropa';
         const robloxUser = inter.fields.getTextInputValue('robloxUser')?.trim() || inter.fields.getTextInputValue('cual')?.trim() || inter.fields.getTextInputValue('metodo')?.trim() || 'N/A';
-        const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: categoria?.id || null, topic: `Ticket donación ${inter.user.id} - ${tipo} - ${puntos} pts`, permissionOverwrites: [{ id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }, { id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] }, { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] }] }).catch(()=>null);
-        if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket.' });
+        const overwrites = [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: inter.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
+          { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ManageMessages] },
+        ];
+        if(ownerId) overwrites.push({ id: ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages] });
+        const ticket = await guild.channels.create({ name: `🎫│donacion-${inter.user.username.slice(0,10)}-${Date.now().toString().slice(-4)}`, type: ChannelType.GuildText, parent: parentId, topic: `Ticket donación ${inter.user.id} - ${tipo} - ${puntos} pts`, permissionOverwrites: overwrites }).catch(e=>{ console.log('Error crear ticket donacion:', e.message, e.code); return null; });
+        if(!ticket) return inter.editReply({ content: '❌ No pude crear ticket - revisa permisos y que la categoría no esté llena (50 canales máx).' });
         const embed = new EmbedBuilder().setColor(tipo==='efectivo'? 0x5865F2 : 0x2ECC71).setTitle(tipo==='robux_directo'? '💸 Ticket Robux Directo' : tipo==='efectivo'? '💵 Ticket Efectivo' : '🥚 Ticket Ropa').setDescription(`**Usuario:** <@${inter.user.id}> (${inter.user.id})\n**Tipo:** ${tipo}\n**Cantidad declarada:** ${cantidadRaw} -> **${puntos} pts**\n**Dato extra:** ${robloxUser}\n\n**Instrucciones usuario:** Sube captura/comprobante aquí.\n\n${tipo==='robux_directo'? `**Verificar en:** ${DONADOR_LINKS.perfil} > Transacciones` : tipo==='ropa'? `**Verificar en:** Grupo > Sales` : `**Verificar en:** Ko-fi Dashboard`}`).setTimestamp();
         const rowOwner = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`apoyo_confirm_${inter.user.id}_${puntos}_${tipo}`).setLabel('✅ Confirmar').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`apoyo_mentira_${inter.user.id}`).setLabel('❌ Mentira').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`apoyo_modificar_${inter.user.id}`).setLabel('✏️ Modificar cantidad').setStyle(ButtonStyle.Secondary));
         await ticket.send({ content: `<@${ownerId}> nuevo ticket ${tipo}`, embeds: [embed], components: [rowOwner] }).catch(()=>{});
