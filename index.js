@@ -1861,6 +1861,21 @@ function buildEpicSpawnEmbed(guild, data){
   return { content: content.trim(), embed };
 }
 
+async function handleDebugSpawns(inter){
+  await inter.deferReply({ flags: MessageFlags.Ephemeral });
+  const apariciones = inter.guild.channels.cache.find(c => c.name.toLowerCase().includes('apariciones-en-vivo'));
+  if(!apariciones) return inter.editReply('❌ No encontré #apariciones-en-vivo');
+  const seen = new Map(); let lastId = null; let fetched = 0;
+  for(let i=0;i<20;i++){
+    const msgs = await apariciones.messages.fetch({ limit: 100,...(lastId?{before:lastId}:{}) }).catch(()=>null);
+    if(!msgs || msgs.size===0) break; fetched+=msgs.size;
+    for(const m of msgs.values()){ lastId=m.id; if(!m.embeds[0]) continue; const d=m.embeds[0].description||''; const p=parsePetFromText(d); if(p &&!seen.has(p.pet)) seen.set(p.pet,{pet:p.pet, cat:p.categoria, desc:d.slice(0,300), title:m.embeds[0].title, date:new Date(m.createdTimestamp).toLocaleString()}); }
+    if(seen.size>=ALL_PETS.length) break; await new Promise(r=>setTimeout(r,400));
+  }
+  let txt=`LOG PETS - ${fetched} msgs escaneados\n\n`; for(const pet of ALL_PETS){ if(seen.has(pet)){ const v=seen.get(pet); txt+=`✅ ${pet} [${v.cat}] | ${v.title} | ${v.desc.replace(/\n/g,' | ')} | ${v.date}\n\n`; } else { txt+=`❌ ${pet} - NO ENCONTRADO en últimos ${fetched} msgs\n\n`; } }
+  const fs=require('fs'); const path=require('path'); const fp=path.join(DATA_DIR,`log_pets_${Date.now()}.txt`); fs.writeFileSync(fp,txt);
+  return inter.editReply({ content:`✅ Log: ${seen.size}/${ALL_PETS.length} pets únicos de ${fetched} msgs.`, files:[{attachment:fp, name:'log_pets.txt'}] });
+}
 function parsePetFromText(text){
   if(!text) return null;
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -3787,6 +3802,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'mis-fusiones', description: 'Ver tus búsquedas de fusión activas' },
       { name: 'setup-chambeadores', description: 'Crea canales y paneles de Chambeadores (reclutamiento + activos + logs solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'setup-apoyo', description: 'Crea categoría de donaciones, VIP y paneles (solo owner)', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+{ name: 'debug-spawns', description: 'Saca log 1 por pet de SenZ V2 para verificar parser', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'actualizar-tienda', description: 'Agregar producto a tienda y reordenar por precio', default_member_permissions: PermissionFlagsBits.Administrator.toString(), options: [{ name: 'link', description: 'Link completo de Roblox del item', type: 3, required: true }, { name: 'precio', description: 'Precio en Robux (ej: 5)', type: 4, required: true, min_value: 1 }, { name: 'nombre', description: 'Nombre opcional', type: 3, required: false }] },
       { name: 'test-bienvenida', description: 'Probar mensaje de bienvenida', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'live', description: 'Anunciar LIVE', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -4992,7 +5008,8 @@ client.on(Events.InteractionCreate, async inter => {
           const logs = await fixCanalesFaltantes(inter.guild);
           return inter.editReply({ content: logs.join('\n') || 'Sin cambios' });
         }
-                if(inter.commandName === 'setup-apoyo'){
+                if(inter.commandName === 'debug-spawns') return handleDebugSpawns(inter);
+if(inter.commandName === 'setup-apoyo'){
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           if (!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels) ||!inter.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
             return inter.editReply({ content: '❌ Necesito permiso Gestionar Canales y Gestionar Roles' });
