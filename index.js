@@ -612,7 +612,7 @@ function getIAMs(member){
 }
 const SOLO_HOIST = ['papoi mayor','moderador','booster papoi','papoi leyenda','papoi veterano','papoi fiel','papoi activo','papoi'];
 const PETS = {
-  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','TRex','T-Rex','Kraken','Cerberus','Yeti','King Snake'],
+  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','T-Rex','Kraken','Cerberus','Yeti','King Snake'],
   'Eterno': ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'],
   'Divino': ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn']
 };
@@ -655,7 +655,8 @@ const PET_EMOJI_MAP = {
   'Cosmic Dragon': 'Cosmic_Dragon',
   'Cosmic Skeleton Boss': 'Skeleton',
   'Tralaledon': 'Tralaledon',
-  'TRex': 'T_Rex',
+  'TRex': 'TRex',
+  'T-Rex': 'TRex',
   'Kraken': 'Kraken',
   'Cerberus': 'Cerberus',
   'Yeti': 'Yeti',
@@ -3496,7 +3497,7 @@ async function handleFusionesInteraction(inter){
           return inter.reply({ content: `❌ Ya tienes 2 fusiones activas (máx 1 por bioma). Cancela una primero.`, flags: MessageFlags.Ephemeral });
         }
                 const modal=new ModalBuilder().setCustomId(`modal_fusion_${fusionId}_${havePet.replace(/\s+/g,'_')}`).setTitle(`Fusión ${FUSIONES[fusionId].label}`);
-const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de Roblox').setPlaceholder('Ej: Nico123 - SOLO username').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(20); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
+const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Usuario Roblox').setPlaceholder('Ej: Nico123 - SOLO username').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(20); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
       }
             if(inter.customId.startsWith('fusion_join_') &&!inter.customId.includes('_have_')){
         const ownerId=inter.customId.replace('fusion_join_',''); const req=fusionesQueue.find(r=>r.userId===ownerId); if(!req) return inter.reply({ content: '❌ Ya no existe.', flags: MessageFlags.Ephemeral }); if(req.userId===inter.user.id) return inter.reply({ content: '❌ No puedes contigo mismo.', flags: MessageFlags.Ephemeral });
@@ -3517,7 +3518,7 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user d
       if(inter.customId.startsWith('fusion_join_have_')){
         const rest=inter.customId.replace('fusion_join_have_',''); const ownerId=rest.split('_')[0]; const havePet=rest.replace(`${ownerId}_`,'').replace(/_/g,' ');
                 const modal=new ModalBuilder().setCustomId(`modal_fusion_join_${ownerId}_${havePet.replace(/\s+/g,'_')}`).setTitle('Roblox User');
-const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de Roblox').setPlaceholder('Ej: Nico123 - SOLO username').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(20); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
+const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Usuario Roblox').setPlaceholder('Ej: Nico123 - SOLO username').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(20); modal.addComponents(new ActionRowBuilder().addComponents(input)); return inter.showModal(modal);
       }
             if(inter.customId.startsWith('fusion_cancel_')){
         const ownerId=inter.customId.replace('fusion_cancel_',''); if(inter.user.id!==ownerId &&!isMod(inter.member)) return inter.reply({ content: '❌ No puedes.', flags: MessageFlags.Ephemeral });
