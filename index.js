@@ -1494,7 +1494,7 @@ const qIndex = Math.floor(Math.random()*3);
     const pistas = [`Corta el ${cables[correct]} - es el único que NO está en Volcán`,`El cable ${cables[correct]} es el que sobra`,`¡${cables[correct]} es el seguro! Los otros 3 explotan`];
     minijuegoActivo.set(userId, { tipo:'bomba', stage:1, cables, correct, start:Date.now() });
     const embed = new EmbedBuilder().setColor(0xED4245).setTitle('💣 FASE 1/3 - CORTA EL CABLE').setDescription(`**${pistas[Math.floor(Math.random()*pistas.length)]}**\n\n${cables.map((c,i)=>`${c} Cable ${i+1}`).join(' | ')}\n\n> Tienes 8s o explota`);
-    const row = new ActionRowBuilder().addComponents(...cables.map((c,i)=> new ButtonBuilder().setCustomId(`minijuego_bomba_cable_${i}`).setLabel(`${c} Cable ${i+1}`).setStyle(i===correct?ButtonStyle.Success:ButtonStyle.Danger).setStyle(ButtonStyle.Secondary)));
+    const row = new ActionRowBuilder().addComponents(...cables.map((c,i)=> new ButtonBuilder().setCustomId(`minijuego_bomba_cable_${i}`).setLabel(`${c} Cable ${i+1}`).setStyle(ButtonStyle.Secondary).setEmoji(c)));
     await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral });
     const to = setTimeout(async()=>{ const st=minijuegoActivo.get(userId); if(st?.stage===1){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); data.weekly=Math.max(0,data.weekly-10); await saveMinijuegos(userId); inter.editReply({ content:'💥 ¡BOOM! No cortaste a tiempo -10 pts', embeds:[], components:[] }).catch(()=>{}); } }, 8000);
     minijuegoActivo.get(userId).timeout=to; return;
@@ -1504,7 +1504,7 @@ const qIndex = Math.floor(Math.random()*3);
     const idx = parseInt(inter.customId.split('_').pop()); clearTimeout(st.timeout);
     if(idx!==st.correct){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); data.weekly=Math.max(0,data.weekly-10); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡CORTE MAL! Era el Cable ${st.correct+1} ${st.cables[st.correct]} -10 pts`, embeds:[], components:[] }); }
     // FASE 2 - MEMORIA
-    await guild.emojis.fetch().catch(()=>{}); const seq=[getRobaEmojis(guild),getRobaEmojis(guild)]; const qPos=Math.floor(Math.random()*4); const correctEmoji=seq[qPos];
+    await guild.emojis.fetch().catch(()=>{}); const seq=[getRobaEmojis(guild),getRobaEmojis(guild)]; const qPos=Math.floor(Math.random()*seq.length); const correctEmoji=seq[qPos];
     st.stage=2; st.seq=seq; st.qPos=qPos; st.correctId=correctEmoji.id;
     const embed2 = new EmbedBuilder().setColor(0xF1C40F).setTitle('💣 FASE 2/3 - MEMORIZA 3s').setDescription(seq.map(e=>`${e}`).join(' ') + `\n\n¡Memoriza! Pregunta en 3s...`).setFooter({text:`Pos ${qPos+1}`});
 await inter.update({ embeds:[embed2], components:[] });
