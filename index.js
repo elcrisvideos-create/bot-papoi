@@ -4401,6 +4401,9 @@ async function crearPanelPingRoles(channel){
   await channel.send({ embeds: [embed], components: [row] });
 }
 
+const DIVINO_BOMBA_SUFFIX = '🚨';
+const getBombaRoleName = (pet) => `${pet} ${DIVINO_BOMBA_SUFFIX}`;
+
 async function mostrarMenuConfiguracion(interaction){
   const member = await interaction.guild.members.fetch(interaction.user.id);
   const guild = interaction.guild;
@@ -4422,36 +4425,31 @@ async function mostrarMenuConfiguracion(interaction){
     }
     return new StringSelectMenuBuilder().setCustomId(`select_${categoria}`).setPlaceholder(hasCatRole? `✅ Ya tienes TODOS los ${categoria}` : `Elige ${categoria} - ya tienes ${options.filter(o=>o.default).length}`).setMinValues(0).setMaxValues(options.length).addOptions(options);
   };
-  const buildEventosSelect = () => {
+  const buildExtraSelect = () => {
     const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
     const hasRace = hasRole(RACE_ROLE_NAME);
     const mariposaEmoji = getPetEmoji(guild, 'Floración Mariposas');
     const mariposaObj = mariposaEmoji? { id: mariposaEmoji.id, name: mariposaEmoji.name } : '🦋';
-    const placeholder = (hasButterfly && hasRace) ? `✅ Mariposas + Carreras` : hasButterfly ? `✅ Mariposas` : hasRace ? `✅ Carreras` : `🦋🏁 Elige eventos`;
-    return new StringSelectMenuBuilder().setCustomId('select_Eventos').setPlaceholder(placeholder).setMinValues(0).setMaxValues(2).addOptions([
-      { label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Te avisa 1 min antes :15 y :45', emoji: mariposaObj, default: hasButterfly },
-      { label: 'Carreras Mario Kart - cada 30 min', value: RACE_ROLE_NAME, description: 'Te avisa 1 min antes :00 y :30', emoji: '🏁', default: hasRace }
-    ]);
-  };
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca los huevos que quieres\n• Desmarca los que ya no quieres → se te quita el rol solo\n• Marca ⭐ TODOS para recibir todo de una categoría\n\n**${BUTTERFLY_EMOJI} Mariposas:** :15 y :45 - te avisamos 1 min antes\n**${RACE_EMOJI} Carreras:** :00 y :30 - te avisamos 1 min antes\n**🚨 Alerta Extrema:** Marca tu divino fav (ej: Kitsune) y te llegan 2 notis seguidas cuando salga, doble vibración\n\n*El bot guarda en cuanto seleccionas.*`);
-  const buildBombaSelect = () => {
     const options = [];
+    options.push({ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Aviso 1 min antes :15 y :45', emoji: mariposaObj, default: hasButterfly });
+    options.push({ label: 'Carreras Mario Kart - cada 30 min', value: RACE_ROLE_NAME, description: 'Aviso 1 min antes :00 y :30', emoji: '🏁', default: hasRace });
     for(const pet of PETS.Divino){
       const roleName = getBombaRoleName(pet);
       const has = hasRole(roleName);
       const custom = getPetEmoji(guild, pet);
-      const emojiVal = custom? { id: custom.id, name: custom.name } : '💥';
-      options.push({ label: `${pet} - ALERTA EXTREMA`, value: roleName, description: `Multiping cuando salga ${pet}`, emoji: emojiVal, default: has });
+      const emojiVal = custom? { id: custom.id, name: custom.name } : '🚨';
+      options.push({ label: `${pet} - ALERTA EXTREMA`, value: roleName, description: `Doble ping cuando salga ${pet}`, emoji: emojiVal, default: has });
     }
-    return new StringSelectMenuBuilder().setCustomId('select_BOMBA').setPlaceholder(options.filter(o=>o.default).length? `🚨 EXTREMA: ${options.filter(o=>o.default).length} activos` : '🚨 Activa ALERTA EXTREMA Divinos').setMinValues(0).setMaxValues(options.length).addOptions(options);
+    const activos = options.filter(o=>o.default).length;
+    return new StringSelectMenuBuilder().setCustomId('select_EXTRA').setPlaceholder(activos? `🚨🏁 ${activos} activos` : '🚨🏁 Eventos + Alerta Extrema').setMinValues(0).setMaxValues(options.length).addOptions(options.slice(0,25));
   };
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca lo que quieres, desmarca lo que no\n• Marca ⭐ TODOS para todo de una categoría\n\n**${BUTTERFLY_EMOJI} Mariposas:** :15 y :45\n**${RACE_EMOJI} Carreras:** :00 y :30\n**🚨 Alerta Extrema:** Ej: Kitsune 🚨 = 2 notis seguidas cuando salga\n\n*Se guarda al seleccionar.*`);
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
   const row2 = new ActionRowBuilder().addComponents(buildSelect('Eterno'));
   const row3 = new ActionRowBuilder().addComponents(buildSelect('Divino'));
-  const row4 = new ActionRowBuilder().addComponents(buildBombaSelect());
-  const row4b = new ActionRowBuilder().addComponents(buildEventosSelect());
+  const row4 = new ActionRowBuilder().addComponents(buildExtraSelect());
   const row5 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_my_pings').setLabel('📋 Ver Mis Pings').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('btn_cerrar').setLabel('Cerrar').setStyle(ButtonStyle.Danger));
-  return { embeds: [embed], components: [row1, row2, row3, row4, row4b, row5], flags: MessageFlags.Ephemeral };
+  return { embeds: [embed], components: [row1, row2, row3, row4, row5], flags: MessageFlags.Ephemeral };
 }
 
 client.on(Events.InteractionCreate, async inter => {
@@ -4603,23 +4601,32 @@ client.on(Events.InteractionCreate, async inter => {
     }
         if(inter.isStringSelectMenu() && inter.customId.startsWith('select_')){
       const categoria = inter.customId.split('_')[1];
-      if(categoria === 'BOMBA'){
+      if(categoria === 'EXTRA'){
         await inter.deferReply({ flags: MessageFlags.Ephemeral });
         const member = await inter.guild.members.fetch(inter.user.id);
         const guild = inter.guild;
         const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
-        const selected = inter.values;
+        const selectedValues = inter.values;
         let agregados=[], quitados=[];
-        for(const pet of PETS.Divino){
-          const roleName = getBombaRoleName(pet);
-          const newHas = selected.includes(roleName);
+        // Eventos
+        for(const roleName of [BUTTERFLY_ROLE_NAME, RACE_ROLE_NAME]){
+          const newHas = selectedValues.includes(roleName);
           const oldHas = hasRole(roleName);
-          let role = findRole(guild, roleName) || await guild.roles.create({ name: roleName, color: 0xFF0000 }).catch(()=>null);
+          const role = findRole(guild, roleName) || (roleName===RACE_ROLE_NAME? await ensureRaceRole(guild) : await ensureButterflyRole(guild));
           if(newHas &&!oldHas){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(roleName); } }
           else if(!newHas && oldHas){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(roleName); } }
         }
-        let msg = `**💥 BOMBA Divina actualizado:**\n`;
-        if(agregados.length) msg += `✅ Ahora te REVIENTA el cel cuando: **${agregados.join(', ')}**\n`;
+        // Alerta Extrema 🚨
+        for(const pet of PETS.Divino){
+          const roleName = getBombaRoleName(pet);
+          const newHas = selectedValues.includes(roleName);
+          const oldHas = hasRole(roleName);
+          let role = findRole(guild, roleName);
+          if(newHas &&!oldHas){ if(!role){ try{ role = await guild.roles.create({ name: roleName, color: 0xFF0000, reason: 'Alerta extrema' }); }catch{} } if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(roleName); } }
+          else if(!newHas && oldHas){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(roleName); } }
+        }
+        let msg = `**🚨🏁 Extra actualizado:**\n`;
+        if(agregados.length) msg += `✅ Ahora: **${agregados.join(', ')}**\n`;
         if(quitados.length) msg += `❌ Ya no: **${quitados.join(', ')}**\n`;
         if(!agregados.length &&!quitados.length) msg += `Sin cambios.`;
         const updatedMenu = await mostrarMenuConfiguracion(inter);
