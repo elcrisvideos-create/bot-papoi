@@ -612,7 +612,7 @@ function getIAMs(member){
 }
 const SOLO_HOIST = ['papoi mayor','moderador','booster papoi','papoi leyenda','papoi veterano','papoi fiel','papoi activo','papoi'];
 const PETS = {
-  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','TRex','Kraken','Cerberus','Yeti','King Snake'],
+  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','TRex','T-Rex','Kraken','Cerberus','Yeti','King Snake'],
   'Eterno': ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'],
   'Divino': ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn']
 };
@@ -1863,8 +1863,9 @@ function buildEpicSpawnEmbed(guild, data){
 
 function parsePetFromText(text){
   if(!text) return null;
-  const t = text.toLowerCase();
-  for(const pet of ALL_PETS){ if(t.includes(pet.toLowerCase())){ const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet)); return {pet, categoria: cat}; } }
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const t = norm(text);
+  for(const pet of ALL_PETS){ if(t.includes(norm(pet))){ const cat = Object.keys(PETS).find(k=>PETS[k].includes(pet)); return {pet, categoria: cat}; } }
   return null;
 }
 async function ensureMusicaChannel(guild){
