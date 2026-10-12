@@ -4401,9 +4401,6 @@ async function crearPanelPingRoles(channel){
   await channel.send({ embeds: [embed], components: [row] });
 }
 
-const DIVINO_BOMBA_SUFFIX = '🚨';
-const getBombaRoleName = (pet) => `${pet} ${DIVINO_BOMBA_SUFFIX}`;
-
 async function mostrarMenuConfiguracion(interaction){
   const member = await interaction.guild.members.fetch(interaction.user.id);
   const guild = interaction.guild;
