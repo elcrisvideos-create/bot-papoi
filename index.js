@@ -4046,12 +4046,10 @@ client.on(Events.MessageCreate, async msg => {
             if(bombaRole) extraBombaContent = ` ${bombaRole}`;
           }
           await canalTest.send({ content: `${content}${extraBombaContent}`, embeds: [embed], components: [row1, row2], allowedMentions: { parse: ['roles'] } }).catch(()=>{});
-          // MULTIPING BOMBA - 2do mensaje 1.5s después solo si es divino y tiene gente con bomba
           if(bombaRole && parsed.categoria === 'Divino'){
             setTimeout(async()=>{
               try{
-                const bombaEmbed = new EmbedBuilder().setColor(0xFF0000).setTitle(`💥💥 ${parsed.pet.toUpperCase()} SIGUE AHÍ - CORRE 💥💥`).setDescription(`**¡BOMBA DIVINA!** ${bombaRole} tu pet soñado sigue vivo\n\n📍 **${parsed.location}**\n⚡ **${parsed.speed}**\n\n**¡ENTRA YA!**`).setTimestamp();
-                await canalTest.send({ content: `${bombaRole} 💥💥💥`, embeds: [bombaEmbed], allowedMentions: { parse: ['roles'] } }).catch(()=>{});
+                await canalTest.send({ content: `${bombaRole} 💥💥💥`, allowedMentions: { parse: ['roles'] } }).catch(()=>{});
               }catch{}
             }, 1500);
           }
@@ -4822,8 +4820,7 @@ client.on(Events.InteractionCreate, async inter => {
                           if(bombaRole){
                             setTimeout(async()=>{
                               try{
-                                const bombaEmbed = new EmbedBuilder().setColor(0xFF0000).setTitle(`💥💥 ${pet.toUpperCase()} SIGUE AHÍ - CORRE 💥💥`).setDescription(`**¡ALERTA EXTREMA!** ${bombaRole} tu pet sigue vivo\n\n📍 **${lugar}**\n⚡ **20B**\n\n**¡ENTRA YA!**`).setTimestamp();
-                                await canalTest.send({ content: `${bombaRole} 💥💥💥`, embeds: [bombaEmbed], allowedMentions: { parse: ['roles'] } });
+                                await canalTest.send({ content: `${bombaRole} 💥💥💥`, allowedMentions: { parse: ['roles'] } });
                               }catch{}
                             }, 1500);
                             await inter.editReply({ content: `✅ Test doble ping enviado a ${canalTest}\nPet: **${pet}** con rol **${bombaRole.name}**\n\n1er mensaje ahora + 2do en 1.5s. Revisa si te llegan 2 notificaciones.` });
