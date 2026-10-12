@@ -1283,15 +1283,18 @@ async function crearPanelMinijuegos(guild){
   const { juegos } = await ensureMinijuegosChannels(guild);
   if(!juegos) return;
   try{ const msgs=await juegos.messages.fetch({limit:30}).catch(()=>null); if(msgs){ for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,200)); } } }catch{}
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🎮 MINIJUEGOS PAPOI - VS BOT • ANTI-MACRO').setDescription(
-    `**Todo es contra el bot y 100% random para que no sirva autoclicker.**\n\n`+
-    `🥚 **Atrapa el Huevo** - Espera random 2-6s, aparece un huevo dorado en 1 de 5 botones random. Si clickeas antes o el botón falso, -5 pts. Mientras más rápido, más puntos (hasta 25).\n\n`+
-    `🎰 **Slot Papoi** - Usa TODOS los emojis de Roba un Huevo. 3 rodillos random. 3 iguales = 50 pts JACKPOT, 2 iguales = 10 pts.\n\n`+
-    `✂ **Piedra Papel Tijera** - Clásico vs bot, el bot elige random al momento. Gana = 15 pts.\n\n`+
-    `🧠 **Memoria Papoi** - Te muestro 3 huevos random 4s y luego pregunto ¿Cuál iba en medio? 4 opciones random. Acierto = 20 pts.\n\n`+
-    `💣 **Huevo Bomba** - Activa el huevo y tienes 1.5-3.5s random para desactivar. Si explota pierdes. Si la salvas = 30 pts.\n\n`+
-    `> Cooldown 8s por juego para evitar spam. Ranking solo orgullo. Campeón semanal gana rol ${MINIJUEGOS_ROL_CAMPEON} automático.`
-  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • Anti-macro • Random'}).setTimestamp();
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🎮 MINIJUEGOS PAPOI - VS BOT • ANTI-MACRO • 8 JUEGOS').setDescription(
+    `**Todo es contra el bot y 100% random para que no sirva autoclicker. Individual y a full color.**\n\n`+
+    `🥚 **Atrapa** - Huevo dorado en 1 de 5 botones. Rápido = 25 pts.\n`+
+    `🎰 **Slot** - 3 rodillos con TODOS tus emojis. 3 iguales = 50 pts JACKPOT.\n`+
+    `✂ **PPT** - Piedra Papel Tijera vs bot. Gana = 15 pts.\n`+
+    `🧠 **Memoria** - Memoriza 3 huevos, ¿cuál iba en medio? 20 pts.\n`+
+    `💣 **Bomba V2** - 3 fases: cables, memoria y QTE 0.8s. +60 pts épico.\n\n`+
+    `🌈 **Chroma Break** - Simon épico a color 🔴🔵🟡🟢 + pet random. Secuencia 3-5 pasos. Perfect = +75 pts. Embed cambia de color en vivo.\n`+
+    `🔨 **Whack-a-Egg** - Grid 3x3, 10 huevos aparecen random 1.1s. Dale al que brilla. Divino 50 pts.\n`+
+    `🏰 **Odyssey** - Roguelike 5 biomas: 🌲 Bosque → 🌋 Volcán → 🌊 Océano → ☁️ Cielo → 🌌 Cosmos. Vida ❤️❤️❤️. Final +100 pts.\n\n`+
+    `> Cooldown 8s. Campeón semanal gana rol ${MINIJUEGOS_ROL_CAMPEON} automático.`
+  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • 8 Juegos • Colorido'}).setTimestamp();
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('minijuego_atrapa').setLabel('🥚 Atrapa').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('minijuego_slot').setLabel('🎰 Slot').setStyle(ButtonStyle.Primary),
