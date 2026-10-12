@@ -2810,7 +2810,7 @@ async function handleApoyoInteraction(inter){
         } else if(tipo === 'robux_directo'){
           const modal = new ModalBuilder().setCustomId('modal_apoyo_robux').setTitle('Donación Robux Directa');
           const cant = new TextInputBuilder().setCustomId('cantidad').setLabel('¿Cuánto Robux donaste?').setPlaceholder('Ej: 100').setStyle(TextInputStyle.Short).setRequired(true);
-          const userRoblox = new TextInputBuilder().setCustomId('robloxUser').setLabel('Tu user de 【entity-Roblox¦canonical_name=Roblox】').setPlaceholder('Ej: Joss123').setStyle(TextInputStyle.Short).setRequired(true);
+          const userRoblox = new TextInputBuilder().setCustomId('robloxUser').setLabel('Usuario Roblox').setPlaceholder('Ej: Joss123').setStyle(TextInputStyle.Short).setRequired(true);
           modal.addComponents(new ActionRowBuilder().addComponents(cant), new ActionRowBuilder().addComponents(userRoblox));
           return inter.showModal(modal);
         } else if(tipo === 'efectivo'){
