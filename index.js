@@ -28,6 +28,7 @@ const axios = require('axios');
 let Groq = null;
 let groq = null;
 let aiCooldown = new Map();
+let groqCache = new Map(); // cache 1h para economizar egress Groq
 const GROSIERIAS = ['verga','vrg','hdp','ptm','ctm','mierda','pito','puta','puto','chinga'];
 try {
   Groq = require('groq-sdk');
@@ -1960,10 +1961,13 @@ function buildEpicSpawnEmbed(guild, data){
 
 async function handleDebugSpawns(inter){
   await inter.deferReply({ flags: MessageFlags.Ephemeral });
+  if(!isOwner(inter.user.id)) return inter.editReply({ content: '❌ Solo owner', flags: MessageFlags.Ephemeral });
+  const cd = checkCooldown(inter.user.id, 'debug-spawns', 3600);
+  if(cd>0) return inter.editReply({ content: `⏳ Cooldown ${cd}s (1h) - economizando`, flags: MessageFlags.Ephemeral });
   const apariciones = inter.guild.channels.cache.find(c => c.name.toLowerCase().includes('apariciones-en-vivo'));
   if(!apariciones) return inter.editReply('❌ No encontré #apariciones-en-vivo');
   const seen = new Map(); let lastId = null; let fetched = 0;
-  for(let i=0;i<20;i++){
+  for(let i=0;i<3;i++){
     const msgs = await apariciones.messages.fetch({ limit: 100,...(lastId?{before:lastId}:{}) }).catch(()=>null);
     if(!msgs || msgs.size===0) break; fetched+=msgs.size;
     for(const m of msgs.values()){ lastId=m.id; if(!m.embeds[0]) continue; const d=m.embeds[0].description||''; const p=parsePetFromText(d); if(p &&!seen.has(p.pet)) seen.set(p.pet,{pet:p.pet, cat:p.categoria, desc:d.slice(0,300), title:m.embeds[0].title, date:new Date(m.createdTimestamp).toLocaleString()}); }
@@ -4138,15 +4142,6 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 });
 
 client.on(Events.MessageCreate, async msg => {
-  // --- LOGGER RAW SENZ - PARA DEBUG NUEVO FORMATO ---
-  if(msg.guild && msg.author.bot && msg.author.id !== client.user.id){
-    const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || ['1554960611497086998','1554960608686903417','1559086915205074944'].includes(msg.channel.id) || msg.channel.name.toLowerCase().includes('huevo-secreto') || msg.channel.name.toLowerCase().includes('spawns') || (msg.channel.name||'').toLowerCase().includes('secret');
-    if(esApariciones){
-      console.log(`🔍 SENZ RAW [${msg.channel.name} - ${msg.channel.id}] bot=${msg.author.id} | content="${(msg.content||'').slice(0,300)}" | embeds=${msg.embeds.length}`);
-      msg.embeds.forEach((e,i)=>{ console.log(` 🔎 EMBED ${i} | title="${e.title||''}" | desc="${(e.description||'').slice(0,800)}" | fields=${(e.fields||[]).map(f=>`${f.name}:${f.value.slice(0,100)}`).join(' | ')}`); });
-      if(!msg.embeds.length && msg.content) console.log(` 📝 CONTENT ONLY: ${msg.content.slice(0,1000)}`);
-    }
-  }
   // --- REPLICADOR ÉPICO TEST (ANTES del filtro bot) ---
   if(msg.guild && msg.author.bot && msg.author.id !== client.user.id){
     const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || ['1554960611497086998','1554960608686903417','1559086915205074944'].includes(msg.channel.id) || msg.channel.name.toLowerCase().includes('huevo-secreto') || msg.channel.name.toLowerCase().includes('spawns') || (msg.channel.name||'').toLowerCase().includes('secret');
@@ -4372,6 +4367,14 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
 
       const pregunta = msg.content.replace(/<@!?\d+>/g,'').replace(/papoi ia/gi,'').replace(/papoi/gi,'').trim().slice(0,500);
       if(!pregunta) return;
+      const cacheKey = `${pregunta.toLowerCase()}-${esOwner?'owner':'user'}`;
+      if(groqCache.has(cacheKey)){
+        const cached = groqCache.get(cacheKey);
+        if(Date.now() - cached.ts < 3600000){
+          await msg.reply({ content: cached.resp.slice(0,1800), allowedMentions: { parse: [] } });
+          return;
+        }
+      }
 
       const modelos = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama3-8b-8192"];
       let chat = null;
@@ -4421,6 +4424,8 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
         return;
       }
       const respuesta = chat.choices[0]?.message?.content || "W papoi me quedé en blanco jaja";
+      groqCache.set(cacheKey, { resp: respuesta, ts: Date.now() });
+      if(groqCache.size>100){ const first = groqCache.keys().next().value; groqCache.delete(first); }
       let finalRespuesta = respuesta
        .replace(/@everyone/gi, '@\u200Beveryone')
        .replace(/@here/gi, '@\u200Bhere')
