@@ -1915,11 +1915,13 @@ function parseSenZSpawn(msg){
     if(!egg) return null;
     const parsed = parsePetFromText(egg);
     if(!parsed) return null;
-    // Anti-spam: mismo pet en mismo lugar en 90s no se reenvía
+    // FIX: anti-spam 25s y con cleanup para que no se llene el Map - si salen 2 seguidos del mismo pet ahora SI pasa si es diferente location o pasan 25s
     const key = `${parsed.pet}-${loc}`;
     const now = Date.now();
-    if(_ultimoSpawnEnviado.has(key) && now - _ultimoSpawnEnviado.get(key) < 90000) return null;
+    if(_ultimoSpawnEnviado.has(key) && now - _ultimoSpawnEnviado.get(key) < 25000) { console.log(`⏭️ Spawn duplicado bloqueado ${key} ${(now - _ultimoSpawnEnviado.get(key))/1000}s`); return null; }
     _ultimoSpawnEnviado.set(key, now);
+    // cleanup cada 100 entries
+    if(_ultimoSpawnEnviado.size>200){ for(const [k,v] of _ultimoSpawnEnviado){ if(now-v>120000) _ultimoSpawnEnviado.delete(k); } }
     return { pet: parsed.pet, categoria: parsed.categoria, location: loc || '???', speed, spawnedRaw: spawned, ts: msg.createdTimestamp, joinUrl: spawnsEpicosData.gameUrl };
   }catch{ return null; }
 }
@@ -2885,7 +2887,7 @@ async function handleApoyoInteraction(inter){
         const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
         if(member) await actualizarRolDonador(guild, member, donadoresData.users[userId].puntos);
         await inter.reply({ content: `✅ Confirmado <@${userId}> +${puntos} pts (${tipo}). Total: ${donadoresData.users[userId].puntos} pts -> ${getRangoDonador(donadoresData.users[userId].puntos)||'Sin rol aún'}` });
-        setTimeout(()=> inter.channel.delete().catch(()=>{}), 5000); return;
+        setTimeout(()=> { try { if(inter.channel?.deletable) inter.channel.delete().catch(()=>{}); else if(inter.channel?.delete) inter.channel.delete().catch(()=>{}); } catch{} }, 5000); return;
       }
       if(inter.customId.startsWith('apoyo_mentira_')){
         if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo owner.', flags: MessageFlags.Ephemeral });
@@ -2898,7 +2900,7 @@ async function handleApoyoInteraction(inter){
           if(member){ const banRole = findRole(guild, DONADOR_ROLES.baneado); if(banRole) await member.roles.add(banRole).catch(()=>{}); }
           await inter.reply({ content: `🚫 <@${userId}> 3 fakes -> baneado del sistema donador.` });
         } else { await inter.reply({ content: `❌ Marcado como mentira <@${userId}> - Fake ${donadoresData.users[userId].fakes}/3` }); }
-        setTimeout(()=> inter.channel.delete().catch(()=>{}), 5000); return;
+        setTimeout(()=> { try{ if(inter.channel?.deletable) inter.channel.delete().catch(()=>{}); }catch{} }, 5000); return;
       }
       if(inter.customId.startsWith('apoyo_modificar_')){
         if(!isOwner(inter.user.id)) return inter.reply({ content: '❌ Solo owner.', flags: MessageFlags.Ephemeral });
@@ -2995,7 +2997,7 @@ async function handleApoyoInteraction(inter){
         const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(()=>null);
         if(member) await actualizarRolDonador(guild, member, donadoresData.users[userId].puntos);
         await inter.reply({ content: `✅ Modificado y confirmado <@${userId}> +${cantidadReal} pts (${tipoReal}). Total: ${donadoresData.users[userId].puntos}` });
-        setTimeout(()=> inter.channel.delete().catch(()=>{}), 5000); return;
+        setTimeout(()=> { try{ if(inter.channel?.deletable) inter.channel.delete().catch(()=>{}); }catch{} }, 5000); return;
       }
     }
   }catch(e){ console.log('Apoyo error', e); if(!inter.replied) inter.reply({ content: `❌ ${e.message}`, flags: MessageFlags.Ephemeral }).catch(()=>{}); }
@@ -3634,7 +3636,7 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Usuario R
           if(isMod(inter.member) || inter.channel.name.includes('fusion-')){
             await inter.reply({ content: '⚠️ Datos perdidos por reinicio. Borrando canal como MOD...', flags: MessageFlags.Ephemeral }).catch(()=>{});
             setTimeout(async ()=>{
-              await inter.channel.delete().catch(()=>{});
+              try{ if(inter.channel?.deletable) await inter.channel.delete().catch(()=>{}); }catch{}
               fusionesActivas.delete(inter.channelId);
               await saveFusionesActivas();
             }, 2000);
@@ -3650,7 +3652,7 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Usuario R
             const log=findChannel(guild, CONFIG.channels.fusionesLogs) || findChannel(guild, CONFIG.channels.staffSanciones); if(log) log.send({ content: `✅ Fusión EXITOSA ${FUSIONES[data.fusionId].label} - <@${data.users[0]}> + <@${data.users[1]}>` }).catch(()=>{});
             await inter.reply({ content: '✅ Exitosa! Cerrando en 10s...' });
             setTimeout(async ()=>{
-              await inter.channel.delete().catch(()=>{});
+              try{ if(inter.channel?.deletable) await inter.channel.delete().catch(()=>{}); }catch{}
               fusionesActivas.delete(inter.channelId);
               await saveFusionesActivas();
             }, 10000);
@@ -3662,7 +3664,7 @@ const input=new TextInputBuilder().setCustomId('robloxUser').setLabel('Usuario R
           if(otherReq){ fusionesQueue.push({...otherReq, createdAt: Date.now(), messageId: null }); await postBusquedaFusion(guild, fusionesQueue[fusionesQueue.length-1]); }
           await inter.reply({ content: `❌ Cancelada, <@${otherId}> vuelve a búsqueda.` });
           setTimeout(async ()=>{
-            await inter.channel.delete().catch(()=>{});
+            try{ if(inter.channel?.deletable) await inter.channel.delete().catch(()=>{}); }catch{}
             fusionesActivas.delete(inter.channelId);
             await saveFusionesActivas();
             await saveFusiones();
@@ -4136,11 +4138,23 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 });
 
 client.on(Events.MessageCreate, async msg => {
+  // --- LOGGER RAW SENZ - PARA DEBUG NUEVO FORMATO ---
+  if(msg.guild && msg.author.bot && msg.author.id !== client.user.id){
+    const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || ['1554960611497086998','1554960608686903417','1559086915205074944'].includes(msg.channel.id) || msg.channel.name.toLowerCase().includes('huevo-secreto') || msg.channel.name.toLowerCase().includes('spawns') || (msg.channel.name||'').toLowerCase().includes('secret');
+    if(esApariciones){
+      console.log(`🔍 SENZ RAW [${msg.channel.name} - ${msg.channel.id}] bot=${msg.author.id} | content="${(msg.content||'').slice(0,300)}" | embeds=${msg.embeds.length}`);
+      msg.embeds.forEach((e,i)=>{ console.log(` 🔎 EMBED ${i} | title="${e.title||''}" | desc="${(e.description||'').slice(0,800)}" | fields=${(e.fields||[]).map(f=>`${f.name}:${f.value.slice(0,100)}`).join(' | ')}`); });
+      if(!msg.embeds.length && msg.content) console.log(` 📝 CONTENT ONLY: ${msg.content.slice(0,1000)}`);
+    }
+  }
   // --- REPLICADOR ÉPICO TEST (ANTES del filtro bot) ---
-  if(msg.guild && msg.author.bot){
-    const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || ['1554960611497086998','1554960608686903417','1559086915205074944'].includes(msg.channel.id) || msg.channel.name.toLowerCase().includes('huevo-secreto') || msg.channel.name.toLowerCase().includes('spawns');
+  if(msg.guild && msg.author.bot && msg.author.id !== client.user.id){
+    const esApariciones = (msg.channel.name||'').toLowerCase().includes('apariciones') || ['1554960611497086998','1554960608686903417','1559086915205074944'].includes(msg.channel.id) || msg.channel.name.toLowerCase().includes('huevo-secreto') || msg.channel.name.toLowerCase().includes('spawns') || (msg.channel.name||'').toLowerCase().includes('secret');
     if(esApariciones && msg.embeds.length){
-      const parsed = parseSenZSpawn(msg);
+      // FIX: ahora parsea TODOS los embeds, no solo [0] - por eso te perdias 1 de 2 seguidos
+      for(const emb of msg.embeds){
+        const parsed = parseSenZSpawn({...msg, embeds: [emb] });
+        if(!parsed) continue;
       if(parsed){
         try{
           const guild = msg.guild;
@@ -4176,6 +4190,7 @@ client.on(Events.MessageCreate, async msg => {
       }
     }
     return;
+  }
   }
   if(!msg.guild || msg.author.bot) return;
   const member = msg.member;
