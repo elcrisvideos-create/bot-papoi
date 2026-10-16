@@ -1935,7 +1935,7 @@ function buildEpicSpawnEmbed(guild, data){
   const color = getColorByCategoria(data.categoria);
   const catRoleName = CATEGORY_ROLES[data.categoria];
   const petEmojiObj = getPetEmoji(guild, data.pet); // emoji custom pequeño para título
-  const petEmojiUrl = (()=>{ try{ const name = PET_EMOJI_MAP[data.pet]; const e = guild.emojis.cache.find(x=>x.name.toLowerCase()===name.toLowerCase()); return e? e.url : null; }catch{ return null; } })();
+  const petEmojiUrl = (()=>{ try{ const name = PET_EMOJI_MAP[data.pet]; const e = guild.emojis.cache.find(x=>x.name.toLowerCase()===name.toLowerCase()); return e? e.imageURL() : null; }catch{ return null; } })();
   const catEmoji = getCategoriaEmoji(guild, data.categoria);
   const tituloEmoji = petEmojiObj ? `${petEmojiObj}` : '🥚';
   const embed = new EmbedBuilder()
