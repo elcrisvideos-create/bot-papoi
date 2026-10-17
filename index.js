@@ -3219,7 +3219,7 @@ async function checkRaceEvent(){
       payload.files = [{ attachment: source, name: fileName }];
     }
     const embed = buildRaceEmbed(guild, target, fileName || raceData.customImageUrl);
-    payload.content = role? `${role} ${RACE_EMOJI} **¡Carrera empieza en 1 minuto! Ve al portal!**` : `${RACE_EMOJI} **¡Carrera en 1 minuto!**`;
+    payload.content = role? `${role} ${RACE_EMOJI} **¡EL TREN FANTASMA LLEGA EN 1 MINUTO**` : `${RACE_EMOJI} **¡Carrera en 1 minuto!**`;
     payload.embeds = [embed];
 
     await ch.send(payload).catch(e=>console.log('Race send fail', e.message));
