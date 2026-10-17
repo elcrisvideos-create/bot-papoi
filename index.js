@@ -77,7 +77,7 @@ const CONFIG = {
     chambeadoresLogs: ['chambeadores-logs', '📋│chambeadores-logs', 'logs-chambeadores'],
     chambeadoresChat: ['chat-chambeadores', '💬│chat-chambeadores', 'chat chambeadores', 'chambeadores-chat'],
     predicciones: ['predicciones-huevos', '🔮│predicciones', 'predicciones', 'predicciones-papoi'],
-    carreras: ['carreras', '🏁│carreras', '🏁 | carreras', 'carreras-papoi', 'mario-kart'],
+    carreras: ['tren-fantasma', '🚂│tren-fantasma', 'tren fantasma', 'fantasma', 'carreras', '🏁│carreras', '🏁 | carreras', 'carreras-papoi', 'mario-kart'],
     sorteos: ['sorteos', '🎁│sorteos', '🎁 | sorteos', 'sorteo-papoi', 'sorteo'],
     sorteosPrivado: ['sorteo-test', 'test-sorteo', 'sorteo-privado'],
     adminAbuse: ['admin-abuse', '👑│admin-abuse', '⏰│admin-abuse', '💥│admin-abuse', 'admin-abuse-countdown'],
@@ -702,10 +702,10 @@ const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
 const BUTTERFLY_EMOJI = '<:Mariposa:1556413173500739656>';
 const BUTTERFLY_CHANNEL_NAME = '🦋 | floracion-mariposas';
-// --- CARRERAS MARIO KART ---
-const RACE_ROLE_NAME = '🏁 Carreras';
-const RACE_EMOJI = '🏁';
-const RACE_CHANNEL_NAME = '🏁│carreras';
+// --- TREN FANTASMA (antes CARRERAS) ---
+const RACE_ROLE_NAME = '🚂 Tren Fantasma';
+const RACE_EMOJI = '🚂';
+const RACE_CHANNEL_NAME = '🚂│tren-fantasma';
 const RACE_DATA_PATH = path.join(DATA_DIR, 'carreras.json');
 let raceData = safeLoadJSON(RACE_DATA_PATH, { channelId: null, messageId: null, customImageUrl: null, customLocalPath: null, customIsVideo: false });
 const saveSorteos = async () => {
@@ -843,12 +843,15 @@ async function ensureButterflyRole(guild){
   return role;
 }
 async function ensureRaceRole(guild){
-  let role = findRole(guild, RACE_ROLE_NAME);
+  let role = findRole(guild, RACE_ROLE_NAME) || findRole(guild, '🏁 Carreras') || findRole(guild, 'carreras') || guild.roles.cache.find(r=>r.name.toLowerCase().includes('carreras'));
+  if(role && role.name !== RACE_ROLE_NAME){
+    try{ await role.edit({ name: RACE_ROLE_NAME }); console.log(`♻️ Rol renombrado: ${role.name} -> ${RACE_ROLE_NAME}`); }catch(e){ console.log('Error renombrando rol tren', e.message); }
+  }
   if(!role){
     try{
-      role = await guild.roles.create({ name: RACE_ROLE_NAME, color: 0xFF0000, reason: 'Rol para evento Carreras Mario Kart 🏁', mentionable: true });
+      role = await guild.roles.create({ name: RACE_ROLE_NAME, color: 0x6A0DAD, reason: 'Rol para evento Tren Fantasma 🚂', mentionable: true });
       console.log(`✅ Rol auto-creado: ${RACE_ROLE_NAME}`);
-    }catch(e){ console.log('Error creando rol carreras', e.message); return null; }
+    }catch(e){ console.log('Error creando rol tren fantasma', e.message); return null; }
   }
   return role;
 }
@@ -867,15 +870,15 @@ function getNextRaceDate(){
 function buildRaceEmbed(guild, target, attachFilename = null){
   const unix = Math.floor(target.getTime()/1000);
   const embed = new EmbedBuilder()
- .setColor(0xFF0000)
- .setTitle(`${RACE_EMOJI} ¡PRÓXIMA CARRERA EN 1 MINUTO!`)
+ .setColor(0x6A0DAD)
+ .setTitle(`${RACE_EMOJI} ¡EL TREN FANTASMA LLEGA EN 1 MINUTO!`)
  .setDescription(
-    `**Próxima carrera en:** <t:${unix}:R> - <t:${unix}:F>\n\n`+
-    `El evento **CARRERAS** empieza en **1 minuto**\n`+
-    `📍 Ve al portal para entrar a la carrera\n`+
-    `${RACE_EMOJI} ¡Corre por el 1er lugar!\n`
+    `**Próximo tren en:** <t:${unix}:R> - <t:${unix}:F>\n\n`+
+    `El evento **TREN FANTASMA** llega en **1 minuto**\n`+
+    `📍 Ve a la estación para subirte al tren\n`+
+    `${RACE_EMOJI} ¡No te quedes fuera! The Phantom Express has arrived!\n`
   )
- .setFooter({ text: `Papois Empire • ${RACE_EMOJI} Carreras cada 30 min` })
+ .setFooter({ text: `Papois Empire • ${RACE_EMOJI} Tren Fantasma cada 30 min` })
  .setTimestamp(target);
   const iconR = guild.iconURL({ extension: 'png', size: 128 });
   if(iconR) embed.setThumbnail(iconR);
@@ -905,11 +908,16 @@ async function ensureRaceChannel(guild){
       name: RACE_CHANNEL_NAME,
       type: ChannelType.GuildText,
       parent: categoria?.id || null,
-      topic: '🏁 Carreras Mario Kart cada 30 min - Aviso 1 min antes',
+      topic: '🚂 Tren Fantasma cada 30 min - Aviso 1 min antes - The Phantom Express has arrived!',
       permissionOverwrites: overwrites
     }).catch(()=>null);
   } else {
     try{
+      if(canal.name !== RACE_CHANNEL_NAME){
+        await canal.setName(RACE_CHANNEL_NAME).catch(()=>{});
+        await canal.setTopic('🚂 Tren Fantasma cada 30 min - Aviso 1 min antes - The Phantom Express has arrived!').catch(()=>{});
+        console.log(`♻️ Canal renombrado: ${RACE_CHANNEL_NAME}`);
+      }
       if(categoria && canal.parentId!== categoria.id) await canal.setParent(categoria.id).catch(()=>{});
       await canal.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: true, ReadMessageHistory: true, SendMessages: false }).catch(()=>{});
       await canal.permissionOverwrites.edit(client.user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, ManageMessages: true, AttachFiles: true, ManageChannels: true }).catch(()=>{});
