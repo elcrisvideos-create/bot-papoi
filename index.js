@@ -217,6 +217,7 @@ function safeSaveJSON(filePath, data) {
 }
 
 let xpData = safeLoadJSON(XP_PATH, {});
+let xpDirty = new Set(); // BATCH SAVE cada 5m para economizar Egress
 let tiktokCache = safeLoadJSON(TIKTOK_PATH, { lastVideoId: null, isLiveNow: false });
 const FUSIONES_PATH = path.join(DATA_DIR, 'fusiones.json');
 const FUSIONES_ACTIVAS_PATH = path.join(DATA_DIR, 'fusiones_activas.json');
@@ -584,6 +585,20 @@ setInterval(()=>{
     }
   }
 }, 15*60*1000);
+
+setInterval(async ()=>{
+  if(xpDirty.size===0) return;
+  try{
+    if(useMongo && XpModel){
+      for(const uid of xpDirty){
+        await XpModel.findOneAndUpdate({ userId: uid }, { xp: xpData[uid]||0 }, { upsert: true }).catch(()=>{});
+      }
+    }
+    safeSaveJSON(XP_PATH, xpData);
+    xpDirty.clear();
+    console.log(`💾 Batch XP guardado: ${Object.keys(xpData).length} users`);
+  }catch(e){ console.log(`Error batch XP: ${e.message}`); }
+}, 5*60*1000); // cada 5m economiza 80% Egress
 
 const NIVELES = [
   { name: 'Papoi', xp: 0, multi: 1.0, iaMs: 5000, sorteoExtra: 0, fusionStar: false },
@@ -4454,10 +4469,7 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
     const gana = Math.floor(base * multi);
     xpData[msg.author.id] = (xpData[msg.author.id]||0) + gana;
     lastXP.set(msg.author.id, ahora);
-    safeSaveJSON(XP_PATH, xpData);
-    if (useMongo && XpModel) {
-      XpModel.findOneAndUpdate({ userId: msg.author.id }, { xp: xpData[msg.author.id] }, { upsert: true }).catch(e=>console.log(`Error XP Mongo: ${e.message}`));
-    }
+    xpDirty.add(msg.author.id); // solo memoria, se guarda en batch cada 5m
     for(const nivel of NIVELES){
       if(xpData[msg.author.id] >= nivel.xp){
         const rol = findRole(msg.guild, nivel.name);
