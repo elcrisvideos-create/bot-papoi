@@ -1317,18 +1317,14 @@ async function crearPanelMinijuegos(guild){
   const { juegos } = await ensureMinijuegosChannels(guild);
   if(!juegos) return;
   try{ const msgs=await juegos.messages.fetch({limit:30}).catch(()=>null); if(msgs){ for(const m of msgs.filter(m=>m.author.id===client.user.id).values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,200)); } } }catch{}
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🎮 MINIJUEGOS PAPOI - VS BOT • ANTI-MACRO • 8 JUEGOS').setDescription(
-    `**Todo es contra el bot y 100% random para que no sirva autoclicker. Individual y a full color.**\n\n`+
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🎮 MINIJUEGOS PAPOI - VS BOT • 4 JUEGOS LIGEROS').setDescription(
+    `**Todo es contra el bot y 100% random. Individual y ligero.**\n\n`+
     `🥚 **Atrapa** - Huevo dorado en 1 de 5 botones. Rápido = 25 pts.\n`+
     `🎰 **Slot** - 3 rodillos con TODOS tus emojis. 3 iguales = 50 pts JACKPOT.\n`+
     `✂ **PPT** - Piedra Papel Tijera vs bot. Gana = 15 pts.\n`+
-    `🧠 **Memoria** - Memoriza 3 huevos, ¿cuál iba en medio? 20 pts.\n`+
-    `💣 **Bomba V2** - 3 fases: cables, memoria y QTE 0.8s. +60 pts épico.\n\n`+
-    `🌈 **Chroma Break** - Simon épico a color 🔴🔵🟡🟢 + pet random. Secuencia 3-5 pasos. Perfect = +75 pts. Embed cambia de color en vivo.\n`+
-    `🔨 **Whack-a-Egg** - Grid 3x3, 10 huevos aparecen random 1.1s. Dale al que brilla. Divino 50 pts.\n`+
-    `🏰 **Odyssey** - Roguelike 5 biomas: 🌲 Bosque → 🌋 Volcán → 🌊 Océano → ☁️ Cielo → 🌌 Cosmos. Vida ❤️❤️❤️. Final +100 pts.\n\n`+
+    `🧠 **Memoria** - Memoriza 3 huevos, ¿cuál iba en medio? 20 pts.\n\n`+
     `> Cooldown 8s. Campeón semanal gana rol ${MINIJUEGOS_ROL_CAMPEON} automático.`
-  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • 8 Juegos • Colorido'}).setTimestamp();
+  ).setThumbnail(guild.iconURL()).setFooter({text:'Papois Empire • 4 Juegos • Optimizado'}).setTimestamp();
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('minijuego_atrapa').setLabel('🥚 Atrapa').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('minijuego_slot').setLabel('🎰 Slot').setStyle(ButtonStyle.Primary),
@@ -1336,15 +1332,9 @@ async function crearPanelMinijuegos(guild){
   );
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('minijuego_memoria').setLabel('🧠 Memoria').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('minijuego_bomba').setLabel('💣 Bomba').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('minijuego_mis').setLabel('📊 Mis Stats').setStyle(ButtonStyle.Secondary),
   );
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('minijuego_chroma').setLabel('🌈 Chroma').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('minijuego_whack').setLabel('🔨 Whack').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('minijuego_odyssey').setLabel('🏰 Odyssey').setStyle(ButtonStyle.Secondary),
-  );
-  await juegos.send({ embeds:[embed], components:[row1,row2,row3] });
+  await juegos.send({ embeds:[embed], components:[row1,row2] });
   return juegos;
 }
 async function crearPanelTops(guild){
@@ -1527,119 +1517,22 @@ const qIndex = Math.floor(Math.random()*3);
     }
   }
 
-  // --- BOMBA NUCLEAR PAPOI V2 ÉPICA ---
-  if(inter.customId==='minijuego_bomba'){
-    const prevB = minijuegoActivo.get(userId);
-    if(prevB?.timeout) clearTimeout(prevB.timeout);
-    if(prevB?.timeoutEscapa) clearTimeout(prevB.timeoutEscapa);
-    await guild.emojis.fetch().catch(()=>{});
-    const cables = ['🔴','🔵','🟡','🟢'].sort(()=>Math.random()-0.5);
-    const correct = Math.floor(Math.random()*4);
-    const pistas = [`Corta el ${cables[correct]} - es el único que NO está en Volcán`,`El cable ${cables[correct]} es el que sobra`,`¡${cables[correct]} es el seguro! Los otros 3 explotan`];
-    minijuegoActivo.set(userId, { tipo:'bomba', stage:1, cables, correct, start:Date.now() });
-    const embed = new EmbedBuilder().setColor(0xED4245).setTitle('💣 FASE 1/3 - CORTA EL CABLE').setDescription(`**${pistas[Math.floor(Math.random()*pistas.length)]}**\n\n${cables.map((c,i)=>`${c} Cable ${i+1}`).join(' | ')}\n\n> Tienes 8s o explota`);
-    const row = new ActionRowBuilder().addComponents(...cables.map((c,i)=> new ButtonBuilder().setCustomId(`minijuego_bomba_cable_${i}`).setLabel(`${c} Cable ${i+1}`).setStyle(ButtonStyle.Secondary).setEmoji(c)));
-    await inter.reply({ embeds:[embed], components:[row], flags: MessageFlags.Ephemeral });
-    const to = setTimeout(async()=>{ const st=minijuegoActivo.get(userId); if(st?.stage===1){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); data.weekly=Math.max(0,data.weekly-10); await saveMinijuegos(userId); inter.editReply({ content:'💥 ¡BOOM! No cortaste a tiempo -10 pts', embeds:[], components:[] }).catch(()=>{}); } }, 8000);
-    minijuegoActivo.get(userId).timeout=to; return;
+    // --- BOMBA ELIMINADA MODO LIGERO ---
+  if(inter.customId==='minijuego_bomba' || inter.customId.startsWith('minijuego_bomba_') || inter.customId==='minijuego_bomba_final'){
+    return inter.reply({ content: '💣 Bomba deshabilitada (modo ligero)', flags: MessageFlags.Ephemeral });
   }
-  if(inter.customId.startsWith('minijuego_bomba_cable_')){
-    const st = minijuegoActivo.get(userId); if(!st || st.stage!==1) return inter.reply({ content:'❌ Bomba ya explotó', flags: MessageFlags.Ephemeral });
-    const idx = parseInt(inter.customId.split('_').pop()); clearTimeout(st.timeout);
-    if(idx!==st.correct){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); data.weekly=Math.max(0,data.weekly-10); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡CORTE MAL! Era el Cable ${st.correct+1} ${st.cables[st.correct]} -10 pts`, embeds:[], components:[] }); }
-    // FASE 2 - MEMORIA
-    await guild.emojis.fetch().catch(()=>{}); const seq=[getRobaEmojis(guild),getRobaEmojis(guild)]; const qPos=Math.floor(Math.random()*seq.length); const correctEmoji=seq[qPos];
-    st.stage=2; st.seq=seq; st.qPos=qPos; st.correctId=correctEmoji.id;
-    const embed2 = new EmbedBuilder().setColor(0xF1C40F).setTitle('💣 FASE 2/3 - MEMORIZA 3s').setDescription(seq.map(e=>`${e}`).join(' ') + `\n\n¡Memoriza! Pregunta en 3s...`).setFooter({text:`Pos ${qPos+1}`});
-await inter.update({ embeds:[embed2], components:[] });
-    setTimeout(async()=>{
-      const cur=minijuegoActivo.get(userId); if(!cur || cur.stage!==2) return;
-      const fakes=[getRobaEmojis(guild),getRobaEmojis(guild)].filter(e=>e.id!==cur.correctId); const opts=[correctEmoji,...fakes].sort(()=>Math.random()-0.5);
-      const embedQ = new EmbedBuilder().setColor(0x9B59B6).setTitle(`🧠 ¿Cuál iba en pos ${qPos+1}?`).setDescription(`¡RÁPIDO! 6s`);
-      const rowQ = new ActionRowBuilder().addComponents(...opts.map(e=> new ButtonBuilder().setCustomId(`minijuego_bomba_mem_${e.id}`).setLabel('?').setEmoji(e.id?{id:e.id}:undefined).setStyle(ButtonStyle.Secondary)));
-      await inter.editReply({ embeds:[embedQ], components:[rowQ] }).catch(()=>{});
-      const to2=setTimeout(async()=>{ const s=minijuegoActivo.get(userId); if(s?.stage===2){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); await saveMinijuegos(userId); inter.editReply({ content:'💥 ¡BOOM! No recordaste -10 pts', embeds:[], components:[] }).catch(()=>{}); } },6000); cur.timeout=to2;
-    },3000); return;
+  // --- CHROMA ELIMINADO ---
+  if(inter.customId==='minijuego_chroma' || inter.customId.startsWith('minijuego_chroma_')){
+    return inter.reply({ content: '🌈 Chroma deshabilitado', flags: MessageFlags.Ephemeral });
   }
-  if(inter.customId.startsWith('minijuego_bomba_mem_')){
-    const st=minijuegoActivo.get(userId); if(!st || st.stage!==2) return inter.reply({ content:'❌ Expiró', flags: MessageFlags.Ephemeral });
-    const chosen=inter.customId.split('_').pop(); clearTimeout(st.timeout);
-    if(chosen!==st.correctId){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-10); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡FALLASTE! Era ${st.seq.find(e=>e.id===st.correctId)} -10 pts`, embeds:[], components:[] }); }
-    // FASE 3 - QTE FINAL
-    st.stage=3; const delay=1000+Math.floor(Math.random()*2500);
-        const embed3=new EmbedBuilder().setColor(0x57F287).setTitle('💣 FASE 3/3 - ¡AHORA!').setDescription(`Espera... cuando veas **¡AHORA!** dale al botón en <0.8s\n\nPreparando detonador...`);
-await inter.update({ embeds:[embed3], components:[] });
-    const to3=setTimeout(async()=>{
-      const cur=minijuegoActivo.get(userId); if(!cur || cur.stage!==3) return;
-      cur.active=true; cur.start=Date.now();
-      const embedGo=new EmbedBuilder().setColor(0x00FF00).setTitle('💥 ¡¡AHORA!! ¡¡AHORA!!').setDescription(`¡CLICK!`);
-      const rowGo=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_bomba_final').setLabel('💣 DESACTIVAR YA!').setStyle(ButtonStyle.Success));
-      await inter.editReply({ embeds:[embedGo], components:[rowGo] }).catch(()=>{});
-      const toBoom=setTimeout(async()=>{ const s=minijuegoActivo.get(userId); if(s?.stage===3 && s?.active){ minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-15); await saveMinijuegos(userId); inter.editReply({ content:'💥 ¡MUY LENTO! Explotó -15 pts', embeds:[], components:[] }).catch(()=>{}); } },900); cur.timeout=toBoom;
-    },delay); st.timeout=to3; return;
+  // --- WHACK ELIMINADO ---
+  if(inter.customId==='minijuego_whack' || inter.customId.startsWith('minijuego_whack_')){
+    return inter.reply({ content: '🔨 Whack deshabilitado', flags: MessageFlags.Ephemeral });
   }
-  if(inter.customId==='minijuego_bomba_final'){
-    const st=minijuegoActivo.get(userId); if(!st || st.stage!==3 ||!st.active) return inter.reply({ content:'❌ Demasiado pronto o ya explotó', flags: MessageFlags.Ephemeral });
-    clearTimeout(st.timeout); const react=Date.now()-st.start; minijuegoActivo.delete(userId);
-    if(react>800){ data.fails++; data.puntos=Math.max(0,data.puntos-15); await saveMinijuegos(userId); return inter.update({ content:`💥 ¡Tarde! ${react}ms -15 pts`, embeds:[], components:[] }); }
-    const pts=Math.max(20, 60-Math.floor(react/10)); data.puntos+=pts; data.weekly+=pts; data.bomba+=pts; await saveMinijuegos(userId);
-    return inter.update({ content:`✅ ¡BOMBA DESACTIVADA EN ${react}ms! +${pts} pts ÉPICO`, embeds:[], components:[] });
+  // --- ODYSSEY ELIMINADO ---
+  if(inter.customId==='minijuego_odyssey' || inter.customId.startsWith('minijuego_odyssey_')){
+    return inter.reply({ content: '🏰 Odyssey deshabilitado', flags: MessageFlags.Ephemeral });
   }
-  // --- CHROMA BREAK V2 - SIMON ÉPICO A COLOR ---
-  if(inter.customId==='minijuego_chroma'){
-    const prev=minijuegoActivo.get(userId); if(prev?.timeout) clearTimeout(prev.timeout);
-    await guild.emojis.fetch().catch(()=>{});
-    const colores=[{e:'🔴',c:0xFF0000},{e:'🔵',c:0x0000FF},{e:'🟡',c:0xFFD700},{e:'🟢',c:0x00FF00}];
-    const len=3+Math.floor(Math.random()*2);
-    const seq=Array.from({length:len},()=>colores[Math.floor(Math.random()*colores.length)]);
-    const pet=getRobaEmojis(guild); if(pet) seq[Math.floor(len/2)].pet=pet;
-    minijuegoActivo.set(userId,{tipo:'chroma', seq, idx:0, start:Date.now()});
-    const embedView=new EmbedBuilder().setColor(0x9B59B6).setTitle('🌈 CHROMA BREAK - MEMORIZA').setDescription(seq.map(s=>`${s.e}${s.pet?`+${s.pet}`:''}`).join(' → ')+`\n\n¡Memoriza ${len} pasos! 5s...`).setFooter({text:'Individual • Anti-macro'});
-    await inter.reply({embeds:[embedView], flags: MessageFlags.Ephemeral});
-    const to=setTimeout(async()=>{ const st=minijuegoActivo.get(userId); if(!st||st.tipo!=='chroma') return; const embedAsk=new EmbedBuilder().setColor(0x5865F2).setTitle(`🌈 REPITE ${st.idx+1}/${st.seq.length}`).setDescription('¡En orden!'); const row=new ActionRowBuilder().addComponents(...colores.map((col,i)=> new ButtonBuilder().setCustomId(`minijuego_chroma_click_${i}`).setLabel(col.e).setStyle(ButtonStyle.Secondary))); await inter.editReply({embeds:[embedAsk], components:[row]}).catch(()=>{}); const to2=setTimeout(async()=>{ const s=minijuegoActivo.get(userId); if(s?.tipo==='chroma'){ minijuegoActivo.delete(userId); data.fails++; await saveMinijuegos(userId); inter.editReply({content:'💥 Tiempo! -5', embeds:[], components:[]}).catch(()=>{});} },12000); st.timeout=to2; },5000); minijuegoActivo.get(userId).timeout=to; return;
-  }
-  if(inter.customId.startsWith('minijuego_chroma_click_')){
-    const st=minijuegoActivo.get(userId); if(!st||st.tipo!=='chroma') return inter.reply({content:'❌ No hay partida', flags: MessageFlags.Ephemeral});
-    const clickIdx=parseInt(inter.customId.split('_').pop()); const expected=st.seq[st.idx]; const map=['🔴','🔵','🟡','🟢']; const expIdx=map.indexOf(expected.e);
-    if(clickIdx!==expIdx){ clearTimeout(st.timeout); minijuegoActivo.delete(userId); data.fails++; data.puntos=Math.max(0,data.puntos-5); data.weekly=Math.max(0,data.weekly-5); await saveMinijuegos(userId); return inter.update({content:`❌ Era ${expected.e} -5 pts`, embeds:[], components:[]}); }
-    st.idx++; if(st.idx>=st.seq.length){ clearTimeout(st.timeout); const react=Date.now()-st.start; const pts=30+st.seq.length*15; minijuegoActivo.delete(userId); data.puntos+=pts; data.weekly+=pts; data.chroma+=pts; await saveMinijuegos(userId); const win=new EmbedBuilder().setColor(0xFFD700).setTitle('🌈 ¡CHROMA PERFECT!').setDescription(`${st.seq.map(s=>s.e).join('')} en ${(react/1000).toFixed(1)}s +${pts} pts`); return inter.update({embeds:[win], components:[], content:`✅ +${pts} pts`}); }
-    const embedNext=new EmbedBuilder().setColor(expected.c).setTitle(`🌈 Bien! ${st.idx}/${st.seq.length}`); const colores=[{e:'🔴'},{e:'🔵'},{e:'🟡'},{e:'🟢'}]; const row=new ActionRowBuilder().addComponents(...colores.map((col,i)=> new ButtonBuilder().setCustomId(`minijuego_chroma_click_${i}`).setLabel(col.e).setStyle(ButtonStyle.Secondary))); return inter.update({embeds:[embedNext], components:[row]});
-  }
-  // --- WHACK-A-EGG - GRID 3x3 COLORIDO ---
-  if(inter.customId==='minijuego_whack'){
-    const prev=minijuegoActivo.get(userId); if(prev?.timeout) clearTimeout(prev.timeout);
-    await guild.emojis.fetch().catch(()=>{}); const state={tipo:'whack', score:0, round:0, max:10, active:-1}; minijuegoActivo.set(userId,state);
-    const embed=new EmbedBuilder().setColor(0x57F287).setTitle('🔨 WHACK-A-EGG').setDescription('10 huevos random. ¡Dale al que brilla!\nDivino 50 pts, Eterno 30, Secreto 15');
-    await inter.reply({embeds:[embed], flags: MessageFlags.Ephemeral});
-    const spawn=async()=>{ const st=minijuegoActivo.get(userId); if(!st||st.tipo!=='whack') return; if(st.round>=st.max){ const pts=st.score; minijuegoActivo.delete(userId); data.puntos+=pts; data.weekly+=pts; data.whack+=pts; await saveMinijuegos(userId); return inter.editReply({content:`🏆 WHACK FINAL ${pts} pts`, embeds:[], components:[]}).catch(()=>{});} st.round++; const idx=Math.floor(Math.random()*9); st.active=idx; const pet=getRobaEmojis(guild); const embedM=new EmbedBuilder().setColor(0xFFD700).setTitle(`🔨 ${st.round}/10 ${pet} Score:${st.score}`).setDescription('¡AHORA!'); const rows=[]; for(let r=0;r<3;r++){ const row=new ActionRowBuilder(); for(let c=0;c<3;c++){ const i=r*3+c; row.addComponents(new ButtonBuilder().setCustomId(`minijuego_whack_click_${i}`).setLabel(i===idx?`${pet}`:'⬛').setStyle(i===idx?ButtonStyle.Success:ButtonStyle.Secondary)); } rows.push(row);} await inter.editReply({embeds:[embedM], components:rows}).catch(()=>{}); st.timeout=setTimeout(()=>{ const cur=minijuegoActivo.get(userId); if(cur&&cur.active!==-1){ cur.active=-1; spawn(); } },1100); }; setTimeout(spawn,1000); return;
-  }
-  if(inter.customId.startsWith('minijuego_whack_click_')){
-    const st=minijuegoActivo.get(userId); if(!st||st.tipo!=='whack'||st.active===-1) return inter.reply({content:'❌ Ya pasó', flags: MessageFlags.Ephemeral});
-    const idx=parseInt(inter.customId.split('_').pop()); if(idx!==st.active){ return inter.reply({content:'💨 Fallo -2', flags: MessageFlags.Ephemeral}); }
-    const pts=30; st.score+=pts; st.active=-1; clearTimeout(st.timeout); await inter.deferUpdate().catch(()=>{});
-    const nspawn=async()=>{ const s=minijuegoActivo.get(userId); if(!s) return; if(s.round>=s.max){ const total=s.score; minijuegoActivo.delete(userId); data.puntos+=total; data.weekly+=total; data.whack+=total; await saveMinijuegos(userId); return inter.editReply({content:`🏆 WHACK ${total} pts épicos`, embeds:[], components:[]}).catch(()=>{});} s.round++; const nIdx=Math.floor(Math.random()*9); s.active=nIdx; const pet=getRobaEmojis(guild); const embedM=new EmbedBuilder().setColor(0xFFD700).setTitle(`🔨 +${pts} Total:${s.score} ${s.round}/10`).setDescription(`${pet}`); const rows=[]; for(let r=0;r<3;r++){ const row=new ActionRowBuilder(); for(let c=0;c<3;c++){ const i=r*3+c; row.addComponents(new ButtonBuilder().setCustomId(`minijuego_whack_click_${i}`).setLabel(i===nIdx?`${pet}`:'⬛').setStyle(i===nIdx?ButtonStyle.Success:ButtonStyle.Secondary)); } rows.push(row);} await inter.editReply({embeds:[embedM], components:rows}).catch(()=>{}); s.timeout=setTimeout(()=>{ const cur=minijuegoActivo.get(userId); if(cur&&cur.active!==-1){ cur.active=-1; nspawn(); } },1100); }; setTimeout(nspawn,250); return;
-  }
-  // --- ODYSSEY - ROGUELIKE DE BIOMAS A COLOR ---
-  if(inter.customId==='minijuego_odyssey'){
-    const prev=minijuegoActivo.get(userId); if(prev?.timeout) clearTimeout(prev.timeout);
-    const biomas=[{name:'🌲 Bosque', color:0x2ECC71},{name:'🌋 Volcán', color:0xE74C3C},{name:'🌊 Océano', color:0x3498DB},{name:'☁️ Cielo', color:0x85C1E9},{name:'🌌 Cosmos', color:0x9B59B6}];
-    const state={tipo:'odyssey', bioma:0, vida:3, pts:0, biomas}; minijuegoActivo.set(userId,state);
-    const embed=new EmbedBuilder().setColor(biomas[0].color).setTitle(`🏰 ODYSSEY - ${biomas[0].name}`).setDescription(`Vida: ${'❤️'.repeat(state.vida)} | Run: ${state.pts} pts\nIndividual y colorido`);
-    const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_odyssey_advance').setLabel('⚔️ Avanzar').setStyle(ButtonStyle.Success));
-    await inter.reply({embeds:[embed], components:[row], flags: MessageFlags.Ephemeral}); return;
-  }
-  if(inter.customId==='minijuego_odyssey_advance'){
-    const st=minijuegoActivo.get(userId); if(!st||st.tipo!=='odyssey') return inter.reply({content:'❌ No hay odisea', flags: MessageFlags.Ephemeral});
-    const bioma=st.biomas[st.bioma]; const ev=Math.floor(Math.random()*3);
-    if(ev===0){ const pet=getRobaEmojis(guild); const embed=new EmbedBuilder().setColor(bioma.color).setTitle(`⚔️ COMBATE ${bioma.name}`).setDescription(`¡${pet} salvaje!\nVida: ${'❤️'.repeat(st.vida)}`); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_odyssey_fight_atk').setLabel('⚔️ Atacar').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('minijuego_odyssey_fight_def').setLabel('🛡️ Defender').setStyle(ButtonStyle.Primary)); return inter.update({embeds:[embed], components:[row]}); }
-    else if(ev===1){ const embed=new EmbedBuilder().setColor(0xF1C40F).setTitle(`💎 COFRE ${bioma.name}`).setDescription('Elige cable:'); const row=new ActionRowBuilder().addComponents(...['🔴','🔵','🟡'].map((c,i)=> new ButtonBuilder().setCustomId(`minijuego_odyssey_chest_${i}`).setLabel(c).setStyle(ButtonStyle.Secondary))); return inter.update({embeds:[embed], components:[row]}); }
-    else { st.pts+=20; const embed=new EmbedBuilder().setColor(bioma.color).setTitle(`✨ Santuario ${bioma.name}`).setDescription(`+20 pts • Total ${st.pts}`); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_odyssey_next').setLabel('➡️ Siguiente').setStyle(ButtonStyle.Success)); return inter.update({embeds:[embed], components:[row]}); }
-  }
-  if(inter.customId.startsWith('minijuego_odyssey_fight_') || inter.customId.startsWith('minijuego_odyssey_chest_') || inter.customId==='minijuego_odyssey_next'){
-    const st=minijuegoActivo.get(userId); if(!st) return inter.reply({content:'❌ Expiró', flags: MessageFlags.Ephemeral});
-    const win=Math.random()>0.35; if(!win){ st.vida--; if(st.vida<=0){ minijuegoActivo.delete(userId); data.fails++; await saveMinijuegos(userId); return inter.update({content:`💀 GAME OVER en ${st.biomas[st.bioma].name} con ${st.pts} pts`, embeds:[], components:[]}); } const embed=new EmbedBuilder().setColor(0xE74C3C).setTitle('💥 Fallaste').setDescription(`Te quedan ${'❤️'.repeat(st.vida)} vidas`); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_odyssey_advance').setLabel('🔄 Reintentar').setStyle(ButtonStyle.Secondary)); return inter.update({embeds:[embed], components:[row]}); }
-    st.pts+=25; st.bioma++; if(st.bioma>=st.biomas.length){ const total=st.pts+100; minijuegoActivo.delete(userId); data.puntos+=total; data.weekly+=total; data.odyssey+=total; await saveMinijuegos(userId); const embed=new EmbedBuilder().setColor(0xFFD700).setTitle('🏆 ¡ODYSSEY COMPLETADA!').setDescription(`¡Cosmos conquistado! +${total} pts épicos\nVidas: ${'❤️'.repeat(st.vida)}`); return inter.update({embeds:[embed], components:[]}); }
-    const bioma=st.biomas[st.bioma]; const embed=new EmbedBuilder().setColor(bioma.color).setTitle(`🏰 ${bioma.name} ${st.bioma+1}/5`).setDescription(`Vida: ${'❤️'.repeat(st.vida)} | Pts: ${st.pts}`); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('minijuego_odyssey_advance').setLabel('⚔️ Avanzar').setStyle(ButtonStyle.Success)); return inter.update({embeds:[embed], components:[row]});
   }
 }
 function startMinijuegosScheduler(){
@@ -2378,24 +2271,13 @@ function checkAcierto(spawnReal){
   console.log(`🎯 Pred: [${pred.top3.join(', ')}] | Real: ${spawnReal.pet} | ${hit?'ACIERTO':'FALLO'} | Acc: ${(prediccionesData.stats.hits/prediccionesData.stats.total*100).toFixed(1)}%`);
 }
 function startPrediccionesScheduler(){
-  console.log('🔮 Scheduler V3 - Escaneo 30s + Update :01,:06,:11...');
-  setTimeout(async()=>{ const g=client.guilds.cache.get(process.env.GUILD_ID); if(g){ await escanearHistorialApariciones(g,false).catch(()=>{}); guardarPrediccionActual(); await actualizarPanelPredicciones(g).catch(()=>{}); } }, 15000);
+  console.log('🔮 Scheduler DECORACION - Scan 30min, sin auto-update');
+  setTimeout(async()=>{ const g=client.guilds.cache.get(process.env.GUILD_ID); if(g){ await escanearHistorialApariciones(g,false).catch(()=>{}); guardarPrediccionActual(); } }, 15000);
   setInterval(async()=>{
     const g=client.guilds.cache.get(process.env.GUILD_ID); if(!g) return;
-    const nuevos = await escanearHistorialApariciones(g,false).catch(()=>0);
-    if(nuevos>0){
-      const ultimo = spawnLogs[spawnLogs.length-1];
-      if(ultimo) checkAcierto(ultimo);
-    }
-  }, 90*1000); // 90s para 6k users economiza 66% Egress
-  setInterval(async()=>{
-    const now = new Date();
-    if([1,6,11,16,21,26,31,36,41,46,51,56].includes(now.getUTCMinutes()) && now.getUTCSeconds()<15){
-      const g=client.guilds.cache.get(process.env.GUILD_ID); if(!g) return;
-      guardarPrediccionActual();
-      await actualizarPanelPredicciones(g).catch(()=>{});
-    }
-  }, 15*1000);
+    await escanearHistorialApariciones(g,false).catch(()=>{});
+    guardarPrediccionActual();
+  }, 30*60*1000); // 30 min decoración - 95% ahorro
 }
 function startAdminAbuseScheduler(){
   console.log('👑 Scheduler Admin Abuse iniciado - Sábados 9AM MX');
