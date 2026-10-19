@@ -106,7 +106,13 @@ const CONFIG = {
   }
 };
 
+const channelIdCache = new Map();
 function findChannel(guild, nameList) {
+  const cacheKey = nameList[0]+'-'+guild.id;
+  if(channelIdCache.has(cacheKey)){
+    const cached = guild.channels.cache.get(channelIdCache.get(cacheKey));
+    if(cached) return cached;
+  }
   const channels = guild.channels.cache.filter(c => typeof c.isTextBased === 'function' && c.isTextBased() && c.type !== ChannelType.GuildCategory && c.type !== ChannelType.GuildVoice && c.type!== ChannelType.DM);
   const lowerNames = nameList.map(n => n.toLowerCase());
   for (const name of lowerNames) {
@@ -115,7 +121,7 @@ function findChannel(guild, nameList) {
   }
   for (const name of lowerNames) {
     const incl = channels.find(c => c.name.toLowerCase().includes(name));
-    if (incl) return incl;
+    if (incl){ channelIdCache.set(cacheKey, incl.id); return incl; }
   }
   return null;
 }
@@ -588,16 +594,20 @@ setInterval(()=>{
 
 setInterval(async ()=>{
   if(xpDirty.size===0) return;
+  const dirtyArray = [...xpDirty];
+  xpDirty.clear();
   try{
     if(useMongo && XpModel){
-      for(const uid of xpDirty){
-        await XpModel.findOneAndUpdate({ userId: uid }, { xp: xpData[uid]||0 }, { upsert: true }).catch(()=>{});
+      const bulkOps = dirtyArray.map(uid=>({ updateOne: { filter: { userId: uid }, update: { $set: { xp: xpData[uid]||0 } }, upsert: true } }));
+      for(let i=0;i<bulkOps.length;i+=500){
+        const chunk = bulkOps.slice(i,i+500);
+        await XpModel.bulkWrite(chunk).catch(()=>{});
+        await new Promise(r=>setTimeout(r,150));
       }
     }
     safeSaveJSON(XP_PATH, xpData);
-    xpDirty.clear();
-    console.log(`💾 Batch XP guardado: ${Object.keys(xpData).length} users`);
-  }catch(e){ console.log(`Error batch XP: ${e.message}`); }
+    console.log(`💾 Batch XP 6k-opt: ${dirtyArray.length} dirty / ${Object.keys(xpData).length} total`);
+  }catch(e){ console.log(`Error batch XP 6k: ${e.message}`); }
 }, 5*60*1000); // cada 5m economiza 80% Egress
 
 const NIVELES = [
@@ -2377,7 +2387,7 @@ function startPrediccionesScheduler(){
       const ultimo = spawnLogs[spawnLogs.length-1];
       if(ultimo) checkAcierto(ultimo);
     }
-  }, 30*1000);
+  }, 90*1000); // 90s para 6k users economiza 66% Egress
   setInterval(async()=>{
     const now = new Date();
     if([1,6,11,16,21,26,31,36,41,46,51,56].includes(now.getUTCMinutes()) && now.getUTCSeconds()<15){
