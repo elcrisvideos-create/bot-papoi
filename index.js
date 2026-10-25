@@ -288,7 +288,12 @@ async function ensureDivinoBombaRoles(guild){
     if(!role){ try{ role = await guild.roles.create({ name, color: 0xFF0000, reason: 'Rol BOMBA divino' }); }catch{} }
   }
 }
-const saveSpawnsEpicos = () => safeSaveJSON(SPAWNS_EPICOS_PATH, spawnsEpicosData);
+const saveSpawnsEpicos = async () => {
+  safeSaveJSON(SPAWNS_EPICOS_PATH, spawnsEpicosData);
+  if(useMongo && global.SpawnsEpicosModel){
+    await global.SpawnsEpicosModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { ...spawnsEpicosData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
+  }
+};
 const SPAWNS_EPICOS_TEST_NAME = '🚨┃Spawns en vivo';
 let prediccionesData = safeLoadJSON(PREDICCIONES_PATH, { channelId: null, messageIds: [], messageId: null, lastScanId: null, lastUpdate: 0, stats: { total: 0, hits: 0, history: [] }, lastPrediction: { ts: 0, top3: [] } });
 // migración si viene del formato viejo
@@ -514,6 +519,26 @@ async function initMongo() {
       bibliotecaData = { roba: bibMongo.roba||[], papoi: bibMongo.papoi||[] };
       safeSaveJSON(BIBLIOTECA_PATH, bibliotecaData);
       console.log(`✅ Biblioteca cargada de Mongo: ${bibMongo.roba.length} roba, ${bibMongo.papoi.length} papoi`);
+    }
+    const tiendaSchema = new mongoose.Schema({ guildId: String, items: Array }, { strict: false });
+    global.TiendaModel = mongoose.model('Tienda', tiendaSchema);
+    const tiendaMongo = await global.TiendaModel.findOne({ guildId: process.env.GUILD_ID }).catch(()=>null);
+    if(tiendaMongo?.items?.length){
+      DONADOR_TIENDA = tiendaMongo.items;
+      safeSaveJSON(TIENDA_PATH, DONADOR_TIENDA);
+      console.log(`✅ Tienda cargada de Mongo: ${DONADOR_TIENDA.length} productos`);
+    } else if(DONADOR_TIENDA.length){
+      await global.TiendaModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { guildId: process.env.GUILD_ID, items: DONADOR_TIENDA }, { upsert: true }).catch(()=>{});
+    }
+    const spawnsEpicosSchema = new mongoose.Schema({ guildId: String, videoUrl: String, gameUrl: String, canalTestId: String }, { strict: false });
+    global.SpawnsEpicosModel = mongoose.model('SpawnsEpicos', spawnsEpicosSchema);
+    const seMongo = await global.SpawnsEpicosModel.findOne({ guildId: process.env.GUILD_ID }).catch(()=>null);
+    if(seMongo){
+      spawnsEpicosData = { videoUrl: seMongo.videoUrl || spawnsEpicosData.videoUrl, gameUrl: seMongo.gameUrl || spawnsEpicosData.gameUrl, canalTestId: seMongo.canalTestId || spawnsEpicosData.canalTestId };
+      safeSaveJSON(SPAWNS_EPICOS_PATH, spawnsEpicosData);
+      console.log(`✅ Spawns Épicos cargado de Mongo: ${spawnsEpicosData.videoUrl}`);
+    } else {
+      await global.SpawnsEpicosModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { ...spawnsEpicosData, guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
     }
         const minijuegoSchema = new mongoose.Schema({ userId: String, puntos: Number, weekly: Number, atrapa: Number, slot: Number, ppt: Number, memoria: Number, bomba: Number, fails: Number }, { strict:false });
     MinijuegoModel = mongoose.model('Minijuego', minijuegoSchema);
@@ -750,9 +775,17 @@ const saveSorteos = async () => {
     ).catch(()=>{});
   }
   if(useMongo && SorteoInviteModel){
-    await SorteoInviteModel.deleteMany({ guildId: process.env.GUILD_ID }).catch(()=>{});
-    if(sorteosInvites.length){
-      await SorteoInviteModel.insertMany(sorteosInvites.map(i=>({...i, guildId: process.env.GUILD_ID}))).catch(()=>{});
+    if(!sorteosInvites.length){
+      await SorteoInviteModel.deleteMany({ guildId: process.env.GUILD_ID }).catch(()=>{});
+    } else {
+      const ops = sorteosInvites.map(i => ({
+        updateOne: {
+          filter: { guildId: process.env.GUILD_ID, invitadoId: i.invitadoId },
+          update: { $set: { ...i, guildId: process.env.GUILD_ID } },
+          upsert: true
+        }
+      }));
+      await SorteoInviteModel.bulkWrite(ops, { ordered: false }).catch(()=>{});
     }
   }
 };
@@ -828,7 +861,12 @@ const TIENDA_PATH = path.join(DATA_DIR, 'tienda.json');
 let DONADOR_TIENDA = safeLoadJSON(TIENDA_PATH, [
   { id: '108532817912057', name: 'Papoi Black', price: 5, puntos: 5, url: 'https://www.roblox.com/es/catalog/108532817912057/Papoi-Black' }
 ]);
-const saveTienda = () => safeSaveJSON(TIENDA_PATH, DONADOR_TIENDA);
+const saveTienda = async () => {
+  safeSaveJSON(TIENDA_PATH, DONADOR_TIENDA);
+  if(useMongo && global.TiendaModel){
+    await global.TiendaModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { guildId: process.env.GUILD_ID, items: DONADOR_TIENDA }, { upsert: true }).catch(()=>{});
+  }
+};
 function extraerIdRoblox(input){
   const m = input.match(/\/catalog\/(\d+)\//) || input.match(/(\d{8,})/);
   return m? m[1] : null;
@@ -2289,7 +2327,7 @@ function guardarPrediccionActual(){
 function checkAcierto(spawnReal){
   const pred = prediccionesData.lastPrediction;
   if(!pred ||!pred.top3.length) return;
-  if(Date.now() - pred.ts > 7*60*1000) return;
+  if(Date.now() - pred.ts > 35*60*1000) return;
   const hit = pred.top3.includes(spawnReal.pet);
   prediccionesData.stats.total++;
   if(hit) prediccionesData.stats.hits++;
@@ -3907,18 +3945,23 @@ client.on(Events.ClientReady, async () => {
   startRaceScheduler();
   startFusionesScheduler();
   await ensureAdminAbuseChannel(guild).catch(()=>{});
-  await crearPanelAdminAbuse(guild).catch(()=>{});
   startAdminAbuseScheduler();
-  await ensureMinijuegosChannels(guild).catch(()=>{});
-    sorteosInvites.forEach(i=>{ if(i.code) inviteCodeToCreador.set(i.code, i.invitadorId); });
+  const { juegos: chJuegos, tops: chTops } = await ensureMinijuegosChannels(guild).catch(()=>({}));
+  if(chJuegos){
+    const msgsJ = await chJuegos.messages.fetch({ limit: 10 }).catch(()=>null);
+    if(!msgsJ || !msgsJ.some(m => m.author.id === client.user.id)) await crearPanelMinijuegos(guild).catch(()=>{});
+  }
+  if(chTops){
+    const msgsT = await chTops.messages.fetch({ limit: 10 }).catch(()=>null);
+    if(!msgsT || !msgsT.some(m => m.author.id === client.user.id)) await crearPanelTops(guild).catch(()=>{});
+  }
+  sorteosInvites.forEach(i=>{ if(i.code) inviteCodeToCreador.set(i.code, i.invitadorId); });
   if(getSorteoActivo()){
     await cargarInviteCache(guild).catch(()=>{});
     await ensureSorteosChannel(guild, false).catch(()=>{});
   }
   startSorteoTopScheduler();
   startSorteoAutoFinalizer();
-  await crearPanelMinijuegos(guild).catch(()=>{});
-  await crearPanelTops(guild).catch(()=>{});
   startMinijuegosScheduler();
   const canalPred = await ensurePrediccionesChannel(guild).catch(()=>null);
   if(canalPred){
