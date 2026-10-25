@@ -18,7 +18,7 @@
  * Si no pones MONGO_URI, el bot funciona igual que V5 con archivos.
  */
 
-const { Client, GatewayIntentBits, Partials, Events, REST, Routes, ChannelType, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, REST, Routes, ChannelType, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, Options } = require('discord.js');
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -180,7 +180,22 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions
   ],
-  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User, Partials.GuildMember]
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User, Partials.GuildMember],
+  makeCache: Options.cacheWithLimits({
+    MessageManager: 25,
+    GuildMemberManager: {
+      maxSize: 800,
+      keepOverLimit: member => member.id === client.user.id || member.permissions?.has(PermissionFlagsBits.Administrator)
+    },
+    ThreadManager: 20,
+    PresenceManager: 0,
+    VoiceStateManager: 0,
+    GuildInviteManager: 0
+  }),
+  sweepers: {
+    messages: { interval: 600, lifetime: 900 },
+    users: { interval: 1800, filter: () => user => user.bot === false }
+  }
 });
 
 // --- PERSISTENCIA V6: MONGODB + FALLBACK ARCHIVOS ---
@@ -190,11 +205,13 @@ function cloneDefault(v){ return JSON.parse(JSON.stringify(v)); }
 const SORTEOS_PATH = path.join(DATA_DIR, 'sorteos.json');
 const SORTEOS_INVITES_PATH = path.join(DATA_DIR, 'sorteos_invites.json');
 const SORTEOS_CACHE_PATH = path.join(DATA_DIR, 'sorteos_cache.json');
+const SORTEOS_CREADORES_PATH = path.join(DATA_DIR, 'sorteos_creadores.json');
 let sorteosData = safeLoadJSON(SORTEOS_PATH, { activo: null }); // {activo: {premio, inicio, fin, canalId, mensajeId, snapshot: [], portadaUrl, portadaLocal, isVideo}}
 let sorteosInvites = safeLoadJSON(SORTEOS_INVITES_PATH, []); // [{invitadorId, invitadoId, code, estado, joinedAt, activoGeneral}]
 let inviteCacheFile = safeLoadJSON(SORTEOS_CACHE_PATH, {}); // {code: uses}
+let inviteCreadoresFile = safeLoadJSON(SORTEOS_CREADORES_PATH, {});
 let inviteCache = new Map(); // RAM: code -> {uses, inviterIdCustom}
-let inviteCodeToCreador = new Map(); // code -> userId que pidió el link
+let inviteCodeToCreador = new Map(Object.entries(inviteCreadoresFile)); // code -> userId que pidió el link
 const XP_PATH = path.join(DATA_DIR, 'xp.json');
 const TIKTOK_PATH = path.join(DATA_DIR, 'tiktok.json');
 const ADMIN_ABUSE_PATH = path.join(DATA_DIR, 'admin_abuse.json');
@@ -940,7 +957,7 @@ async function ensureRaceChannel(guild){
 async function fixPapoisAlIniciar(guild){
   const rolPapoi = findRole(guild, 'papoi');
   if(!rolPapoi){ console.log('❌ No encontré rol papoi para fix'); return 0; }
-  await guild.members.fetch().catch(()=>{});
+  if(fixed>=50) break;.catch(()=>{});
   let fixed = 0;
   for(const [, m] of guild.members.cache){
     if(m.user.bot) continue;
@@ -1451,7 +1468,6 @@ async function handleMinijuegosInteraction(inter){
 
   // --- SLOT ---
   if(inter.customId==='minijuego_slot'){
-    await guild.emojis.fetch().catch(()=>{});
     const e1 = getRobaEmojis(guild) || '🥚'; const e2 = getRobaEmojis(guild) || '🥚'; const e3 = getRobaEmojis(guild) || '🥚';
     let pts=0, txt='';
     if(e1.id===e2.id && e2.id===e3.id){ pts=50; txt=`🎉 JACKPOT! 3x ${e1} +50 pts`; }
@@ -1486,8 +1502,7 @@ async function handleMinijuegosInteraction(inter){
 
   // --- MEMORIA ---
   if(inter.customId==='minijuego_memoria'){
-    await guild.emojis.fetch().catch(()=>{});
-    const seq = [getRobaEmojis(guild), getRobaEmojis(guild), getRobaEmojis(guild)];
+    const seq = [getRobaEmojis(guild), getRobaEmojis(guild)];
 const qIndex = Math.floor(Math.random()*3);
     const correctEmoji = seq[qIndex];
     const fakes = [getRobaEmojis(guild), getRobaEmojis(guild)].filter(e=>e.id!==correctEmoji.id).slice(0,3);
@@ -1798,22 +1813,24 @@ async function actualizarPanelAdminAbuse(guild){
     }
     if(!msg) return crearPanelAdminAbuse(guild);
     const target = getNextSaturday9amMX();
-    const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
-    const source = localPath || adminAbuseData.customImageUrl || null;
+    const hasAttachment = msg.attachments.size > 0;
     let fileName = null;
-    let files = [];
-    if(source){
-      const ext = path.extname(source.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
-      fileName = `admin_abuse_portada.${ext}`;
-      files = [{ attachment: source, name: fileName }];
+    if(hasAttachment){
+      fileName = msg.attachments.first()?.name || 'admin_abuse_portada.png';
+    } else {
+      const localPath = adminAbuseData.customLocalPath && fs.existsSync(adminAbuseData.customLocalPath)? adminAbuseData.customLocalPath : null;
+      const source = localPath || adminAbuseData.customImageUrl || null;
+      if(source){
+        const ext = path.extname(source.split('?')[0]).replace('.','') || (adminAbuseData.customIsVideo?'mp4':'png');
+        fileName = `admin_abuse_portada.${ext}`;
+      }
     }
     const embed = buildAdminAbuseEmbed(guild, target, fileName);
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin_abuse_notify').setLabel('🔔 Avísame del Admin Abuse').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('admin_abuse_mi_hora').setLabel('🕒 Ver mi hora local').setStyle(ButtonStyle.Secondary)
     );
-    if(files.length) await msg.edit({ embeds: [embed], components: [row], files }).catch(()=>{});
-    else await msg.edit({ embeds: [embed], components: [row] }).catch(()=>{});
+    await msg.edit({ embeds: [embed], components: [row] }).catch(()=>{});
   }catch(e){ console.log('AdminAbuse update error', e.message); }
 }
 // ========== PREDICCIONES PAPOI - SOLO MORBO, VISUAL 1000% ==========
@@ -2314,7 +2331,7 @@ function startAdminAbuseScheduler(){
       }
       await actualizarPanelAdminAbuse(guild);
     }catch(e){ console.log('AdminAbuse scheduler', e.message); }
-  }, 60*1000);
+  }, 5*60*1000);
 }
 async function handleAdminAbuseInteraction(inter){
   const guild = inter.guild;
@@ -3426,7 +3443,7 @@ async function limpiarFusionesUsuario(guild, userId, reason='AUTO'){
   }catch(e){ console.log('limpiarFusionesUsuario', e.message); }
 }
 function startFusionesScheduler(){
-  console.log('🔀 Scheduler Fusiones V6.6 FIX DEFINITIVO iniciado - caza fantasmas cada 30s');
+  console.log('🔀 Scheduler Fusiones V6.6 OPTIMIZADO 10m para 5k-10k');
   setTimeout(async ()=>{
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
     if(guild){ const elim = limpiarDuplicadosFusiones(); if(elim>0) console.log(`🧹 ${elim} duplicados al iniciar`); }
@@ -3479,7 +3496,7 @@ function startFusionesScheduler(){
       for(const r of toRemove){ if(canalFusiones&&r.messageId) canalFusiones.messages.delete(r.messageId).catch(()=>{}); if(useMongo && FusionModel) await FusionModel.deleteOne({ userId: r.userId, fusionId: r.fusionId }).catch(()=>{}); }
       if(toRemove.length){ fusionesQueue=fusionesQueue.filter(r=>now-r.createdAt<=24*60*60*1000); await saveFusiones(); console.log(`🧹 Limpieza 24h: ${toRemove.length} búsquedas viejas`); }
     }catch(e){ console.log('Fusiones scheduler V6.6', e.message); }
-  }, 30*1000);
+  }, 10*60*1000);
 }
 
 async function handleFusionesInteraction(inter){
@@ -4032,9 +4049,12 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if(!member) return;
     if(isPapoiMayor(member)) return; // tú si puedes poner nuevos
 
-    // Veamos quien puso ese emoji primero
-    const users = await reaction.users.fetch().catch(()=>null);
-    if(!users) return;
+    // Veamos quien puso ese emoji primero - cache primero para ahorrar egress
+    let users = reaction.users.cache;
+    if(users.size < 2){
+      users = await reaction.users.fetch().catch(()=>null);
+      if(!users) return;
+    }
     
     const loPusoAlguienConPermiso = [...users.values()].some(u => {
       if(u.id === client.user.id) return true;
