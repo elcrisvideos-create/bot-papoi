@@ -194,7 +194,7 @@ const client = new Client({
   }),
   sweepers: {
     messages: { interval: 600, lifetime: 900 },
-    users: { interval: 1800, filter: () => user => user.bot === false }
+    users: { interval: 1800, filter: () => user => !user.bot && user.id !== process.env.OWNER_ID }
   }
 });
 
@@ -480,7 +480,7 @@ async function initMongo() {
     const sorteoInviteSchema = new mongoose.Schema({ guildId: String, invitadorId: String, invitadoId: String, code: String, estado: String, joinedAt: Number, activoGeneral: Boolean }, { strict: false });
     SorteoInviteModel = mongoose.model('SorteoInvite', sorteoInviteSchema);
     const sMongo = await SorteoModel.findOne({ guildId: process.env.GUILD_ID });
-    if(sMongo && sMongo.activo){ sorteosData = { activo: sMongo.activo }; sorteosData.activo.snapshot = sMongo.snapshot || sMongo.activo.snapshot || []; safeSaveJSON(SORTEOS_PATH, sorteosData); console.log(`✅ Sorteo cargado de Mongo`); }
+    if(sMongo && sMongo.activo){ sorteosData = { activo: sMongo.activo }; sorteosData.activo.snapshot = sMongo.snapshot || sMongo.activo.snapshot || []; if(sMongo.creadoresMap) Object.entries(sMongo.creadoresMap).forEach(([k,v])=>inviteCodeToCreador.set(k,v)); safeSaveJSON(SORTEOS_PATH, sorteosData); console.log(`✅ Sorteo cargado de Mongo`); }
     const invitesMongo = await SorteoInviteModel.find({ guildId: process.env.GUILD_ID });
     if(invitesMongo.length){ sorteosInvites = invitesMongo.map(i=>({invitadorId:i.invitadorId, invitadoId:i.invitadoId, code:i.code, estado:i.estado, joinedAt:i.joinedAt, activoGeneral:i.activoGeneral})); safeSaveJSON(SORTEOS_INVITES_PATH, sorteosInvites); }
     const chambeadorSchema = new mongoose.Schema({ userId: String, robloxUser: String, puntos: Number, baneado: Boolean, lastReport: Number, createdAt: Number }, { strict: false });
@@ -736,11 +736,18 @@ const RACE_CHANNEL_NAME = '🚂│tren-fantasma';
 const RACE_DATA_PATH = path.join(DATA_DIR, 'carreras.json');
 let raceData = safeLoadJSON(RACE_DATA_PATH, { channelId: null, messageId: null, customImageUrl: null, customLocalPath: null, customIsVideo: false });
 const saveSorteos = async () => {
+  const creadoresObj = Object.fromEntries(inviteCodeToCreador);
+  if(sorteosData.activo) sorteosData.activo.creadoresMap = creadoresObj;
   safeSaveJSON(SORTEOS_PATH, sorteosData);
   safeSaveJSON(SORTEOS_INVITES_PATH, sorteosInvites);
   safeSaveJSON(SORTEOS_CACHE_PATH, inviteCacheFile);
+  safeSaveJSON(SORTEOS_CREADORES_PATH, creadoresObj);
   if(useMongo && SorteoModel){
-    await SorteoModel.findOneAndUpdate({ guildId: process.env.GUILD_ID }, { activo: sorteosData.activo, snapshot: sorteosData.activo?.snapshot || [], guildId: process.env.GUILD_ID }, { upsert: true }).catch(()=>{});
+    await SorteoModel.findOneAndUpdate(
+      { guildId: process.env.GUILD_ID },
+      { activo: sorteosData.activo, snapshot: sorteosData.activo?.snapshot || [], creadoresMap: creadoresObj, guildId: process.env.GUILD_ID },
+      { upsert: true }
+    ).catch(()=>{});
   }
   if(useMongo && SorteoInviteModel){
     await SorteoInviteModel.deleteMany({ guildId: process.env.GUILD_ID }).catch(()=>{});
@@ -957,13 +964,13 @@ async function ensureRaceChannel(guild){
 async function fixPapoisAlIniciar(guild){
   const rolPapoi = findRole(guild, 'papoi');
   if(!rolPapoi){ console.log('❌ No encontré rol papoi para fix'); return 0; }
-  if(fixed>=50) break;.catch(()=>{});
   let fixed = 0;
   for(const [, m] of guild.members.cache){
     if(m.user.bot) continue;
     if(!m.roles.cache.has(rolPapoi.id)){
       await m.roles.add(rolPapoi.id).catch(()=>{});
       fixed++;
+      if(fixed >= 50) break; // <-- Aquí adentro del for sí funciona perfecto
       await new Promise(r=>setTimeout(r, 120));
     }
   }
@@ -1502,19 +1509,23 @@ async function handleMinijuegosInteraction(inter){
 
   // --- MEMORIA ---
   if(inter.customId==='minijuego_memoria'){
-    const seq = [getRobaEmojis(guild), getRobaEmojis(guild)];
-const qIndex = Math.floor(Math.random()*3);
+    const seq = [getRobaEmojis(guild), getRobaEmojis(guild), getRobaEmojis(guild)];
+    if(seq.some(e => !e)) return inter.reply({ content: '❌ Faltan emojis en el servidor', flags: MessageFlags.Ephemeral });
+    const qIndex = Math.floor(Math.random()*3);
     const correctEmoji = seq[qIndex];
-    const fakes = [getRobaEmojis(guild), getRobaEmojis(guild)].filter(e=>e.id!==correctEmoji.id).slice(0,3);
-    const options = [correctEmoji,...fakes].sort(()=>Math.random()-0.5);
+    const uniqueMap = new Map([[correctEmoji.id, correctEmoji]]);
+    for(let i=0; i<6 && uniqueMap.size<4; i++){
+      const fe = getRobaEmojis(guild);
+      if(fe && !uniqueMap.has(fe.id)) uniqueMap.set(fe.id, fe);
+    }
+    const options = [...uniqueMap.values()].sort(()=>Math.random()-0.5);
     minijuegoActivo.set(userId, { tipo:'memoria', correctId: correctEmoji.id, seq });
     const embed = new EmbedBuilder().setColor(0x9B59B6).setTitle('🧠 MEMORIZA 4s').setDescription(seq.map(e=>`${e}`).join(' ') + `\n\nPregunta en 4s...`).setFooter({text:`Posición ${qIndex+1} de 3`});
     await inter.reply({ embeds:[embed], flags: MessageFlags.Ephemeral });
     setTimeout(async ()=>{
       const embed2 = new EmbedBuilder().setColor(0x5865F2).setTitle(`🧠 ¿Cuál iba en la posición ${qIndex+1}?`).setDescription(`Era: ${seq.map(()=> '❓').join(' ')}`);
-      const row = new ActionRowBuilder().addComponents(...options.map((e,i)=> new ButtonBuilder().setCustomId(`minijuego_memoria_opt_${e.id}`).setLabel(e.name.slice(0,20)).setEmoji({id:e.id, name:e.name}).setStyle(ButtonStyle.Secondary)));
-    await inter.editReply({ embeds: [embed2], components: [row] }).catch(()=>{});
-
+      const row = new ActionRowBuilder().addComponents(...options.map((e)=> new ButtonBuilder().setCustomId(`minijuego_memoria_opt_${e.id}`).setLabel(e.name.slice(0,20)).setEmoji({id:e.id, name:e.name}).setStyle(ButtonStyle.Secondary)));
+      await inter.editReply({ embeds: [embed2], components: [row] }).catch(()=>{});
     }, 4000);
     return;
   }
@@ -1547,7 +1558,6 @@ const qIndex = Math.floor(Math.random()*3);
   // --- ODYSSEY ELIMINADO ---
   if(inter.customId==='minijuego_odyssey' || inter.customId.startsWith('minijuego_odyssey_')){
     return inter.reply({ content: '🏰 Odyssey deshabilitado', flags: MessageFlags.Ephemeral });
-  }
   }
 }
 function startMinijuegosScheduler(){
@@ -2255,15 +2265,17 @@ async function escanearHistorialApariciones(guild, full=false){
       await new Promise(r=>setTimeout(r,400));
     }
   }
-    // ordenar por tiempo y quedarnos con los últimos 5000
-  spawnLogs.sort((a,b)=>a.ts-b.ts);
-  if(spawnLogs.length>5000) spawnLogs = spawnLogs.slice(-5000);
-  await saveSpawns();
-
-  // el más nuevo real
-  const newest = spawnLogs[spawnLogs.length-1];
-  if(newest) prediccionesData.lastScanId = newest.messageId;
-  await savePredicciones();
+    if(total > 0){
+    spawnLogs.sort((a,b)=>a.ts-b.ts);
+    if(spawnLogs.length>5000) spawnLogs = spawnLogs.slice(-5000);
+    await saveSpawns();
+    const newest = spawnLogs[spawnLogs.length-1];
+    if(newest){
+      prediccionesData.lastScanId = newest.messageId;
+      checkAcierto(newest);
+    }
+    await savePredicciones();
+  }
   return total;
 }
 function guardarPrediccionActual(){
@@ -3121,17 +3133,20 @@ async function checkRaceEvent(){
     let payload = {};
     let fileName = null;
     const localPath = raceData.customLocalPath && fs.existsSync(raceData.customLocalPath)? raceData.customLocalPath : null;
-    const source = localPath || raceData.customImageUrl || null;
-    if(source){
-      const ext = path.extname(source.split('?')[0]).replace('.','') || (raceData.customIsVideo? 'mp4' : 'png');
+    if(localPath && raceData.customIsVideo){
+      const ext = path.extname(localPath).replace('.','') || 'mp4';
       fileName = `carrera_portada.${ext}`;
-      payload.files = [{ attachment: source, name: fileName }];
+      payload.files = [{ attachment: localPath, name: fileName }];
     }
     const embed = buildRaceEmbed(guild, target, fileName || raceData.customImageUrl);
     payload.content = role? `${role} ${RACE_EMOJI} **¡EL TREN FANTASMA LLEGA EN 1 MINUTO**` : `${RACE_EMOJI} **¡Carrera en 1 minuto!**`;
     payload.embeds = [embed];
 
-    await ch.send(payload).catch(e=>console.log('Race send fail', e.message));
+    await ch.send(payload).catch(async () => {
+      delete payload.files;
+      embed.setImage(null);
+      await ch.send(payload).catch(e=>console.log('Race send fail', e.message));
+    });
   }catch(e){ console.log('Race error', e.message); }
 }
 function startButterflyScheduler(){
@@ -3895,12 +3910,13 @@ client.on(Events.ClientReady, async () => {
   await crearPanelAdminAbuse(guild).catch(()=>{});
   startAdminAbuseScheduler();
   await ensureMinijuegosChannels(guild).catch(()=>{});
+    sorteosInvites.forEach(i=>{ if(i.code) inviteCodeToCreador.set(i.code, i.invitadorId); });
+  if(getSorteoActivo()){
     await cargarInviteCache(guild).catch(()=>{});
-  await ensureSorteosChannel(guild, false).catch(()=>{}); // ahora siempre público
+    await ensureSorteosChannel(guild, false).catch(()=>{});
+  }
   startSorteoTopScheduler();
   startSorteoAutoFinalizer();
-  // Reconstruir map creador desde invites guardados
-  sorteosInvites.forEach(i=>{ if(i.code) inviteCodeToCreador.set(i.code, i.invitadorId); });
   await crearPanelMinijuegos(guild).catch(()=>{});
   await crearPanelTops(guild).catch(()=>{});
   startMinijuegosScheduler();
@@ -4917,9 +4933,8 @@ client.on(Events.InteractionCreate, async inter => {
           await inter.deferReply({ flags: MessageFlags.Ephemeral });
           const premio = inter.options.getString('premio') || 'Gamepass x2 Dinero - Roba un Huevo';
           const inicio = Date.now();
-          // FIX: Fecha fija Domingo 18 Octubre 2026 23:59:59 America/Cancun (Playa del Carmen UTC-5)
-          // 19 Oct 04:59:59 UTC = 18 Oct 23:59:59 Cancun
-          const fin = new Date(Date.UTC(2026, 9, 19, 4, 59, 59, 999));
+          // Duración automática de 7 días para futuros sorteos
+          const fin = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
           // snapshot de miembros actuales
           await inter.guild.members.fetch().catch(()=>{});
           const snapshot = [...inter.guild.members.cache.keys()];
