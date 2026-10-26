@@ -142,7 +142,9 @@ function findCategory(guild, nameList) {
 }
 
 function findRole(guild, roleName) {
-  return guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase()) || null;
+  const norm = s => s.toLowerCase().replace(/_/g,' ').replace(/\s+/g,' ').trim();
+  const target = norm(roleName);
+  return guild.roles.cache.find(r => norm(r.name) === target) || guild.roles.cache.find(r => norm(r.name).includes(target) || target.includes(norm(r.name))) || null;
 }
 
 function findStaffSancionesChannel(guild){
@@ -682,7 +684,7 @@ function getIAMs(member){
 }
 const SOLO_HOIST = ['papoi mayor','moderador','booster papoi','papoi leyenda','papoi veterano','papoi fiel','papoi activo','papoi'];
 const PETS = {
-  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','T-Rex','Kraken','Cerberus','Yeti','King Snake','Graveyard_Brute','BloodBloom','Dread_Wolf','Ghost_Reaper','Shelltide_Voyager','Gorillastein','Voidseer Pumpkin'],
+  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','T-Rex','Kraken','Cerberus','Yeti','King Snake','Graveyard Brute','BloodBloom','Dread Wolf','Ghost Reaper','Shelltide Voyager','Gorillastein','Voidseer Pumpkin'],
   'Eterno': ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'],
   'Divino': ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn']
 };
@@ -1025,20 +1027,32 @@ async function fixPapoisAlIniciar(guild){
   const rolPapoi = findRole(guild, 'papoi');
   if(!rolPapoi){ console.log('❌ No encontré rol papoi para fix'); return 0; }
   let fixed = 0;
-  for(const [, m] of guild.members.cache){
-    if(m.user.bot) continue;
-    if(!m.roles.cache.has(rolPapoi.id)){
-      await m.roles.add(rolPapoi.id).catch(()=>{});
-      fixed++;
-      await new Promise(r=>setTimeout(r, 200));
-      if(fixed >= 100) break;
+  let lastId = '0';
+  let totalEscaneados = 0;
+  try{
+    while(true){
+      const batch = await guild.members.fetch({ limit: 1000, after: lastId }).catch(()=>null);
+      if(!batch || batch.size===0) break;
+      totalEscaneados += batch.size;
+      for(const [, m] of batch){
+        lastId = m.id;
+        if(m.user.bot) continue;
+        if(!m.roles.cache.has(rolPapoi.id)){
+          await m.roles.add(rolPapoi.id).catch(()=>{});
+          fixed++;
+          await new Promise(r=>setTimeout(r, 250));
+        }
+      }
+      for(const [, m] of batch){
+        if(m.roles.cache.has(rolPapoi.id) && guild.members.cache.size > 800){
+          guild.members.cache.delete(m.id);
+        }
+      }
+      if(batch.size < 1000) break;
+      await new Promise(r=>setTimeout(r, 1000));
     }
-  }
-  if(fixed>0) console.log(`✅ FIX PAPOI: ${fixed} usuarios sin rol arreglados (batch 100, cache 800)`);
-  if(fixed >= 100){
-    console.log('🔄 Quedan más sin rol (bot apagado 1 semana), reintentando en 2 min...');
-    setTimeout(()=>fixPapoisAlIniciar(guild).catch(()=>{}), 2*60*1000);
-  }
+  }catch(e){ console.log('fixPapoi paginado error', e.message); }
+  if(fixed>0) console.log(`✅ FIX PAPOI PAGINADO: ${fixed}/${totalEscaneados} sin rol arreglados (RAM ~120MB)`);
   return fixed;
 }
 
@@ -1205,7 +1219,7 @@ async function getBoostInfo(guild){
 }
 function esDeRobaUnHuevo(emojiName){
   const n = emojiName.toLowerCase();
-  const claves = ['huevo','royal','world','archangel','arcangel','kitsune','unicorn','celestial','skeleton','pegasus','gorilla','oni','mosasaurus','maja','lava','phoenix','fenix','ice','starry','razorfang','centaur','gargoyle','jelly','shark','stag','cosmic','tralaledon','trex','kraken','cerberus','yeti','snake','mariposa','nightflame','lunar','dragon'];
+  const claves = ['huevo','royal','world','archangel','arcangel','kitsune','unicorn','celestial','skeleton','pegasus','gorilla','oni','mosasaurus','maja','lava','phoenix','fenix','ice','starry','razorfang','centaur','gargoyle','jelly','shark','stag','cosmic','tralaledon','trex','kraken','cerberus','yeti','snake','mariposa','nightflame','lunar','dragon','graveyard','blood','dread','ghost','shelltide','gorillastein','voidseer','pumpkin','brute','bloom','wolf','reaper','voyager'];
   return claves.some(k => n.includes(k));
 }
 async function crearPanelBiblioteca(guild, customRobaIds = null, customPapoiIds = null){
@@ -4583,10 +4597,13 @@ async function mostrarMenuConfiguracion(interaction){
   const buildExtraSelect = () => {
     const hasButterfly = hasRole(BUTTERFLY_ROLE_NAME);
     const hasRace = hasRole(RACE_ROLE_NAME);
+    const hasPumpkin = hasRole(PUMPKIN_BOSS_ROLE_NAME);
     const mariposaEmoji = getPetEmoji(guild, 'Floración Mariposas');
     const mariposaObj = mariposaEmoji? { id: mariposaEmoji.id, name: mariposaEmoji.name } : '🦋';
+    const pumpkinObj = '🎃';
     const options = [];
-    options.push({ label: 'Floración Mariposas - cada 30 min', value: BUTTERFLY_ROLE_NAME, description: 'Aviso 1 min antes :15 y :45', emoji: mariposaObj, default: hasButterfly });
+    options.push({ label: 'Floración Mariposas - RANDOM', value: BUTTERFLY_ROLE_NAME, description: 'Ahora RANDOM por servidor', emoji: mariposaObj, default: hasButterfly });
+    options.push({ label: 'Jefe Calabaza - :15 y :45', value: PUMPKIN_BOSS_ROLE_NAME, description: 'Aviso 1 min antes :15 y :45 Halloween', emoji: pumpkinObj, default: hasPumpkin });
     options.push({ label: 'Carreras Mario Kart - cada 30 min', value: RACE_ROLE_NAME, description: 'Aviso 1 min antes :00 y :30', emoji: '🏁', default: hasRace });
     for(const pet of PETS.Divino){
       const roleName = getBombaRoleName(pet);
