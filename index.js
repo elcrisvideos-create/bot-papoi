@@ -63,7 +63,7 @@ const CONFIG = {
     clips: ['clips-tiktok', 'clips'],
     live: ['elcris-en-vivo', 'en-vivo', 'live'],
     pingRoles: ['ping-roles', '🔗 | ping-roles', '🔗│ping-roles'],
-    butterfly: ['floracion-mariposas', 'floración-mariposas', 'mariposas', 'butterfly', 'butterfly-bloom', 'evento-mariposas'],
+    butterfly: ['jefe-calabaza', '🎃│jefe-calabaza', 'rey-calabaza', 'pumpkin-boss', 'floracion-mariposas', 'floración-mariposas', 'mariposas', 'butterfly', 'butterfly-bloom', 'evento-mariposas'],
     apariciones: ['📜┃ultimas-apariciones', 'ultimas-apariciones', '📜│ultimas-apariciones'],
     aparicionesEnVivo: ['apariciones-en-vivo'],
     staffChat: ['chat staff', 'staff-chat', '💬 | chat-staff'],
