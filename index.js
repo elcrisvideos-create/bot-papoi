@@ -682,7 +682,7 @@ function getIAMs(member){
 }
 const SOLO_HOIST = ['papoi mayor','moderador','booster papoi','papoi leyenda','papoi veterano','papoi fiel','papoi activo','papoi'];
 const PETS = {
-  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','T-Rex','Kraken','Cerberus','Yeti','King Snake'],
+  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','T-Rex','Kraken','Cerberus','Yeti','King Snake','Graveyard_Brute','BloodBloom','Dread_Wolf','Ghost_Reaper','Shelltide_Voyager','Gorillastein','Voidseer Pumpkin'],
   'Eterno': ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'],
   'Divino': ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn']
 };
@@ -730,7 +730,16 @@ const PET_EMOJI_MAP = {
   'Kraken': 'Kraken',
   'Cerberus': 'Cerberus',
   'Yeti': 'Yeti',
-  'King Snake': 'King_Snake'
+  'King Snake': 'King_Snake',
+  'Graveyard_Brute': 'Graveyard_Brute',
+  'BloodBloom': 'BloodBloom',
+  'Dread_Wolf': 'Dread_Wolf',
+  'Ghost_Reaper': 'Ghost_Reaper',
+  'Shelltide_Voyager': 'Shelltide_Voyager',
+  'Gorillastein': 'Gorillastein',
+  'Voidseer Pumpkin': 'voidseer_pumpkin',
+  'voidseer_pumpkin': 'voidseer_pumpkin',
+  'Voidseer_Pumpkin': 'voidseer_pumpkin'
 };
 function getCategoriaEmoji(guild, categoria){
   if(!guild) return CATEGORY_EMOJI[categoria];
@@ -754,6 +763,9 @@ const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
 const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
 const BUTTERFLY_EMOJI = '<:Mariposa:1556413173500739656>';
 const BUTTERFLY_CHANNEL_NAME = '🦋 | floracion-mariposas';
+const PUMPKIN_BOSS_ROLE_NAME = 'Jefe Calabaza';
+const PUMPKIN_BOSS_EMOJI = '🎃';
+const PUMPKIN_BOSS_CHANNEL_NAME = '🎃│jefe-calabaza';
 // --- TREN FANTASMA (antes CARRERAS) ---
 const RACE_ROLE_NAME = '🚂 Tren Fantasma';
 const RACE_EMOJI = '🚂';
@@ -1008,11 +1020,15 @@ async function fixPapoisAlIniciar(guild){
     if(!m.roles.cache.has(rolPapoi.id)){
       await m.roles.add(rolPapoi.id).catch(()=>{});
       fixed++;
-      if(fixed >= 50) break; // <-- Aquí adentro del for sí funciona perfecto
-      await new Promise(r=>setTimeout(r, 120));
+      await new Promise(r=>setTimeout(r, 200));
+      if(fixed >= 100) break;
     }
   }
-  if(fixed>0) console.log(`✅ FIX PAPOI: ${fixed} usuarios sin rol arreglados`);
+  if(fixed>0) console.log(`✅ FIX PAPOI: ${fixed} usuarios sin rol arreglados (batch 100, cache 800)`);
+  if(fixed >= 100){
+    console.log('🔄 Quedan más sin rol (bot apagado 1 semana), reintentando en 2 min...');
+    setTimeout(()=>fixPapoisAlIniciar(guild).catch(()=>{}), 2*60*1000);
+  }
   return fixed;
 }
 
@@ -3129,6 +3145,7 @@ function isPreguntaDivinoHorario(msg){
   return patrones.some(p => txt.includes(p));
 }
 async function checkButterflyEvent(){
+  // HALLOWEEN: Mariposas RANDOM, xx:15 y xx:45 ahora JEFE CALABAZA
   try{
     const now = new Date();
     const m = now.getUTCMinutes();
@@ -3142,12 +3159,14 @@ async function checkButterflyEvent(){
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
     if(!guild) return;
     await ensureButterflyRole(guild);
-    const role = findRole(guild, BUTTERFLY_ROLE_NAME);
+    const roleButterfly = findRole(guild, BUTTERFLY_ROLE_NAME);
+    const rolePumpkin = findRole(guild, PUMPKIN_BOSS_ROLE_NAME) || findRole(guild, 'Pumpkin Boss') || findRole(guild, 'Jefe Calabaza');
     const ch = findChannel(guild, CONFIG.channels.butterfly) || findChannel(guild, CONFIG.channels.apariciones) || findChannel(guild, CONFIG.channels.general);
     if(!ch) return;
-    const embed = new EmbedBuilder().setColor(0x8A2BE2).setTitle(`${BUTTERFLY_EMOJI} ¡Floración de Mariposas en 1 minuto!`).setDescription(`**¡Prepara tu red!** ${BUTTERFLY_EMOJI}\n\nEl evento **THE BUTTERFLY BLOOM HAS BEGUN!** empieza en **1 minuto**\n\n📍 Ve al **Enchanted Forest**\n${BUTTERFLY_EMOJI} ¡Agarra tu red y atrapa mariposas!\n\n> Evento global cada 30 minutos`).setFooter({ text: `Papois Empire • ${BUTTERFLY_EMOJI} Floración de Mariposas` }).setTimestamp();
-    await ch.send({ content: role? `${role} ${BUTTERFLY_EMOJI} **¡El evento de mariposas empieza en 1 minuto, prepárate!**` : `${BUTTERFLY_EMOJI} **¡Evento en 1 minuto!**`, embeds: [embed] }).catch(()=>{});
-  }catch(e){ console.log('Butterfly error', e.message); }
+    const embed = new EmbedBuilder().setColor(0xFF6B00).setTitle(`${PUMPKIN_BOSS_EMOJI} ¡JEFE CALABAZA en 1 minuto!`).setDescription(`**¡Prepárate!** ${PUMPKIN_BOSS_EMOJI}\n\nEl evento **PUMPKIN BOSS FIGHT** empieza en **1 minuto** a las **:${eventMinute}**\n\n📍 Centro del mapa\n${PUMPKIN_BOSS_EMOJI} ¡Jefe Calabaza aparece!\n\n> ${BUTTERFLY_EMOJI} Mariposas ahora es RANDOM por servidor`).setFooter({ text: `Papois Empire • ${PUMPKIN_BOSS_EMOJI} Jefe Calabaza :15 y :45` }).setTimestamp();
+    const pingRole = rolePumpkin || roleButterfly;
+    await ch.send({ content: pingRole? `${pingRole} ${PUMPKIN_BOSS_EMOJI} **¡Jefe Calabaza en 1 minuto! :${eventMinute}**` : `${PUMPKIN_BOSS_EMOJI} **¡Jefe Calabaza en 1 minuto!**`, embeds: [embed] }).catch(()=>{});
+  }catch(e){ console.log('Butterfly/Pumpkin error', e.message); }
 }
 async function checkRaceEvent(){
   try{
@@ -3188,7 +3207,7 @@ async function checkRaceEvent(){
   }catch(e){ console.log('Race error', e.message); }
 }
 function startButterflyScheduler(){
-  console.log('🦋 Scheduler Mariposas GLOBAL iniciado :14 y :44 UTC = 1 min antes');
+  console.log('🎃 Scheduler Jefe Calabaza :14 y :44 UTC = 1 min antes (Mariposas RANDOM)');
   setTimeout(checkButterflyEvent, 5000);
   setInterval(checkButterflyEvent, 30000);
 }
@@ -4512,7 +4531,7 @@ async function crearPanelPingRoles(channel){
       ` → Si marcas TODOS los Eterno, te damos ${eternoEmoji} **Huevo Eterno**\n`+
       ` → Si marcas TODOS los Divino, te damos ${divinoEmoji} **Huevo Divino**\n`+
       ` → Si marcas ${BUTTERFLY_EMOJI}, te avisamos **1 min antes** del evento de mariposas\n\n`+
-      `> **${BUTTERFLY_EMOJI} Mariposas: :15 y :45**\n`+
+      `> **${PUMPKIN_BOSS_EMOJI} Jefe Calabaza: :15 y :45 (Mariposas RANDOM)**\n`+
       `> **${RACE_EMOJI} Carreras: :00 y :30**\n`+
       `> **Te pingea 1 min antes**\n\n`+
       `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 4 categorías.`
