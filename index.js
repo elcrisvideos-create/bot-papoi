@@ -926,6 +926,16 @@ async function ensureButterflyRole(guild){
   }
   return role;
 }
+
+async function ensurePumpkinBossRole(guild){
+  let role = findRole(guild, PUMPKIN_BOSS_ROLE_NAME) || findRole(guild, 'Pumpkin Boss');
+  if(role) return role;
+  try{
+    role = await guild.roles.create({ name: PUMPKIN_BOSS_ROLE_NAME, color: 0xFF6B00, reason: 'Rol para Jefe Calabaza Halloween :15 y :45', mentionable: true });
+    console.log(`✅ Rol auto-creado: ${PUMPKIN_BOSS_ROLE_NAME}`);
+    return role;
+  }catch(e){ console.log('Error creando rol calabaza', e.message); return null; }
+}
 async function ensureRaceRole(guild){
   let role = findRole(guild, RACE_ROLE_NAME) || findRole(guild, '🏁 Carreras') || findRole(guild, 'carreras') || guild.roles.cache.find(r=>r.name.toLowerCase().includes('carreras'));
   if(role && role.name !== RACE_ROLE_NAME){
@@ -3159,6 +3169,7 @@ async function checkButterflyEvent(){
     const guild = client.guilds.cache.get(process.env.GUILD_ID);
     if(!guild) return;
     await ensureButterflyRole(guild);
+    await ensurePumpkinBossRole(guild);
     const roleButterfly = findRole(guild, BUTTERFLY_ROLE_NAME);
     const rolePumpkin = findRole(guild, PUMPKIN_BOSS_ROLE_NAME) || findRole(guild, 'Pumpkin Boss') || findRole(guild, 'Jefe Calabaza');
     const ch = findChannel(guild, CONFIG.channels.butterfly) || findChannel(guild, CONFIG.channels.apariciones) || findChannel(guild, CONFIG.channels.general);
