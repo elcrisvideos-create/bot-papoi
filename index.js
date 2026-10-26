@@ -142,9 +142,10 @@ function findCategory(guild, nameList) {
 }
 
 function findRole(guild, roleName) {
+  if(!guild || !roleName) return null;
   const norm = s => s.toLowerCase().replace(/_/g,' ').replace(/\s+/g,' ').trim();
   const target = norm(roleName);
-  return guild.roles.cache.find(r => norm(r.name) === target) || guild.roles.cache.find(r => norm(r.name).includes(target) || target.includes(norm(r.name))) || null;
+  return guild.roles.cache.find(r => norm(r.name) === target) || null;
 }
 
 function findStaffSancionesChannel(guild){
@@ -1030,12 +1031,15 @@ async function fixPapoisAlIniciar(guild){
   let lastId = '0';
   let totalEscaneados = 0;
   try{
+    let prevLastId = null;
     while(true){
       const batch = await guild.members.fetch({ limit: 1000, after: lastId }).catch(()=>null);
       if(!batch || batch.size===0) break;
       totalEscaneados += batch.size;
-      for(const [, m] of batch){
-        lastId = m.id;
+      let batchLastId = lastId;
+      for(const [id, m] of batch){
+        batchLastId = id;
+        lastId = id;
         if(m.user.bot) continue;
         if(!m.roles.cache.has(rolPapoi.id)){
           await m.roles.add(rolPapoi.id).catch(()=>{});
@@ -1043,6 +1047,8 @@ async function fixPapoisAlIniciar(guild){
           await new Promise(r=>setTimeout(r, 250));
         }
       }
+      if(prevLastId === lastId) break;
+      prevLastId = batchLastId;
       for(const [, m] of batch){
         if(m.roles.cache.has(rolPapoi.id) && guild.members.cache.size > 800){
           guild.members.cache.delete(m.id);
@@ -3189,8 +3195,8 @@ async function checkButterflyEvent(){
     const ch = findChannel(guild, CONFIG.channels.butterfly) || findChannel(guild, CONFIG.channels.apariciones) || findChannel(guild, CONFIG.channels.general);
     if(!ch) return;
     const embed = new EmbedBuilder().setColor(0xFF6B00).setTitle(`${PUMPKIN_BOSS_EMOJI} ¡JEFE CALABAZA en 1 minuto!`).setDescription(`**¡Prepárate!** ${PUMPKIN_BOSS_EMOJI}\n\nEl evento **PUMPKIN BOSS FIGHT** empieza en **1 minuto** a las **:${eventMinute}**\n\n📍 Centro del mapa\n${PUMPKIN_BOSS_EMOJI} ¡Jefe Calabaza aparece!\n\n> ${BUTTERFLY_EMOJI} Mariposas ahora es RANDOM por servidor`).setFooter({ text: `Papois Empire • ${PUMPKIN_BOSS_EMOJI} Jefe Calabaza :15 y :45` }).setTimestamp();
-    const pingRole = rolePumpkin || roleButterfly;
-    await ch.send({ content: pingRole? `${pingRole} ${PUMPKIN_BOSS_EMOJI} **¡Jefe Calabaza en 1 minuto! :${eventMinute}**` : `${PUMPKIN_BOSS_EMOJI} **¡Jefe Calabaza en 1 minuto!**`, embeds: [embed] }).catch(()=>{});
+    const pings = [rolePumpkin, roleButterfly].filter(Boolean).map(r => `${r}`).join(' ');
+    await ch.send({ content: pings? `${pings} ${PUMPKIN_BOSS_EMOJI} **¡Jefe Calabaza en 1 minuto! :${eventMinute}**` : `${PUMPKIN_BOSS_EMOJI} **¡Jefe Calabaza en 1 minuto!**`, embeds: [embed] }).catch(()=>{});
   }catch(e){ console.log('Butterfly/Pumpkin error', e.message); }
 }
 async function checkRaceEvent(){
@@ -3977,7 +3983,7 @@ client.on(Events.ClientReady, async () => {
     await ensureApoyoCategory(guild).catch(()=>{});
     await ensureVipDonadoresCategory(guild).catch(()=>{});
     await actualizarPanelNiveles(guild).catch(()=>{});
-    await fixPapoisAlIniciar(guild).catch(e=>console.log('fixPapois', e.message));
+    fixPapoisAlIniciar(guild).catch(e=>console.log('fixPapois', e.message));
     const general = findChannel(guild, CONFIG.channels.general);
     if(general) {
       await general.setRateLimitPerUser(10).catch(()=>{});
@@ -4781,10 +4787,10 @@ client.on(Events.InteractionCreate, async inter => {
         const selectedValues = inter.values;
         let agregados=[], quitados=[];
         // Eventos
-        for(const roleName of [BUTTERFLY_ROLE_NAME, RACE_ROLE_NAME]){
+           for(const roleName of [BUTTERFLY_ROLE_NAME, PUMPKIN_BOSS_ROLE_NAME, RACE_ROLE_NAME]){
           const newHas = selectedValues.includes(roleName);
           const oldHas = hasRole(roleName);
-          const role = findRole(guild, roleName) || (roleName===RACE_ROLE_NAME? await ensureRaceRole(guild) : await ensureButterflyRole(guild));
+             const role = findRole(guild, roleName) || (roleName===RACE_ROLE_NAME? await ensureRaceRole(guild) : roleName===PUMPKIN_BOSS_ROLE_NAME? await ensurePumpkinBossRole(guild) : await ensureButterflyRole(guild));
           if(newHas &&!oldHas){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(roleName); } }
           else if(!newHas && oldHas){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(roleName); } }
         }
@@ -4811,10 +4817,10 @@ client.on(Events.InteractionCreate, async inter => {
         const hasRole = (n) => member.roles.cache.some(r => r.name.toLowerCase() === n.toLowerCase());
         const selectedValues = inter.values;
         let agregados = [], quitados = [];
-        for(const roleName of [BUTTERFLY_ROLE_NAME, RACE_ROLE_NAME]){
+           for(const roleName of [BUTTERFLY_ROLE_NAME, PUMPKIN_BOSS_ROLE_NAME, RACE_ROLE_NAME]){
           const newHas = selectedValues.includes(roleName);
           const oldHas = hasRole(roleName);
-          const role = findRole(guild, roleName) || (roleName===RACE_ROLE_NAME? await ensureRaceRole(guild) : await ensureButterflyRole(guild));
+             const role = findRole(guild, roleName) || (roleName===RACE_ROLE_NAME? await ensureRaceRole(guild) : roleName===PUMPKIN_BOSS_ROLE_NAME? await ensurePumpkinBossRole(guild) : await ensureButterflyRole(guild));
           if(newHas &&!oldHas){ if(role){ await member.roles.add(role).catch(()=>{}); agregados.push(roleName); } }
           else if(!newHas && oldHas){ if(role){ await member.roles.remove(role).catch(()=>{}); quitados.push(roleName); } }
         }
