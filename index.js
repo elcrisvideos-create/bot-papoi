@@ -685,9 +685,9 @@ function getIAMs(member){
 }
 const SOLO_HOIST = ['papoi mayor','moderador','booster papoi','papoi leyenda','papoi veterano','papoi fiel','papoi activo','papoi'];
 const PETS = {
-  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','T-Rex','Kraken','Cerberus','Yeti','King Snake','Graveyard Brute','BloodBloom','Dread Wolf','Ghost Reaper','Shelltide Voyager','Gorillastein','Voidseer Pumpkin'],
-  'Eterno': ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon'],
-  'Divino': ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn']
+  'Secreto': ['Starry Fox','RazorFang','Centaur','Gargoyle','Pure Jellyfish','Mutant Shark','Stag','Cosmic Dragon','Cosmic Skeleton Boss','Tralaledon','T-Rex','Kraken','Cerberus','Yeti','King Snake','Graveyard Brute','BloodBloom','Dread Wolf'],
+  'Eterno': ['Celestial Sunlion','Skeleton Horse','Pegasus','Gorilla King','Oni Tiger','Eternal Lunar Dragon','Mosasaurus','El Maja','Lava Dragon','Phoenix','Ice Dragon','Ghost Reaper','Shelltide Voyager','Gorillastein'],
+  'Divino': ['Royal Skywhale','World Burner','ArchAngel','Nightflame','Kitsune','Unicorn','Voidseer Pumpkin']
 };
 const CATEGORY_ROLES = {
   'Secreto': 'Huevo Secreto',
@@ -3243,7 +3243,7 @@ function startButterflyScheduler(){
   setInterval(checkButterflyEvent, 30000);
 }
 function startRaceScheduler(){
-  console.log('🏁 Scheduler Carreras iniciado :29 y :59 UTC = 1 min antes');
+  console.log('🚂 Scheduler Tren Fantasma iniciado :29 y :59 UTC = 1 min antes');
   setTimeout(checkRaceEvent, 7000);
   setInterval(checkRaceEvent, 30000);
 }
@@ -4554,7 +4554,7 @@ async function crearPanelPingRoles(channel){
       ` ${secretoEmoji} **Secreto** - ${PETS.Secreto.length} huevos\n`+
       ` ${eternoEmoji} **Eterno** - ${PETS.Eterno.length} huevos\n`+
       ` ${divinoEmoji} **Divino** - ${PETS.Divino.length} huevos\n`+
-      ` ${BUTTERFLY_EMOJI} **Eventos** - Floración Mariposas + ${RACE_EMOJI} Carreras (cada 30 min)\n\n`+
+      ` ${BUTTERFLY_EMOJI} **Eventos** - Mariposas RANDOM + ${PUMPKIN_BOSS_EMOJI} Jefe Calabaza + ${RACE_EMOJI} Tren Fantasma (cada 30 min)\n\n`+
       `**4⃣** Lo que ya tienes te saldrá con **✅** marcado\n`+
       `**5⃣** **Marca** lo que quieres, **desmarca** lo que no quieres\n`+
       `**6⃣** ¿Quieres TODO de una categoría? Marca **TODOS**\n`+
@@ -4562,8 +4562,9 @@ async function crearPanelPingRoles(channel){
       ` → Si marcas TODOS los Eterno, te damos ${eternoEmoji} **Huevo Eterno**\n`+
       ` → Si marcas TODOS los Divino, te damos ${divinoEmoji} **Huevo Divino**\n`+
       ` → Si marcas ${BUTTERFLY_EMOJI}, te avisamos **1 min antes** del evento de mariposas\n\n`+
-      `> **${PUMPKIN_BOSS_EMOJI} Jefe Calabaza: :15 y :45 (Mariposas RANDOM)**\n`+
-      `> **${RACE_EMOJI} Carreras: :00 y :30**\n`+
+      `> **${BUTTERFLY_EMOJI} Mariposas: RANDOM**\n`+
+      `> **${PUMPKIN_BOSS_EMOJI} Jefe Calabaza: :15 y :45**\n`+
+      `> **${RACE_EMOJI} Tren Fantasma: :00 y :30**\n`+
       `> **Te pingea 1 min antes**\n\n`+
       `**¿No sabes qué tienes?** Presiona **📋 Mis Pings** para verlo dividido en 4 categorías.`
     )
@@ -4610,7 +4611,7 @@ async function mostrarMenuConfiguracion(interaction){
     const options = [];
     options.push({ label: 'Floración Mariposas - RANDOM', value: BUTTERFLY_ROLE_NAME, description: 'Ahora RANDOM por servidor', emoji: mariposaObj, default: hasButterfly });
     options.push({ label: 'Jefe Calabaza - :15 y :45', value: PUMPKIN_BOSS_ROLE_NAME, description: 'Aviso 1 min antes :15 y :45 Halloween', emoji: pumpkinObj, default: hasPumpkin });
-    options.push({ label: 'Carreras Mario Kart - cada 30 min', value: RACE_ROLE_NAME, description: 'Aviso 1 min antes :00 y :30', emoji: '🏁', default: hasRace });
+    options.push({ label: 'Tren Fantasma - :00 y :30', value: RACE_ROLE_NAME, description: 'Aviso 1 min antes :00 y :30 Halloween', emoji: '🚂', default: hasRace });
     for(const pet of PETS.Divino){
       const roleName = getBombaRoleName(pet);
       const has = hasRole(roleName);
@@ -4621,7 +4622,7 @@ async function mostrarMenuConfiguracion(interaction){
     const activos = options.filter(o=>o.default).length;
     return new StringSelectMenuBuilder().setCustomId('select_EXTRA').setPlaceholder(activos? `🚨🏁 ${activos} activos` : '🚨🏁 Eventos + Alerta Extrema').setMinValues(0).setMaxValues(options.length).addOptions(options.slice(0,25));
   };
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca lo que quieres, desmarca lo que no\n• Marca ⭐ TODOS para todo de una categoría\n\n**${BUTTERFLY_EMOJI} Mariposas:** :15 y :45\n**${RACE_EMOJI} Carreras:** :00 y :30\n**🚨 Alerta Extrema:** Ej: Kitsune 🚨 = 2 notis seguidas cuando salga\n\n*Se guarda al seleccionar.*`);
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle('⚙️ Elige qué te avisamos').setDescription(`**✅ = Ya lo tienes**\n**⬜ = No lo tienes**\n\n**¿Cómo usarlo?**\n• Marca lo que quieres, desmarca lo que no\n• Marca ⭐ TODOS para todo de una categoría\n\n**${BUTTERFLY_EMOJI} Mariposas:** RANDOM\n**${PUMPKIN_BOSS_EMOJI} Jefe Calabaza:** :15 y :45\n**${RACE_EMOJI} Tren Fantasma:** :00 y :30\n**🚨 Alerta Extrema:** Ej: Kitsune 🚨 = 2 notis seguidas cuando salga\n\n*Se guarda al seleccionar.*`);
   const row1 = new ActionRowBuilder().addComponents(buildSelect('Secreto'));
   const row2 = new ActionRowBuilder().addComponents(buildSelect('Eterno'));
   const row3 = new ActionRowBuilder().addComponents(buildSelect('Divino'));
