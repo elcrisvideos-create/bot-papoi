@@ -795,6 +795,15 @@ function calcMutValue(state){
   return {M,noX2,withX2,final,gain,gainPct,sumBonus};
 }
 setInterval(()=>{ const now=Date.now(); for(const [k,v] of calcCache){ if(now-v.last>15*60*1000) calcCache.delete(k); } }, 5*60*1000).unref?.();
+function formatPrettyCalc(value, inputUnit){
+  const map={K:1e3,M:1e6,B:1e9,T:1e12};
+  const abs = value * (map[inputUnit]||1e9);
+  if(abs>=1e12) return {text:(abs/1e12).toFixed(2),unit:'T'};
+  if(abs>=1e9) return {text:(abs/1e9).toFixed(2),unit:'B'};
+  if(abs>=1e6) return {text:(abs/1e6).toFixed(2),unit:'M'};
+  if(abs>=1e3) return {text:(abs/1e3).toFixed(2),unit:'K'};
+  return {text:abs.toFixed(2),unit:''};
+}
 
 // --- V8: EVENTO MARIPOSAS GLOBAL + AUTO-ROL ---
 const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
@@ -4569,10 +4578,14 @@ function buildCalcEmbed(state){
   const c=calcMutValue(state);
   const baseTxt = state.base ? `${state.base}${state.unit}/s` : `0${state.unit}/s`;
   const multTxt = `x${c.M.toFixed(3)}`;
-  const finalTxt = state.base ? `$${c.final.toFixed(2)}${state.unit}/s` : `$0${state.unit}/s`;
-  const noX2Txt = `$${c.noX2.toFixed(2)}${state.unit}/s`;
-  const x2Txt = `$${c.withX2.toFixed(2)}${state.unit}/s`;
-  const gainTxt = `+${c.gain.toFixed(2)}${state.unit}/s +${c.gainPct.toFixed(1)}%`;
+  const prettyFinal = formatPrettyCalc(c.final, state.unit);
+  const prettyNoX2 = formatPrettyCalc(c.noX2, state.unit);
+  const prettyX2 = formatPrettyCalc(c.withX2, state.unit);
+  const prettyGain = formatPrettyCalc(c.gain, state.unit);
+  const finalTxt = `$${prettyFinal.text}${prettyFinal.unit}/s`;
+  const noX2Txt = `$${prettyNoX2.text}${prettyNoX2.unit}/s`;
+  const x2Txt = `$${prettyX2.text}${prettyX2.unit}/s`;
+  const gainTxt = `+${prettyGain.text}${prettyGain.unit}/s +${c.gainPct.toFixed(1)}%`;
   const mutsTxt = state.muts.size ? [...state.muts].map(id=>{ const m=CALC_MUTATIONS.find(x=>x.id===id); return m? `${m.emoji} ${m.name}`:id; }).join(', ') : 'Sin mutaciones';
   const embed = new EmbedBuilder()
     .setColor(state.gamepass ? 0x22c55e : 0x39ff14)
@@ -4606,9 +4619,9 @@ async function crearPanelCalculadora(channel){
   const embed = new EmbedBuilder()
     .setColor(0x39ff14)
     .setTitle('🧮 CALCULADORA DE MUTACIONES • STEAL AN EGG')
-    .setDescription(`**Calcula cuánto va a valer tu huevo con mutaciones**\n\n**¿Cómo usarla?**\n**1️⃣** Dale a **🧮 Abrir Calculadora** (solo tú lo ves)\n**2️⃣** Pon tu valor base en **M o B** (ej: 40.4B)\n**3️⃣** Elige tus mutaciones (Silver, Bloom, Rainbow...)\n**4️⃣** Activa **Gamepass x2** si lo tienes\n\n> 💡 **Ejemplo:** 40.4B + Rainbow (x3.5) + Parasite (x3) = **$242B/s** y con x2 **$484B/s**\n\n*Panel épico, 0 consumo extra, no guarda nada.*`)
+    .setDescription(`**Calcula cuánto va a valer tu huevo con mutaciones**\n\n**¿Cómo usarla?**\n**1️⃣** Dale a **🧮 Abrir Calculadora** (solo tú lo ves)\n**2️⃣** Pon tu valor base en **M o B** (ej: 40.4B)\n**3️⃣** Elige tus mutaciones (Silver, Bloom, Rainbow...)\n**4️⃣** Activa **Gamepass x2** si lo tienes\n\n> 💡 **Ejemplo:** 40.4B + Rainbow (x3.5) + Parasite (x3) = **$242B/s** y con x2 **$484B/s**\n\n*CALCULADORA PAPOI EMPIRE.*`)
     .setThumbnail(channel.guild.iconURL() || client.user.displayAvatarURL())
-    .setFooter({ text: 'Papois Empire • Calculadora Épica • M = 1 + Σ(mut-1)' })
+    .setFooter({ text: 'Papois Empire • Calculadora PAPOIS EMPIRE' })
     .setTimestamp();
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_open_calc').setLabel('🧮 Abrir Calculadora').setStyle(ButtonStyle.Success));
   await channel.send({ embeds:[embed], components:[row] });
