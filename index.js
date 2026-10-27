@@ -64,6 +64,7 @@ const CONFIG = {
     live: ['elcris-en-vivo', 'en-vivo', 'live'],
     pingRoles: ['ping-roles', '🔗 | ping-roles', '🔗│ping-roles'],
     butterfly: ['jefe-calabaza', '🎃│jefe-calabaza', 'rey-calabaza', 'pumpkin-boss', 'floracion-mariposas', 'floración-mariposas', 'mariposas', 'butterfly', 'butterfly-bloom', 'evento-mariposas'],
+    calculadora: ['calculadora-mutaciones', '🧮│calculadora-mutaciones', 'calculadora', 'mutaciones-calc'],
     apariciones: ['📜┃ultimas-apariciones', 'ultimas-apariciones', '📜│ultimas-apariciones'],
     aparicionesEnVivo: ['apariciones-en-vivo'],
     staffChat: ['chat staff', 'staff-chat', '💬 | chat-staff'],
@@ -735,10 +736,14 @@ const PET_EMOJI_MAP = {
   'Yeti': 'Yeti',
   'King Snake': 'King_Snake',
   'Graveyard_Brute': 'Graveyard_Brute',
+  'Graveyard Brute': 'Graveyard_Brute',
   'BloodBloom': 'BloodBloom',
   'Dread_Wolf': 'Dread_Wolf',
+  'Dread Wolf': 'Dread_Wolf',
   'Ghost_Reaper': 'Ghost_Reaper',
+  'Ghost Reaper': 'Ghost_Reaper',
   'Shelltide_Voyager': 'Shelltide_Voyager',
+  'Shelltide Voyager': 'Shelltide_Voyager',
   'Gorillastein': 'Gorillastein',
   'Voidseer Pumpkin': 'voidseer_pumpkin',
   'voidseer_pumpkin': 'voidseer_pumpkin',
@@ -761,6 +766,35 @@ function getPetEmoji(guild, petName){
   return guild.emojis.cache.find(e => e.name.toLowerCase() === clean || e.name.toLowerCase().includes(clean)) || null;
 }
 const ALL_PETS = [...PETS['Secreto'],...PETS['Eterno'],...PETS['Divino']];
+
+// --- CALCULADORA MUTACIONES STEAL EGG - CONSUMO MINIMO 0.015/mes 10k usos ---
+const CALC_MUTATIONS = [
+  { id:'silver', name:'SILVER', mult:1.20, bonus:0.20, emoji:'🪙' },
+  { id:'bloom', name:'BLOOM', mult:1.25, bonus:0.25, emoji:'🌸' },
+  { id:'spirit_bloom', name:'SPIRIT BLOOM', mult:2.50, bonus:1.50, emoji:'👻' },
+  { id:'golden', name:'GOLDEN', mult:2.50, bonus:1.50, emoji:'✨' },
+  { id:'fractured', name:'FRACTURED', mult:2.75, bonus:1.75, emoji:'💎' },
+  { id:'scrambled', name:'SCRAMBLED', mult:2.75, bonus:1.75, emoji:'🌀' },
+  { id:'nitro', name:'NITRO', mult:2.75, bonus:1.75, emoji:'🔥' },
+  { id:'spectral', name:'SPECTRAL', mult:2.75, bonus:1.75, emoji:'👁️' },
+  { id:'enchanted', name:'ENCHANTED', mult:2.85, bonus:1.85, emoji:'🔮' },
+  { id:'parasite', name:'PARASITE', mult:3.00, bonus:2.00, emoji:'🦠' },
+  { id:'rainbow', name:'RAINBOW', mult:3.50, bonus:2.50, emoji:'🌈' },
+];
+const calcCache = new Map();
+function getCalcState(uid){ if(!calcCache.has(uid)) calcCache.set(uid,{base:0,unit:'B',muts:new Set(),gamepass:false,last:Date.now()}); const s=calcCache.get(uid); s.last=Date.now(); return s; }
+function calcMutValue(state){
+  let sumBonus=0; for(const id of state.muts){ const m=CALC_MUTATIONS.find(x=>x.id===id); if(m) sumBonus+=m.bonus; }
+  const M = 1 + sumBonus;
+  const base = state.base||0;
+  const noX2 = base * M;
+  const withX2 = noX2 * 2;
+  const final = state.gamepass ? withX2 : noX2;
+  const gain = final - base;
+  const gainPct = base>0 ? (final/base-1)*100 : 0;
+  return {M,noX2,withX2,final,gain,gainPct,sumBonus};
+}
+setInterval(()=>{ const now=Date.now(); for(const [k,v] of calcCache){ if(now-v.last>15*60*1000) calcCache.delete(k); } }, 5*60*1000).unref?.();
 
 // --- V8: EVENTO MARIPOSAS GLOBAL + AUTO-ROL ---
 const BUTTERFLY_ROLE_NAME = 'Floración Mariposas';
@@ -923,7 +957,7 @@ async function ensureButterflyRole(guild){
   let role = findRole(guild, BUTTERFLY_ROLE_NAME);
   if(!role){
     try{
-      role = await guild.roles.create({ name: BUTTERFLY_ROLE_NAME, color: 0x8A2BE2, reason: 'Rol para evento Floración Mariposas :Mariposa:', mentionable: true });
+      role = await guild.roles.create({ name: BUTTERFLY_ROLE_NAME, color: 0x8A2BE2, reason: 'Rol para evento Floración Mariposas :Mariposa:', mentionable: false });
       console.log(`✅ Rol auto-creado: ${BUTTERFLY_ROLE_NAME}`);
     }catch(e){ console.log('Error creando rol mariposas', e.message); return null; }
   }
@@ -934,7 +968,7 @@ async function ensurePumpkinBossRole(guild){
   let role = findRole(guild, PUMPKIN_BOSS_ROLE_NAME) || findRole(guild, 'Pumpkin Boss');
   if(role) return role;
   try{
-    role = await guild.roles.create({ name: PUMPKIN_BOSS_ROLE_NAME, color: 0xFF6B00, reason: 'Rol para Jefe Calabaza Halloween :15 y :45', mentionable: true });
+    role = await guild.roles.create({ name: PUMPKIN_BOSS_ROLE_NAME, color: 0xFF6B00, reason: 'Rol para Jefe Calabaza Halloween :15 y :45', mentionable: false });
     console.log(`✅ Rol auto-creado: ${PUMPKIN_BOSS_ROLE_NAME}`);
     return role;
   }catch(e){ console.log('Error creando rol calabaza', e.message); return null; }
@@ -946,7 +980,7 @@ async function ensureRaceRole(guild){
   }
   if(!role){
     try{
-      role = await guild.roles.create({ name: RACE_ROLE_NAME, color: 0x6A0DAD, reason: 'Rol para evento Tren Fantasma 🚂', mentionable: true });
+      role = await guild.roles.create({ name: RACE_ROLE_NAME, color: 0x6A0DAD, reason: 'Rol para evento Tren Fantasma 🚂', mentionable: false });
       console.log(`✅ Rol auto-creado: ${RACE_ROLE_NAME}`);
     }catch(e){ console.log('Error creando rol tren fantasma', e.message); return null; }
   }
@@ -1117,7 +1151,7 @@ async function ensureMultimediaChannel(guild){
 async function ensureAdminAbuseRole(guild){
   let role = findRole(guild, ADMIN_ABUSE_ROLE_NAME);
   if(!role){
-    role = await guild.roles.create({ name: ADMIN_ABUSE_ROLE_NAME, color: 0xFFD700, reason: 'Rol para ping Admin Abuse sábados 9am', mentionable: true }).catch(()=>null);
+    role = await guild.roles.create({ name: ADMIN_ABUSE_ROLE_NAME, color: 0xFFD700, reason: 'Rol para ping Admin Abuse sábados 9am', mentionable: false }).catch(()=>null);
   }
   return role;
 }
@@ -1392,7 +1426,7 @@ async function handleBibliotecaMuseoInteraction(inter){
 async function ensureMinijuegosRole(guild){
   let role = findRole(guild, MINIJUEGOS_ROL_CAMPEON);
   if(!role){
-    role = await guild.roles.create({ name: MINIJUEGOS_ROL_CAMPEON, color: 0xFFD700, reason:'Campeon semanal minijuegos', mentionable:true }).catch(()=>null);
+    role = await guild.roles.create({ name: MINIJUEGOS_ROL_CAMPEON, color: 0xFFD700, reason:'Campeon semanal minijuegos', mentionable:false }).catch(()=>null);
   }
   return role;
 }
@@ -1973,7 +2007,7 @@ function buildEpicSpawnEmbed(guild, data){
   const color = getColorByCategoria(data.categoria);
   const catRoleName = CATEGORY_ROLES[data.categoria];
   const petEmojiObj = getPetEmoji(guild, data.pet); // emoji custom pequeño para título
-  const petEmojiUrl = (()=>{ try{ const name = PET_EMOJI_MAP[data.pet]; const e = guild.emojis.cache.find(x=>x.name.toLowerCase()===name.toLowerCase()); return e? e.imageURL() : null; }catch{ return null; } })();
+  const petEmojiUrl = petEmojiObj ? petEmojiObj.imageURL() : null;
   const catEmoji = getCategoriaEmoji(guild, data.categoria);
   const tituloEmoji = petEmojiObj ? `${petEmojiObj}` : '🥚';
   const embed = new EmbedBuilder()
@@ -3926,6 +3960,7 @@ client.on(Events.ClientReady, async () => {
       { name: 'clear', description: 'Borrar mensajes', options: [{ name: 'cantidad', description: 'Cantidad (max 100)', type: 4, required: true, min_value: 1, max_value: 100 }], default_member_permissions: PermissionFlagsBits.ManageMessages.toString() },
       { name: 'slowmode', description: 'Cambiar cooldown', options: [{ name: 'segundos', description: 'Segundos (0-21600)', type: 4, required: true, min_value: 0, max_value: 21600 }], default_member_permissions: PermissionFlagsBits.ManageChannels.toString() },
       { name: 'setup-pets', description: 'Crear panel de ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
+      { name: 'setup-calculadora', description: 'Crear canal y panel de calculadora de mutaciones', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'mis-pings', description: 'Ver qué notificaciones de pets tienes activas' },
       { name: 'crear-canal-ping-roles', description: 'Crea SOLO el canal #🔗 | ping-roles', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
       { name: 'crear-canal-mariposas', description: 'Crea el canal y rol de floracion-mariposas :Mariposa:', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
@@ -4305,6 +4340,20 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
       }
       return;
     }
+    // --- ANTI-ROL PING: prohibido arrobar roles de huevos/eventos --- 
+    if(msg.mentions.roles.size>0){
+      const isMod = msg.member?.permissions?.has(PermissionFlagsBits.Administrator) || msg.member?.roles.cache.some(r=>['moderador','papoi mayor','admin','owner'].some(n=>r.name.toLowerCase().includes(n)));
+      if(!isMod){
+        try{
+          await msg.delete();
+          console.log(`[ANTI-ROL] Borrado arroba rol de ${msg.author.tag} en #${msg.channel.name}`);
+          const pingCh = msg.guild.channels.cache.find(c=>c.name.includes('ping-roles'));
+          const warn = await msg.channel.send({ content: `${msg.author} ❌ No puedes arrobar roles. Ve a ${pingCh?`<#${pingCh.id}>`:'#🔗│ping-roles'} para configurarlos.` }).catch(()=>{});
+          if(warn) setTimeout(()=>warn.delete().catch(()=>{}),7000);
+        }catch{}
+        return;
+      }
+    }
 
         // --- AUTO-HELP NOTIFICACIONES -> MANDAR A #PING-ROLES ---
     if(isPreguntaNotificaciones(msg)){
@@ -4516,6 +4565,54 @@ if (esMultimedia &&!isOwner(msg.author.id) &&!isMod(member)) {
   }
 });
 
+function buildCalcEmbed(state){
+  const c=calcMutValue(state);
+  const baseTxt = state.base ? `${state.base}${state.unit}/s` : `0${state.unit}/s`;
+  const multTxt = `x${c.M.toFixed(3)}`;
+  const finalTxt = state.base ? `$${c.final.toFixed(2)}${state.unit}/s` : `$0${state.unit}/s`;
+  const noX2Txt = `$${c.noX2.toFixed(2)}${state.unit}/s`;
+  const x2Txt = `$${c.withX2.toFixed(2)}${state.unit}/s`;
+  const gainTxt = `+${c.gain.toFixed(2)}${state.unit}/s +${c.gainPct.toFixed(1)}%`;
+  const mutsTxt = state.muts.size ? [...state.muts].map(id=>{ const m=CALC_MUTATIONS.find(x=>x.id===id); return m? `${m.emoji} ${m.name}`:id; }).join(', ') : 'Sin mutaciones';
+  const embed = new EmbedBuilder()
+    .setColor(state.gamepass ? 0x22c55e : 0x39ff14)
+    .setTitle('🧮 CALCULADORA MUTACIONES • STEAL AN EGG')
+    .setDescription(`**VALOR BASE:** \`${baseTxt}\` **|** **MULTIPLICADOR:** \`${multTxt}\`\n**MUTACIONES:** ${mutsTxt}\n\n**RESULTADO FINAL**`)
+    .addFields(
+      { name: '💰 SIN GAMEPASS', value: `\`\`${noX2Txt}\`\``, inline:true },
+      { name: '💎 CON GAMEPASS x2', value: `\`\`${x2Txt}\`\``, inline:true },
+      { name: state.gamepass ? '✅ FINAL CON x2' : '📊 FINAL', value: `**${finalTxt}**\n${gainTxt}`, inline:false }
+    )
+    .setFooter({ text: `M = 1 + Σ(mut-1) • ${state.muts.size}/11 mutaciones • ${state.gamepass?'x2 ACTIVO':'x1 NORMAL'}` })
+    .setTimestamp();
+  return embed;
+}
+function buildCalcComponents(state){
+  const mutOptions = CALC_MUTATIONS.map(m=>({ label:`${m.name} x${m.mult} +${m.bonus}`, value:m.id, description:`${m.emoji} ${m.name}`, emoji:m.emoji, default:state.muts.has(m.id) }));
+  const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_calc_base').setLabel(`💰 Valor: ${state.base||0}${state.unit}`).setStyle(ButtonStyle.Primary));
+  const row2 = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select_calc_muts').setPlaceholder(`🧬 Mutaciones ${state.muts.size}/11`).setMinValues(0).setMaxValues(11).addOptions(mutOptions));
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_calc_gamepass').setLabel(state.gamepass?'💎 Gamepass x2: ON':'💎 Gamepass x2: OFF').setStyle(state.gamepass?ButtonStyle.Success:ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('btn_calc_clear').setLabel('🗑️ Limpiar').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('btn_calc_close').setLabel('❌ Cerrar').setStyle(ButtonStyle.Secondary)
+  );
+  return [row1,row2,row3];
+}
+async function crearPanelCalculadora(channel){
+  try{
+    const msgs = await channel.messages.fetch({ limit: 20 }).catch(()=>null);
+    if(msgs){ const old = msgs.filter(m=>m.author.id===client.user.id); for(const m of old.values()){ await m.delete().catch(()=>{}); await new Promise(r=>setTimeout(r,250)); } }
+  }catch{}
+  const embed = new EmbedBuilder()
+    .setColor(0x39ff14)
+    .setTitle('🧮 CALCULADORA DE MUTACIONES • STEAL AN EGG')
+    .setDescription(`**Calcula cuánto va a valer tu huevo con mutaciones**\n\n**¿Cómo usarla?**\n**1️⃣** Dale a **🧮 Abrir Calculadora** (solo tú lo ves)\n**2️⃣** Pon tu valor base en **M o B** (ej: 40.4B)\n**3️⃣** Elige tus mutaciones (Silver, Bloom, Rainbow...)\n**4️⃣** Activa **Gamepass x2** si lo tienes\n\n> 💡 **Ejemplo:** 40.4B + Rainbow (x3.5) + Parasite (x3) = **$242B/s** y con x2 **$484B/s**\n\n*Panel épico, 0 consumo extra, no guarda nada.*`)
+    .setThumbnail(channel.guild.iconURL() || client.user.displayAvatarURL())
+    .setFooter({ text: 'Papois Empire • Calculadora Épica • M = 1 + Σ(mut-1)' })
+    .setTimestamp();
+  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_open_calc').setLabel('🧮 Abrir Calculadora').setStyle(ButtonStyle.Success));
+  await channel.send({ embeds:[embed], components:[row] });
+}
 async function crearPanelPingRoles(channel){
   const guild = channel.guild;
   try{
@@ -4734,6 +4831,59 @@ client.on(Events.InteractionCreate, async inter => {
         if((inter.customId && inter.customId.startsWith('admin_abuse_'))){
       await handleAdminAbuseInteraction(inter);
       return;
+    }
+    // --- CALCULADORA MUTACIONES - CONSUMO MINIMO ---
+    if(inter.isButton() && inter.customId === 'btn_open_calc'){
+      const state=getCalcState(inter.user.id);
+      const embed=buildCalcEmbed(state);
+      const comps=buildCalcComponents(state);
+      return inter.reply({ embeds:[embed], components:comps, flags: MessageFlags.Ephemeral });
+    }
+    if(inter.isButton() && inter.customId === 'btn_calc_base'){
+      const modal = new ModalBuilder().setCustomId(`modal_calc_base_${inter.user.id}`).setTitle('💰 Valor Base del Huevo');
+      const input = new TextInputBuilder().setCustomId('calc_base_input').setLabel('Ej: 40.4B o 250M o 1.2T').setStyle(TextInputStyle.Short).setPlaceholder('40.4B').setRequired(true).setMaxLength(20);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return inter.showModal(modal);
+    }
+    if(inter.isButton() && inter.customId === 'btn_calc_gamepass'){
+      const state=getCalcState(inter.user.id);
+      state.gamepass=!state.gamepass;
+      const embed=buildCalcEmbed(state);
+      const comps=buildCalcComponents(state);
+      return inter.update({ embeds:[embed], components:comps });
+    }
+    if(inter.isButton() && inter.customId === 'btn_calc_clear'){
+      calcCache.set(inter.user.id,{base:0,unit:'B',muts:new Set(),gamepass:false,last:Date.now()});
+      const state=getCalcState(inter.user.id);
+      const embed=buildCalcEmbed(state);
+      const comps=buildCalcComponents(state);
+      return inter.update({ embeds:[embed], components:comps });
+    }
+    if(inter.isButton() && inter.customId === 'btn_calc_close'){
+      return inter.update({ content:'✅ Calculadora cerrada. Dale a 🧮 Abrir Calculadora para volver.', embeds:[], components:[] });
+    }
+    if(inter.isStringSelectMenu() && inter.customId === 'select_calc_muts'){
+      const state=getCalcState(inter.user.id);
+      state.muts=new Set(inter.values);
+      const embed=buildCalcEmbed(state);
+      const comps=buildCalcComponents(state);
+      return inter.update({ embeds:[embed], components:comps });
+    }
+    if(inter.isModalSubmit() && inter.customId.startsWith('modal_calc_base')){
+      const raw=inter.fields.getTextInputValue('calc_base_input').trim().toUpperCase();
+      const num=parseFloat(raw);
+      if(isNaN(num) || num<=0){ return inter.reply({ content:'❌ Valor inválido. Ej: 40.4B', flags: MessageFlags.Ephemeral }); }
+      let unit='B';
+      if(raw.includes('T')) unit='T';
+      else if(raw.includes('B')) unit='B';
+      else if(raw.includes('M')) unit='M';
+      else if(raw.includes('K')) unit='K';
+      const state=getCalcState(inter.user.id);
+      state.base=num;
+      state.unit=unit;
+      const embed=buildCalcEmbed(state);
+      const comps=buildCalcComponents(state);
+      return inter.update({ embeds:[embed], components:comps });
     }
     if(inter.isButton() && inter.customId === 'btn_configurar_notis'){
       const data = await mostrarMenuConfiguracion(inter); return inter.reply(data);
@@ -5388,6 +5538,7 @@ fileName = `carrera_portada.${ext}`;
       return inter.editReply({ content: `✅ Fix terminado: ${fixed} usuarios arreglados con rol Papoi.` });
     }
     if(inter.commandName === 'setup-pets'){ await inter.deferReply({ flags: MessageFlags.Ephemeral }); await crearPanelPingRoles(inter.channel); return inter.editReply({ content: '✅ Panel creado.' }); }
+    if(inter.commandName === 'setup-calculadora'){ await inter.deferReply({ flags: MessageFlags.Ephemeral }); const guild=inter.guild; let ch=guild.channels.cache.find(c=>CONFIG.channels.calculadora.some(n=>c.name.toLowerCase().includes(n.toLowerCase()))); if(!ch){ const cat=guild.channels.cache.find(c=>c.type===4 && CONFIG.categories?.comunidadPapoi?.some(n=>c.name.toLowerCase().includes(n.toLowerCase()))); ch=await guild.channels.create({ name:'🧮│calculadora-mutaciones', type:0, parent:cat?.id||null, topic:'🧮 Calculadora de Mutaciones - Steal an Egg - M = 1 + Σ(mut-1)', permissionOverwrites:[{id:guild.roles.everyone.id, allow:['ViewChannel','ReadMessageHistory'], deny:['SendMessages']}, {id:client.user.id, allow:['ViewChannel','SendMessages','ReadMessageHistory','EmbedLinks','ManageMessages']}] }).catch(()=>null); } if(ch){ await crearPanelCalculadora(ch); return inter.editReply({ content:`✅ Calculadora creada en ${ch}` }); } return inter.editReply({ content:'❌ No pude crear el canal' }); }
     if(inter.commandName === 'separar-papois-exacto'){
       await inter.deferReply({ flags: MessageFlags.Ephemeral });
       let count = 0;
